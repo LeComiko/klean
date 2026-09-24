@@ -1,0 +1,157 @@
+using Klean.Api.DTOs;
+using Klean.Api.Data;
+using Klean.Api.Models;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace Klean.Api.Controllers;
+
+[ApiController]
+[Route("api/absences")]
+public class AbsencesController : ControllerBase
+{
+    private readonly KleanDbContext _db;
+
+    public AbsencesController(KleanDbContext db) => _db = db;
+
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<AbsenceDto>>> Lister()
+    {
+        var absences = await _db.Absences
+            .AsNoTracking()
+            .OrderByDescending(a => a.DateDebut)
+            .Select(a => new AbsenceDto
+            {
+                Id = a.Id,
+                EntrepriseId = a.EntrepriseId,
+                AgentId = a.AgentId,
+                Type = a.Type.ToString(),
+                DateDebut = a.DateDebut,
+                DateFin = a.DateFin,
+                Motif = a.Motif
+            })
+            .ToListAsync();
+
+        return Ok(absences);
+    }
+
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<AbsenceDto>> Obtenir(Guid id)
+    {
+        var absence = await _db.Absences
+            .AsNoTracking()
+            .Where(a => a.Id == id)
+            .Select(a => new AbsenceDto
+            {
+                Id = a.Id,
+                EntrepriseId = a.EntrepriseId,
+                AgentId = a.AgentId,
+                Type = a.Type.ToString(),
+                DateDebut = a.DateDebut,
+                DateFin = a.DateFin,
+                Motif = a.Motif
+            })
+            .FirstOrDefaultAsync();
+
+        return absence is null ? NotFound() : Ok(absence);
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<AbsenceDto>> Creer(AbsenceCreateDto dto)
+    {
+        if (!Enum.TryParse<TypeAbsence>(dto.Type, out var type))
+        {
+            return BadRequest($"Type d'absence « {dto.Type} » invalide. Valeurs acceptées : {string.Join(", ", Enum.GetNames<TypeAbsence>())}.");
+        }
+
+        if (!await _db.Agents.AnyAsync(a => a.Id == dto.AgentId))
+        {
+            return BadRequest($"Agent {dto.AgentId} inconnu.");
+        }
+
+        if (dto.DateFin < dto.DateDebut)
+        {
+            return BadRequest("La date de fin précède la date de début.");
+        }
+
+        var absence = new Absence
+        {
+            EntrepriseId = dto.EntrepriseId,
+            AgentId = dto.AgentId,
+            Type = type,
+            DateDebut = Utc(dto.DateDebut),
+            DateFin = Utc(dto.DateFin),
+            Motif = dto.Motif
+        };
+
+        _db.Absences.Add(absence);
+        await _db.SaveChangesAsync();
+
+        // La détection d'impacts sur le planning arrive à l'étape 8.
+        return CreatedAtAction(nameof(Obtenir), new { id = absence.Id }, Vers(absence));
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> Modifier(Guid id, AbsenceCreateDto dto)
+    {
+        if (!Enum.TryParse<TypeAbsence>(dto.Type, out var type))
+        {
+            return BadRequest($"Type d'absence « {dto.Type} » invalide. Valeurs acceptées : {string.Join(", ", Enum.GetNames<TypeAbsence>())}.");
+        }
+
+        var absence = await _db.Absences.FindAsync(id);
+        if (absence is null) return NotFound();
+
+        if (absence.AgentId != dto.AgentId && !await _db.Agents.AnyAsync(a => a.Id == dto.AgentId))
+        {
+            return BadRequest($"Agent {dto.AgentId} inconnu.");
+        }
+
+        if (dto.DateFin < dto.DateDebut)
+        {
+            return BadRequest("La date de fin précède la date de début.");
+        }
+
+        absence.AgentId = dto.AgentId;
+        absence.Type = type;
+        absence.DateDebut = Utc(dto.DateDebut);
+        absence.DateFin = Utc(dto.DateFin);
+        absence.Motif = dto.Motif;
+
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Supprimer(Guid id)
+    {
+        var absence = await _db.Absences.FindAsync(id);
+        if (absence is null) return NotFound();
+
+        _db.Absences.Remove(absence);
+
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict("Suppression refusée par la base : des données rattachées l'empêchent.");
+        }
+
+        return NoContent();
+    }
+
+    private static DateTime Utc(DateTime d) => DateTime.SpecifyKind(d, DateTimeKind.Utc);
+
+    private static AbsenceDto Vers(Absence a) => new()
+    {
+        Id = a.Id,
+        EntrepriseId = a.EntrepriseId,
+        AgentId = a.AgentId,
+        Type = a.Type.ToString(),
+        DateDebut = a.DateDebut,
+        DateFin = a.DateFin,
+        Motif = a.Motif
+    };
+}
