@@ -45,7 +45,10 @@ Créer la structure du dépôt et vérifier que tout démarre.
 - `git init`, `.gitignore` .NET + Node
 - Solution `KLEAN.sln`, projet `backend` (`dotnet new webapi`)
 - Projet `frontend` (`npm create vite@latest -- --template react-ts`,
-  linter ESLint)
+  linter **oxlint**, livré par le template)
+- `.oxlintrc.json` : activer `react/exhaustive-deps` et le jeu `jsx-a11y`
+  en `error` — ce sont les règles qui servent les étapes 10 à 12 et les
+  exigences d'accessibilité de `CLAUDE.md` §12
 - Packages : `Npgsql.EntityFrameworkCore.PostgreSQL`,
   `Microsoft.EntityFrameworkCore.Design`, `Swashbuckle.AspNetCore`
 - Base PostgreSQL `klean` créée
@@ -332,3 +335,4 @@ Quand un client demande « pourquoi ce montant ? », on peut répondre.
 | Compétences | Hors V1 du moteur | L'entité n'existe pas ; ne pas bloquer le moteur dessus |
 | Remplacement automatique | Non implémenté | Sans notifications ni application agent, il n'y a personne à contacter |
 | `Stock.EmplacementId` | Sans clé étrangère | Peut pointer vers un dépôt, un véhicule ou un site |
+| Linter frontend | oxlint, pas ESLint | Couvre `exhaustive-deps` et `jsx-a11y`, les deux familles utiles ici ; une devDep au lieu de six, cohérent avec la discipline de dépendances. Limite acceptée : pas de règle personnalisée en JavaScript |
