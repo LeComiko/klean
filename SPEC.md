@@ -74,8 +74,12 @@ Les onze entités et la migration initiale.
   fichier, enums dans le fichier de l'entité qui les utilise
 - `Id` de type `Guid`, data annotations `[Key]`, `[Required]`, `[MaxLength]`
 - Propriétés de navigation bidirectionnelles sur les relations one-to-many
-- `EntrepriseId` (Guid, requis) sur les onze entités dès le départ, **sans**
-  clé étrangère sur les sept qui ne l'ont pas naturellement
+- `EntrepriseId` (Guid, requis) sur **dix** entités dès le départ — les trois
+  qui la portent naturellement avec clé étrangère (Client, Agent, Produit) et
+  les sept dénormalisées **sans** clé étrangère (Site, Contrat, Prestation,
+  Intervention, Absence, Remplacement, Stock). `Entreprise` n'en porte pas :
+  son propre `Id` **est** le tenant, et l'amorçage de l'étape 5 doit créer la
+  première entreprise avant qu'aucun tenant n'existe
 - `backend/Data/KleanDbContext.cs` : les onze `DbSet`, les cinq conversions
   d'enum en string
 - Migration `InitialCreate`

@@ -89,6 +89,32 @@ cd frontend && npm run build     # tsc -b && vite build
 cd frontend && npm run lint
 ```
 
+## Migrations
+
+L'outil `dotnet-ef` est requis :
+
+```bash
+dotnet tool install --global dotnet-ef --version 10.0.12
+```
+
+Sous macOS avec Homebrew, il faut lui indiquer où trouver le runtime, sinon il
+échoue en annonçant un runtime manquant alors qu'il est installé :
+
+```bash
+export DOTNET_ROOT=/opt/homebrew/opt/dotnet/libexec
+```
+
+Puis, depuis `backend/` :
+
+```bash
+dotnet ef migrations add NomDeLaMigration
+dotnet ef database update
+```
+
+La migration `InitialCreate` crée les onze tables métier. Les cinq colonnes
+d'énumération sont de type `text` : la validation des valeurs est applicative,
+pas contrainte par la base.
+
 ## Architecture
 
 ```

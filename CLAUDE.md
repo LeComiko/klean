@@ -296,6 +296,14 @@ du confort de test, pas une fonctionnalité.
 **Exécutable verrouillé.** `dotnet build` échoue avec `MSB3027` si l'API
 tourne encore. Préférer `dotnet watch run` pendant le développement.
 
+**`dotnet-ef` et Homebrew.** L'outil global s'installe sans erreur mais
+refuse de démarrer : Homebrew place le runtime dans son Cellar, l'apphost le
+cherche à l'emplacement standard, et le message parle d'un runtime manquant
+alors qu'il est présent. Exporter `DOTNET_ROOT` avant toute commande `ef` :
+```bash
+export DOTNET_ROOT=/opt/homebrew/opt/dotnet/libexec
+```
+
 **Encodage des scripts SQL.** Sous PowerShell, `Set-Content -Encoding UTF8`
 ajoute un BOM que `psql` ne comprend pas. Utiliser `-Encoding ASCII`, et
 éviter les emojis dans les commentaires SQL.
