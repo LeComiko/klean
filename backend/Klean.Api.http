@@ -1,0 +1,6 @@
+@Klean.Api_HostAddress = http://localhost:5137
+
+GET {{Klean.Api_HostAddress}}/api/sante
+Accept: application/json
+
+###
