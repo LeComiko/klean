@@ -11,6 +11,7 @@ var chaine = builder.Configuration.GetConnectionString("Klean")
 
 builder.Services.AddDbContext<KleanDbContext>(options => options.UseNpgsql(chaine));
 
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -22,8 +23,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Point de contrôle minimal de l'étape 1 : l'API démarre et répond.
-// Les contrôleurs métier arrivent à l'étape 3.
-app.MapGet("/api/sante", () => new { statut = "ok", version = "0.1.0" });
+app.MapControllers();
+
+// Point de contrôle minimal : l'API démarre et répond. Exclu de la
+// description OpenAPI pour ne pas ajouter de schéma anonyme aux DTOs.
+app.MapGet("/api/sante", () => new { statut = "ok", version = "0.1.0" })
+   .ExcludeFromDescription();
 
 app.Run();
