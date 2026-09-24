@@ -109,7 +109,16 @@ public class EntreprisesController : ControllerBase
         }
         catch (DbUpdateException)
         {
-            return Conflict("Suppression refusée par la base : des données rattachées l'empêchent.");
+            // La cascade descend jusqu'aux agents, mais Intervention.AgentId est
+            // en Restrict : l'historique du planning bloque la suppression. Le
+            // message doit dire quoi faire, pas seulement que ça a échoué.
+            var affectees = await _db.Interventions
+                .CountAsync(i => i.EntrepriseId == id && i.AgentId != null);
+
+            return Conflict(affectees > 0
+                ? $"Suppression refusée : {affectees} intervention(s) de cette entreprise sont affectées à un agent. "
+                  + "Les désaffecter ou les supprimer d'abord."
+                : "Suppression refusée par la base : des données rattachées l'empêchent.");
         }
 
         return NoContent();

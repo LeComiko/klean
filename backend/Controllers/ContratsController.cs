@@ -1,0 +1,148 @@
+using Klean.Api.DTOs;
+using Klean.Api.Data;
+using Klean.Api.Models;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace Klean.Api.Controllers;
+
+[ApiController]
+[Route("api/contrats")]
+public class ContratsController : ControllerBase
+{
+    private readonly KleanDbContext _db;
+
+    public ContratsController(KleanDbContext db) => _db = db;
+
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<ContratDto>>> Lister()
+    {
+        var contrats = await _db.Contrats
+            .AsNoTracking()
+            .OrderByDescending(c => c.DateDebut)
+            .Select(c => new ContratDto
+            {
+                Id = c.Id,
+                EntrepriseId = c.EntrepriseId,
+                SiteId = c.SiteId,
+                DateDebut = c.DateDebut,
+                DateFin = c.DateFin,
+                Frequence = c.Frequence,
+                Actif = c.Actif
+            })
+            .ToListAsync();
+
+        return Ok(contrats);
+    }
+
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<ContratDto>> Obtenir(Guid id)
+    {
+        var contrat = await _db.Contrats
+            .AsNoTracking()
+            .Where(c => c.Id == id)
+            .Select(c => new ContratDto
+            {
+                Id = c.Id,
+                EntrepriseId = c.EntrepriseId,
+                SiteId = c.SiteId,
+                DateDebut = c.DateDebut,
+                DateFin = c.DateFin,
+                Frequence = c.Frequence,
+                Actif = c.Actif
+            })
+            .FirstOrDefaultAsync();
+
+        return contrat is null ? NotFound() : Ok(contrat);
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<ContratDto>> Creer(ContratCreateDto dto)
+    {
+        if (!await _db.Sites.AnyAsync(s => s.Id == dto.SiteId))
+        {
+            return BadRequest($"Site {dto.SiteId} inconnu.");
+        }
+
+        if (dto.DateFin.HasValue && dto.DateFin.Value < dto.DateDebut)
+        {
+            return BadRequest("La date de fin précède la date de début.");
+        }
+
+        var contrat = new Contrat
+        {
+            EntrepriseId = dto.EntrepriseId,
+            SiteId = dto.SiteId,
+            DateDebut = Utc(dto.DateDebut),
+            DateFin = Utc(dto.DateFin),
+            Frequence = dto.Frequence,
+            Actif = dto.Actif
+        };
+
+        _db.Contrats.Add(contrat);
+        await _db.SaveChangesAsync();
+
+        return CreatedAtAction(nameof(Obtenir), new { id = contrat.Id }, Vers(contrat));
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> Modifier(Guid id, ContratCreateDto dto)
+    {
+        var contrat = await _db.Contrats.FindAsync(id);
+        if (contrat is null) return NotFound();
+
+        if (contrat.SiteId != dto.SiteId && !await _db.Sites.AnyAsync(s => s.Id == dto.SiteId))
+        {
+            return BadRequest($"Site {dto.SiteId} inconnu.");
+        }
+
+        if (dto.DateFin.HasValue && dto.DateFin.Value < dto.DateDebut)
+        {
+            return BadRequest("La date de fin précède la date de début.");
+        }
+
+        contrat.SiteId = dto.SiteId;
+        contrat.DateDebut = Utc(dto.DateDebut);
+        contrat.DateFin = Utc(dto.DateFin);
+        contrat.Frequence = dto.Frequence;
+        contrat.Actif = dto.Actif;
+
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Supprimer(Guid id)
+    {
+        var contrat = await _db.Contrats.FindAsync(id);
+        if (contrat is null) return NotFound();
+
+        _db.Contrats.Remove(contrat);
+
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict("Suppression refusée par la base : des données rattachées l'empêchent.");
+        }
+
+        return NoContent();
+    }
+
+    // Npgsql refuse un DateTime dont le Kind est Unspecified (CLAUDE.md §10).
+    private static DateTime Utc(DateTime d) => DateTime.SpecifyKind(d, DateTimeKind.Utc);
+    private static DateTime? Utc(DateTime? d) => d.HasValue ? Utc(d.Value) : null;
+
+    private static ContratDto Vers(Contrat c) => new()
+    {
+        Id = c.Id,
+        EntrepriseId = c.EntrepriseId,
+        SiteId = c.SiteId,
+        DateDebut = c.DateDebut,
+        DateFin = c.DateFin,
+        Frequence = c.Frequence,
+        Actif = c.Actif
+    };
+}
