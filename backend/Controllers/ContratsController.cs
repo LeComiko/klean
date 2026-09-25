@@ -16,6 +16,7 @@ public class ContratsController : ControllerBase
 
     public ContratsController(KleanDbContext db) => _db = db;
 
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ContratDto>>> Lister()
     {
@@ -37,6 +38,7 @@ public class ContratsController : ControllerBase
         return Ok(contrats);
     }
 
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ContratDto>> Obtenir(Guid id)
     {
@@ -58,6 +60,7 @@ public class ContratsController : ControllerBase
         return contrat is null ? NotFound() : Ok(contrat);
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpPost]
     public async Task<ActionResult<ContratDto>> Creer(ContratCreateDto dto)
     {
@@ -86,6 +89,7 @@ public class ContratsController : ControllerBase
         return CreatedAtAction(nameof(Obtenir), new { id = contrat.Id }, Vers(contrat));
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Modifier(Guid id, ContratCreateDto dto)
     {
@@ -112,6 +116,7 @@ public class ContratsController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Supprimer(Guid id)
     {

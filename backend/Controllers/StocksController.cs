@@ -16,6 +16,7 @@ public class StocksController : ControllerBase
 
     public StocksController(KleanDbContext db) => _db = db;
 
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<StockDto>>> Lister()
     {
@@ -36,6 +37,7 @@ public class StocksController : ControllerBase
         return Ok(stocks);
     }
 
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<StockDto>> Obtenir(Guid id)
     {
@@ -56,6 +58,7 @@ public class StocksController : ControllerBase
         return stock is null ? NotFound() : Ok(stock);
     }
 
+    [Authorize(Roles = RolesKlean.Exploitation)]
     [HttpPost]
     public async Task<ActionResult<StockDto>> Creer(StockCreateDto dto)
     {
@@ -86,6 +89,7 @@ public class StocksController : ControllerBase
         return CreatedAtAction(nameof(Obtenir), new { id = stock.Id }, Vers(stock));
     }
 
+    [Authorize(Roles = RolesKlean.Exploitation)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Modifier(Guid id, StockCreateDto dto)
     {
@@ -111,6 +115,7 @@ public class StocksController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = RolesKlean.Exploitation)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Supprimer(Guid id)
     {

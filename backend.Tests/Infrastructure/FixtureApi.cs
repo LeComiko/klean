@@ -143,6 +143,35 @@ public class FixtureApi : IAsyncLifetime
         return client;
     }
 
+    /// <summary>
+    /// Crée un compte du rôle demandé via l'API — donc en passant par les mêmes
+    /// contrôles qu'en production — puis rend un client connecté dessus.
+    /// </summary>
+    public async Task<HttpClient> ClientDeRoleAsync(
+        HttpClient administrateur, string role, string email,
+        Guid? agentId = null, Guid? clientId = null)
+    {
+        var creation = await administrateur.PostAsJsonAsync("/api/auth/comptes",
+            new CompteCreateDto
+            {
+                Email = email,
+                MotDePasse = MotDePasse,
+                Nom = role,
+                Role = role,
+                AgentId = agentId,
+                ClientId = clientId
+            });
+
+        if (!creation.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"Création du compte {role} impossible : "
+                + await creation.Content.ReadAsStringAsync());
+        }
+
+        return await ClientConnecteAsync(email);
+    }
+
     public HttpClient ClientAnonyme() => Fabrique.CreateClient();
 
     /// <summary>

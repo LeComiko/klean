@@ -21,6 +21,7 @@ public class RemplacementsController : ControllerBase
 
     public RemplacementsController(KleanDbContext db) => _db = db;
 
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<RemplacementDto>>> Lister()
     {
@@ -43,6 +44,7 @@ public class RemplacementsController : ControllerBase
         return Ok(remplacements);
     }
 
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<RemplacementDto>> Obtenir(Guid id)
     {
@@ -65,6 +67,7 @@ public class RemplacementsController : ControllerBase
         return remplacement is null ? NotFound() : Ok(remplacement);
     }
 
+    [Authorize(Roles = RolesKlean.Exploitation)]
     [HttpPost]
     public async Task<ActionResult<RemplacementDto>> Creer(RemplacementCreateDto dto)
     {
@@ -92,6 +95,7 @@ public class RemplacementsController : ControllerBase
         return CreatedAtAction(nameof(Obtenir), new { id = remplacement.Id }, Vers(remplacement));
     }
 
+    [Authorize(Roles = RolesKlean.Exploitation)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Modifier(Guid id, RemplacementCreateDto dto)
     {
@@ -103,19 +107,31 @@ public class RemplacementsController : ControllerBase
         var remplacement = await _db.Remplacements.FindAsync(id);
         if (remplacement is null) return NotFound();
 
+        // Le CRUD brut ne franchit pas la machine à états : il laissait forcer
+        // Accepte, donc changer l'agent d'une intervention sans passer par la
+        // seule méthode autorisée à le faire (CLAUDE.md §9). Les transitions
+        // passent par les endpoints gardés de l'étape 12.
+        if (statut != remplacement.Statut)
+        {
+            return BadRequest(
+                $"Le statut d'un remplacement ne se modifie pas ici. Il vaut "
+                + $"« {remplacement.Statut} » et doit être renvoyé tel quel. Utiliser "
+                + "les actions proposer, accepter ou refuser.");
+        }
+
         var erreur = await ValiderLiens(dto);
         if (erreur is not null) return BadRequest(erreur);
 
         remplacement.InterventionId = dto.InterventionId;
         remplacement.AbsenceId = dto.AbsenceId;
         remplacement.AgentRemplacantId = dto.AgentRemplacantId;
-        remplacement.Statut = statut;
         remplacement.Score = dto.Score;
 
         await _db.SaveChangesAsync();
         return NoContent();
     }
 
+    [Authorize(Roles = RolesKlean.Exploitation)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Supprimer(Guid id)
     {

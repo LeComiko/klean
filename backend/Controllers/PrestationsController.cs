@@ -16,6 +16,7 @@ public class PrestationsController : ControllerBase
 
     public PrestationsController(KleanDbContext db) => _db = db;
 
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<PrestationDto>>> Lister()
     {
@@ -35,6 +36,7 @@ public class PrestationsController : ControllerBase
         return Ok(prestations);
     }
 
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<PrestationDto>> Obtenir(Guid id)
     {
@@ -54,6 +56,7 @@ public class PrestationsController : ControllerBase
         return prestation is null ? NotFound() : Ok(prestation);
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpPost]
     public async Task<ActionResult<PrestationDto>> Creer(PrestationCreateDto dto)
     {
@@ -75,6 +78,7 @@ public class PrestationsController : ControllerBase
         return CreatedAtAction(nameof(Obtenir), new { id = prestation.Id }, Vers(prestation));
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Modifier(Guid id, PrestationCreateDto dto)
     {
@@ -94,6 +98,7 @@ public class PrestationsController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Supprimer(Guid id)
     {

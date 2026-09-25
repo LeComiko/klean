@@ -252,19 +252,25 @@ public class CrudTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Siret_en_doublon_renvoie_409()
+    public async Task Siret_deja_pris_par_une_autre_entreprise_renvoie_409()
     {
-        await Creer<EntrepriseDto>("/api/entreprises", new EntrepriseCreateDto
-        {
-            RaisonSociale = "Première", Siret = "30000000000003"
-        });
+        // Le SIRET est unique à l'échelle de l'instance, pas du tenant : deux
+        // entreprises clientes ne peuvent pas déclarer le même. La contrainte est
+        // en base, hors portée des filtres, donc Alpha se heurte à celui de Beta
+        // sans pouvoir le lire.
+        var sienne = await _client.GetFromJsonAsync<List<EntrepriseDto>>("/api/entreprises");
+        Assert.NotNull(sienne);
+        var alpha = Assert.Single(sienne);
 
-        var reponse = await _client.PostAsJsonAsync("/api/entreprises", new EntrepriseCreateDto
-        {
-            RaisonSociale = "Seconde", Siret = "30000000000003"
-        });
+        var reponse = await _client.PutAsJsonAsync($"/api/entreprises/{alpha.Id}",
+            new EntrepriseCreateDto
+            {
+                RaisonSociale = alpha.RaisonSociale,
+                Siret = "20000000000002"
+            });
 
         Assert.Equal(HttpStatusCode.Conflict, reponse.StatusCode);
+        Assert.Contains("déjà enregistré", await reponse.Content.ReadAsStringAsync());
     }
 
     [Fact]

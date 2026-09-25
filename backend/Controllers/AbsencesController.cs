@@ -16,6 +16,7 @@ public class AbsencesController : ControllerBase
 
     public AbsencesController(KleanDbContext db) => _db = db;
 
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<AbsenceDto>>> Lister()
     {
@@ -37,6 +38,7 @@ public class AbsencesController : ControllerBase
         return Ok(absences);
     }
 
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<AbsenceDto>> Obtenir(Guid id)
     {
@@ -58,6 +60,7 @@ public class AbsencesController : ControllerBase
         return absence is null ? NotFound() : Ok(absence);
     }
 
+    [Authorize(Roles = RolesKlean.Exploitation)]
     [HttpPost]
     public async Task<ActionResult<AbsenceDto>> Creer(AbsenceCreateDto dto)
     {
@@ -69,6 +72,18 @@ public class AbsencesController : ControllerBase
         if (!await _db.Agents.AnyAsync(a => a.Id == dto.AgentId))
         {
             return BadRequest($"Agent {dto.AgentId} inconnu.");
+        }
+
+        // Un motif d'arrêt maladie en texte libre est une donnée de santé au sens
+        // de l'article 9 du RGPD, et le planning n'en fait rien : il lui suffit
+        // de savoir QU'un agent est absent. Décision consignée dans SPEC.md.
+        if (type == TypeAbsence.Maladie && !string.IsNullOrWhiteSpace(dto.Motif))
+        {
+            return BadRequest(
+                "Un arrêt maladie ne peut pas porter de motif : c'est une donnée de "
+                + "santé, et le planning n'en a pas besoin. Renseigner le type et les "
+                + "dates seulement. Le motif reste disponible sur les autres types "
+                + "d'absence.");
         }
 
         if (dto.DateFin < dto.DateDebut)
@@ -92,6 +107,7 @@ public class AbsencesController : ControllerBase
         return CreatedAtAction(nameof(Obtenir), new { id = absence.Id }, Vers(absence));
     }
 
+    [Authorize(Roles = RolesKlean.Exploitation)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Modifier(Guid id, AbsenceCreateDto dto)
     {
@@ -106,6 +122,18 @@ public class AbsencesController : ControllerBase
         if (absence.AgentId != dto.AgentId && !await _db.Agents.AnyAsync(a => a.Id == dto.AgentId))
         {
             return BadRequest($"Agent {dto.AgentId} inconnu.");
+        }
+
+        // Un motif d'arrêt maladie en texte libre est une donnée de santé au sens
+        // de l'article 9 du RGPD, et le planning n'en fait rien : il lui suffit
+        // de savoir QU'un agent est absent. Décision consignée dans SPEC.md.
+        if (type == TypeAbsence.Maladie && !string.IsNullOrWhiteSpace(dto.Motif))
+        {
+            return BadRequest(
+                "Un arrêt maladie ne peut pas porter de motif : c'est une donnée de "
+                + "santé, et le planning n'en a pas besoin. Renseigner le type et les "
+                + "dates seulement. Le motif reste disponible sur les autres types "
+                + "d'absence.");
         }
 
         if (dto.DateFin < dto.DateDebut)
@@ -123,6 +151,7 @@ public class AbsencesController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = RolesKlean.Exploitation)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Supprimer(Guid id)
     {

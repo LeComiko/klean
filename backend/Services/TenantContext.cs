@@ -12,6 +12,21 @@ public class TenantContext : ITenantContext
 
     public void DesactiverFiltrage() => FiltrageActif = false;
 
+    /// <summary>
+    /// Nuls pour un compte interne : aucune restriction supplémentaire ne
+    /// s'applique alors, les filtres globaux traitent null comme « pas de
+    /// cadrage ».
+    /// </summary>
+    public Guid? ClientId => Revendication(JwtService.RevendicationClientId);
+
+    public Guid? AgentId => Revendication(JwtService.RevendicationAgentId);
+
+    private Guid? Revendication(string nom)
+    {
+        var valeur = _accesseur.HttpContext?.User?.FindFirst(nom)?.Value;
+        return Guid.TryParse(valeur, out var id) ? id : null;
+    }
+
     public Guid? EntrepriseId
     {
         get

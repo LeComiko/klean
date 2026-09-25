@@ -16,6 +16,7 @@ public class AgentsController : ControllerBase
 
     public AgentsController(KleanDbContext db) => _db = db;
 
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<AgentDto>>> Lister()
     {
@@ -41,6 +42,7 @@ public class AgentsController : ControllerBase
         return Ok(agents);
     }
 
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<AgentDto>> Obtenir(Guid id)
     {
@@ -66,6 +68,7 @@ public class AgentsController : ControllerBase
         return agent is null ? NotFound() : Ok(agent);
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpPost]
     public async Task<ActionResult<AgentDto>> Creer(AgentCreateDto dto)
     {
@@ -90,6 +93,7 @@ public class AgentsController : ControllerBase
         return CreatedAtAction(nameof(Obtenir), new { id = agent.Id }, Vers(agent));
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Modifier(Guid id, AgentCreateDto dto)
     {
@@ -110,6 +114,7 @@ public class AgentsController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Supprimer(Guid id)
     {

@@ -16,6 +16,7 @@ public class ProduitsController : ControllerBase
 
     public ProduitsController(KleanDbContext db) => _db = db;
 
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ProduitDto>>> Lister()
     {
@@ -36,6 +37,7 @@ public class ProduitsController : ControllerBase
         return Ok(produits);
     }
 
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ProduitDto>> Obtenir(Guid id)
     {
@@ -56,6 +58,7 @@ public class ProduitsController : ControllerBase
         return produit is null ? NotFound() : Ok(produit);
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpPost]
     public async Task<ActionResult<ProduitDto>> Creer(ProduitCreateDto dto)
     {
@@ -73,6 +76,7 @@ public class ProduitsController : ControllerBase
         return CreatedAtAction(nameof(Obtenir), new { id = produit.Id }, Vers(produit));
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Modifier(Guid id, ProduitCreateDto dto)
     {
@@ -88,6 +92,7 @@ public class ProduitsController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Supprimer(Guid id)
     {

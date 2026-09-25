@@ -248,9 +248,69 @@ seule passe sur les onze contrôleurs, puisque autorisations et pagination
 touchent les mêmes fichiers.
 
 **Périmètre**
-- Matrice des droits — une ligne par rôle, une colonne par ressource, verbe par
-  verbe — écrite **dans ce fichier** avant d'écrire une ligne de code
+## Matrice des droits
+
+`L` lire · `C` créer · `M` modifier · `S` supprimer · `—` aucun accès, 403
+
+| Ressource | Administrateur | Responsable | ChefEquipe | Agent | ClientSyndic |
+|---|---|---|---|---|---|
+| Entreprises | L M | L | L | — | — |
+| Clients | L C M S | L | L | — | L¹ |
+| Sites | L C M S | L | L | — | L¹ |
+| Contrats | L C M S | L | L | — | — |
+| Prestations | L C M S | L | L | — | — |
+| Agents | L C M S | L | L | — | — |
+| Interventions | L C M S | L C M S | L **M** | L² | — |
+| Absences | L C M S | L C M S | L | — | — |
+| Remplacements | L C M S | L C M S | L | — | — |
+| Produits | L C M S | L | L | — | — |
+| Stocks | L C M S | L C M S | L | — | — |
+
+¹ **`ClientSyndic`** ne voit que les ressources rattachées à son propre
+`ClientId`. Deuxième axe d'isolation, indépendant du tenant.
+² **`Agent`** ne voit que les interventions dont il est l'affectataire.
+Troisième axe, même mécanisme.
+
+**Lecture de la matrice, ligne par ligne**
+
+- **Administrateur** : tout, sauf créer ou supprimer une entreprise — voir
+  ci-dessous.
+- **Responsable d'exploitation** : écrit sur ce que `SPEC.md` lui attribue —
+  interventions, absences, remplacements, stocks. Il **lit** les données de
+  référence : clients, sites, contrats, prestations, agents, produits. Le
+  partage entre exploitation et référence vient du tableau des rôles, qui
+  réserve les « données de référence » à l'administrateur.
+- **Chef d'équipe** : lecture sur toute son entreprise, écriture **uniquement**
+  sur les interventions, et en modification seulement — planifier relève du
+  responsable, contrôler et valider relèvent de lui. Défini par le verbe et non
+  par le périmètre : le cadrage par périmètre est l'étape 19.
+- **Agent** : ses interventions, en lecture. Le reste de l'application mobile —
+  consignes, checklist, anomalies, photos — suppose des endpoints conçus pour
+  elle, et des entités qui n'existent pas encore. Cette étape **sécurise** le
+  rôle, elle ne le sert pas.
+- **Client / Syndic** : son client et ses sites, en lecture. Même raisonnement :
+  ce qu'un syndic veut réellement voir — prestations réalisées, passages
+  certifiés, rapports — c'est le portail, avec ses propres endpoints. On ferme
+  d'abord, on ouvre ensuite ce qui est conçu pour l'être.
+
+⚠️ **`POST` et `DELETE` sur `/api/entreprises` sont retirés.** Créer ou
+supprimer une entreprise est du provisionnement d'instance, pas de la gestion de
+tenant. En l'état, un administrateur pouvait créer une entreprise que le filtre
+lui masquait aussitôt, et supprimer la sienne en cascade. L'amorçage crée la
+première ; les suivantes relèveront d'un parcours d'inscription. Le décompte
+passe de 55 à **53** endpoints métier, plus 3 d'authentification.
+
+⚠️ Le point où je m'attends à de la contradiction du terrain : un responsable
+d'exploitation qui ne peut pas créer un site ni un contrat. C'est ce que dit le
+tableau des rôles, mais ça peut ne pas résister à un premier client. C'est une
+ligne de la matrice, donc un attribut à changer.
+
+**Périmètre de mise en œuvre**
 - `[Authorize(Roles = ...)]` par endpoint, conformément à la matrice
+- les deux nouveaux axes d'isolation appliqués par **filtres globaux**, comme le
+  tenant : `Client` sur `e.Id`, `Site` sur `e.ClientId`, `Intervention` sur
+  `e.AgentId`. Les revendications `clientId` et `agentId` sont déjà dans le
+  jeton. Aucun contrôleur ne doit refaire ce travail à la main.
 - **Second axe d'isolation** : un compte `ClientSyndic` ne voit que les sites de
   son `ClientId`, en lecture seule. Filtre appliqué côté requête, jamais en
   confiance dans le contrôleur.

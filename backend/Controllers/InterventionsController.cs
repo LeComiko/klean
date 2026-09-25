@@ -16,6 +16,7 @@ public class InterventionsController : ControllerBase
 
     public InterventionsController(KleanDbContext db) => _db = db;
 
+    [Authorize(Roles = RolesKlean.InterneEtAgent)]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<InterventionDto>>> Lister()
     {
@@ -37,6 +38,7 @@ public class InterventionsController : ControllerBase
         return Ok(interventions);
     }
 
+    [Authorize(Roles = RolesKlean.InterneEtAgent)]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<InterventionDto>> Obtenir(Guid id)
     {
@@ -58,6 +60,7 @@ public class InterventionsController : ControllerBase
         return intervention is null ? NotFound() : Ok(intervention);
     }
 
+    [Authorize(Roles = RolesKlean.Exploitation)]
     [HttpPost]
     public async Task<ActionResult<InterventionDto>> Creer(InterventionCreateDto dto)
     {
@@ -91,6 +94,7 @@ public class InterventionsController : ControllerBase
         return CreatedAtAction(nameof(Obtenir), new { id = intervention.Id }, Vers(intervention));
     }
 
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Modifier(Guid id, InterventionCreateDto dto)
     {
@@ -124,6 +128,7 @@ public class InterventionsController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = RolesKlean.Exploitation)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Supprimer(Guid id)
     {

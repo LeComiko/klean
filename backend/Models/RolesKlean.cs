@@ -13,6 +13,22 @@ public static class RolesKlean
     public const string Agent = "Agent";
     public const string ClientSyndic = "ClientSyndic";
 
+    // ---- Groupes utilisés par [Authorize(Roles = ...)] ----
+    // La sémantique de Roles est « l'un de », pas « tous ».
+    // Voir la matrice des droits dans SPEC.md, étape 8.
+
+    /// <summary>Les trois rôles internes : lecture sur toute l'entreprise.</summary>
+    public const string Interne = $"{Administrateur},{Responsable},{ChefEquipe}";
+
+    /// <summary>Écriture sur les données d'exploitation, hors données de référence.</summary>
+    public const string Exploitation = $"{Administrateur},{Responsable}";
+
+    /// <summary>Lecture interne, plus le syndic cadré sur son propre client.</summary>
+    public const string InterneEtClientSyndic = $"{Interne},{ClientSyndic}";
+
+    /// <summary>Lecture interne, plus l'agent cadré sur ses propres interventions.</summary>
+    public const string InterneEtAgent = $"{Interne},{Agent}";
+
     public static readonly string[] Tous =
     [
         Administrateur,

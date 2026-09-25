@@ -16,6 +16,7 @@ public class ClientsController : ControllerBase
 
     public ClientsController(KleanDbContext db) => _db = db;
 
+    [Authorize(Roles = RolesKlean.InterneEtClientSyndic)]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ClientDto>>> Lister()
     {
@@ -39,6 +40,7 @@ public class ClientsController : ControllerBase
         return Ok(clients);
     }
 
+    [Authorize(Roles = RolesKlean.InterneEtClientSyndic)]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ClientDto>> Obtenir(Guid id)
     {
@@ -62,6 +64,7 @@ public class ClientsController : ControllerBase
         return client is null ? NotFound() : Ok(client);
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpPost]
     public async Task<ActionResult<ClientDto>> Creer(ClientCreateDto dto)
     {
@@ -87,6 +90,7 @@ public class ClientsController : ControllerBase
         return CreatedAtAction(nameof(Obtenir), new { id = client.Id }, Vers(client));
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Modifier(Guid id, ClientCreateDto dto)
     {
@@ -110,6 +114,7 @@ public class ClientsController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Supprimer(Guid id)
     {

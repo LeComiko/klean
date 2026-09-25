@@ -32,6 +32,11 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
     private bool TenantFiltrageActif => _tenant?.FiltrageActif ?? false;
     private Guid? TenantEntrepriseId => _tenant?.EntrepriseId;
 
+    // Deuxième et troisième axes d'isolation : nuls pour un compte interne,
+    // auquel cas aucune restriction supplémentaire ne s'applique.
+    private Guid? TenantClientId => _tenant?.ClientId;
+    private Guid? TenantAgentId => _tenant?.AgentId;
+
     public DbSet<Entreprise> Entreprises => Set<Entreprise>();
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Site> Sites => Set<Site>();
@@ -143,9 +148,13 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
             !TenantFiltrageActif || TenantEntrepriseId == null || e.Id == TenantEntrepriseId);
 
         modelBuilder.Entity<Client>().HasQueryFilter(e =>
-            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+            !TenantFiltrageActif || TenantEntrepriseId == null
+            || (e.EntrepriseId == TenantEntrepriseId
+                && (TenantClientId == null || e.Id == TenantClientId)));
         modelBuilder.Entity<Site>().HasQueryFilter(e =>
-            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+            !TenantFiltrageActif || TenantEntrepriseId == null
+            || (e.EntrepriseId == TenantEntrepriseId
+                && (TenantClientId == null || e.ClientId == TenantClientId)));
         modelBuilder.Entity<Contrat>().HasQueryFilter(e =>
             !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
         modelBuilder.Entity<Prestation>().HasQueryFilter(e =>
@@ -153,7 +162,9 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Agent>().HasQueryFilter(e =>
             !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
         modelBuilder.Entity<Intervention>().HasQueryFilter(e =>
-            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+            !TenantFiltrageActif || TenantEntrepriseId == null
+            || (e.EntrepriseId == TenantEntrepriseId
+                && (TenantAgentId == null || e.AgentId == TenantAgentId)));
         modelBuilder.Entity<Absence>().HasQueryFilter(e =>
             !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
         modelBuilder.Entity<Remplacement>().HasQueryFilter(e =>

@@ -16,6 +16,7 @@ public class SitesController : ControllerBase
 
     public SitesController(KleanDbContext db) => _db = db;
 
+    [Authorize(Roles = RolesKlean.InterneEtClientSyndic)]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<SiteDto>>> Lister()
     {
@@ -40,6 +41,7 @@ public class SitesController : ControllerBase
         return Ok(sites);
     }
 
+    [Authorize(Roles = RolesKlean.InterneEtClientSyndic)]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<SiteDto>> Obtenir(Guid id)
     {
@@ -64,6 +66,7 @@ public class SitesController : ControllerBase
         return site is null ? NotFound() : Ok(site);
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpPost]
     public async Task<ActionResult<SiteDto>> Creer(SiteCreateDto dto)
     {
@@ -90,6 +93,7 @@ public class SitesController : ControllerBase
         return CreatedAtAction(nameof(Obtenir), new { id = site.Id }, Vers(site));
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Modifier(Guid id, SiteCreateDto dto)
     {
@@ -114,6 +118,7 @@ public class SitesController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Supprimer(Guid id)
     {

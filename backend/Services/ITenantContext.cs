@@ -13,6 +13,19 @@ public interface ITenantContext
     /// </summary>
     Guid? EntrepriseId { get; }
 
+    /// <summary>
+    /// Client du jeton, renseigné pour un compte ClientSyndic. Deuxième axe
+    /// d'isolation : les filtres globaux s'en servent pour restreindre le
+    /// syndic à son propre client et à ses sites.
+    /// </summary>
+    Guid? ClientId { get; }
+
+    /// <summary>
+    /// Agent du jeton, renseigné pour un compte Agent. Troisième axe : il ne
+    /// voit que les interventions dont il est l'affectataire.
+    /// </summary>
+    Guid? AgentId { get; }
+
     bool FiltrageActif { get; }
 
     /// <summary>
