@@ -1,6 +1,7 @@
 using Klean.Api.DTOs;
 using Klean.Api.Data;
 using Klean.Api.Models;
+using Klean.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -8,9 +9,10 @@ using Microsoft.EntityFrameworkCore;
 namespace Klean.Api.Controllers;
 
 /// <summary>
-/// CRUD brut sur les remplacements. Le cycle métier gardé — candidats,
-/// proposer, accepter, refuser — est ajouté à l'étape 8 ; c'est lui qui doit
-/// être utilisé en exploitation, ce PUT reste un outil d'administration.
+/// Remplacements : le CRUD brut, et le cycle métier gardé — candidats,
+/// proposer, accepter, refuser. C'est le cycle qui doit être utilisé en
+/// exploitation ; le PUT reste un outil d'administration et refuse tout
+/// changement de statut.
 /// </summary>
 [Authorize]
 [ApiController]
@@ -18,8 +20,13 @@ namespace Klean.Api.Controllers;
 public class RemplacementsController : ControllerBase
 {
     private readonly KleanDbContext _db;
+    private readonly RemplacementService _cycle;
 
-    public RemplacementsController(KleanDbContext db) => _db = db;
+    public RemplacementsController(KleanDbContext db, RemplacementService cycle)
+    {
+        _db = db;
+        _cycle = cycle;
+    }
 
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
@@ -163,6 +170,54 @@ public class RemplacementsController : ControllerBase
 
         return NoContent();
     }
+
+    // ------------------------------------------------------- cycle métier gardé
+
+    /// <summary>
+    /// Candidats au remplacement, classés par score décroissant. Réservé aux
+    /// rôles internes, comme la liste de candidats d'une intervention : elle
+    /// nomme des agents.
+    /// </summary>
+    [Authorize(Roles = RolesKlean.Interne)]
+    [HttpGet("{id:guid}/candidats")]
+    public async Task<ActionResult<IEnumerable<CandidatDto>>> Candidats(Guid id)
+    {
+        var candidats = await _cycle.GetCandidatsAsync(id);
+
+        return candidats is null ? NotFound() : Ok(candidats);
+    }
+
+    [Authorize(Roles = RolesKlean.Exploitation)]
+    [HttpPost("{id:guid}/proposer")]
+    public async Task<ActionResult<RemplacementDto>> Proposer(Guid id, ProposerDto dto)
+        => Traduire(await _cycle.ProposerAsync(id, dto.AgentId));
+
+    /// <summary>
+    /// Accepte la proposition : c'est ici, et nulle part ailleurs dans le cycle,
+    /// que l'intervention change d'agent (CLAUDE.md §9).
+    /// </summary>
+    [Authorize(Roles = RolesKlean.Exploitation)]
+    [HttpPost("{id:guid}/accepter")]
+    public async Task<ActionResult<RemplacementDto>> Accepter(Guid id)
+        => Traduire(await _cycle.AccepterAsync(id));
+
+    [Authorize(Roles = RolesKlean.Exploitation)]
+    [HttpPost("{id:guid}/refuser")]
+    public async Task<ActionResult<RemplacementDto>> Refuser(Guid id)
+        => Traduire(await _cycle.RefuserAsync(id));
+
+    /// <summary>
+    /// Une ressource inexistante donne 404, une transition impossible 400. La
+    /// distinction est exigée par la spécification : « ce remplacement n'existe
+    /// pas » et « ce remplacement n'est pas dans le bon état » n'appellent pas la
+    /// même action côté appelant.
+    /// </summary>
+    private ActionResult<RemplacementDto> Traduire(ResultatRemplacement resultat) => resultat.Issue switch
+    {
+        IssueRemplacement.Ok => Ok(resultat.Valeur),
+        IssueRemplacement.Introuvable => NotFound(),
+        _ => BadRequest(resultat.Message)
+    };
 
     private async Task<string?> ValiderLiens(RemplacementCreateDto dto)
     {

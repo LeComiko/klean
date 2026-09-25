@@ -305,14 +305,37 @@ Refuse ──proposer──► Propose
 
 - `DetecterImpactsAsync(absenceId)` crée un `Remplacement` en statut
   `Recherche` pour chaque intervention `Planifiee` de l'agent absent dont le
-  créneau chevauche l'absence. Idempotent : ne recrée pas si un remplacement
-  actif existe déjà.
-- `AccepterAsync` est **le seul endroit du code** où une intervention change
-  d'agent.
+  **jour** tombe dans l'absence. Comparaison au jour, comme les filtres durs du
+  §8. Idempotent : ne recrée pas si un remplacement `Recherche`, `Propose` ou
+  `Accepte` existe déjà sur la même intervention. Appelée automatiquement à la
+  création d'une absence, et rejouable par
+  `POST /api/absences/{id}/detecter-impacts`.
+- `ProposerAsync` **refuse** un agent écarté par un filtre dur, au lieu de le
+  proposer avec un score nul. Sans cette garde les filtres durs seraient
+  décoratifs : il suffirait de proposer à la main l'agent en arrêt maladie. Le
+  score est celui que le moteur calcule à cet instant, jamais celui que le
+  client envoie.
+- `AccepterAsync` **revérifie** l'éligibilité avant d'écrire : entre la
+  proposition et l'acceptation, une absence a pu être saisie.
 - Un refus ne réaffecte rien et ne déclenche aucune cascade : chaque
-  proposition est une action humaine explicite.
+  proposition est une action humaine explicite. Il ramène en `Recherche` et
+  efface l'agent — le service ne produit donc jamais le statut `Refuse`, mais
+  l'accepte en entrée puisque le CRUD brut peut l'avoir posé. Limite assumée de
+  la V1 : sans table d'historique, un refus ne laisse pas de trace et rien
+  n'empêche de reproposer aussitôt le même agent.
 - Toute transition invalide retourne 400 avec un message explicite ; une
   ressource inexistante retourne 404. La distinction doit être testée.
+
+⚠️ **Correction d'une affirmation fausse de la version précédente de cette
+section.** Elle indiquait qu'`AccepterAsync` était « **le seul endroit du code**
+où une intervention change d'agent ». C'est faux : `PUT /api/interventions/{id}`
+écrit `AgentId` après avoir seulement vérifié que l'agent existe. Vérifié
+empiriquement — un agent en arrêt maladie ce jour-là, absent de la liste des
+candidats, est accepté par le `PUT` avec un `204`. Les filtres durs du moteur
+d'affectation sont donc contournables par une requête légitime d'un
+`Responsable`. `AccepterAsync` est le seul endroit **du cycle de remplacement**
+qui change l'agent ; ce n'est pas le seul du code. Arbitrage en attente, voir la
+fin de l'étape 10 de `SPEC.md`.
 
 Pas de mode « remplacement automatique » : sans notifications ni application
 agent, il n'y a personne à contacter.

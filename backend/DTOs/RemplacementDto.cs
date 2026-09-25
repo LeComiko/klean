@@ -25,7 +25,7 @@ public class RemplacementDto
 
 /// <summary>
 /// CRUD brut, destiné à l'administration et au diagnostic. Les transitions
-/// métier gardées — proposer, accepter, refuser — arrivent à l'étape 8 dans
+/// métier gardées — proposer, accepter, refuser — vivent dans
 /// <c>RemplacementService</c> : c'est par là que passe le cycle normal,
 /// pas par ce PUT (CLAUDE.md §9).
 /// </summary>

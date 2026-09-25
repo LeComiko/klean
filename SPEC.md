@@ -411,13 +411,53 @@ sépare deux journées de travail, pas deux tâches d'une même journée.
   `POST /api/absences/{id}/detecter-impacts`
 - `RemplacementsController` : `candidats`, `proposer`, `accepter`, `refuser`
 
-**Validation** — scénario complet, chaque point vérifié :
-détection (1 remplacement) · idempotence (0 au second appel) · candidats
-classés · `accepter` sur statut `Recherche` → **400** · proposition →
-`Propose` avec score · refus → retour `Recherche` **sans réaffecter
-l'intervention** · proposition puis acceptation → l'intervention **change
-réellement d'agent** · proposition après acceptation → 400 · id inexistant
-→ **404**.
+- `backend.Tests/RemplacementTests.cs` : scénario complet et transitions
+  invalides
+
+**Validation** — 24 tests, chaque point du scénario vérifié :
+détection déclenchée par la création de l'absence (1 remplacement) ·
+idempotence (0 au second appel) · seules les interventions `Planifiee` sont
+couvertes · chaque jour de l'absence est couvert · l'agent absent n'est pas
+candidat à son propre remplacement · `accepter` et `refuser` sur statut
+`Recherche` → **400** · proposition → `Propose` avec score · refus → retour
+`Recherche` **sans réaffecter l'intervention** · proposition puis acceptation →
+l'intervention **change réellement d'agent** · proposition et acceptation après
+acceptation → 400 · proposition après refus acceptée · id inexistant → **404**
+sur les trois actions · `ChefEquipe` lit les candidats mais reçoit **403** sur
+`proposer`.
+
+Dix sabotages rejoués, chacun rattrapé : garde d'idempotence, filtre
+`Planifiee`, dernier jour de l'absence, `accepter` sans garde de statut,
+`proposer` sans garde de statut, refus laissant `Refuse`, éligibilité à la
+proposition, éligibilité à l'acceptation, acceptation qui n'écrit pas l'agent,
+404 traduit en 400.
+
+**Deux gardes ajoutées, que la spécification n'imposait pas explicitement.**
+`proposer` refuse un agent écarté par un filtre dur au lieu de le proposer avec
+un score nul — sinon les filtres durs sont décoratifs. Et `accepter` revérifie
+l'éligibilité : entre la proposition et l'acceptation, une absence a pu être
+saisie.
+
+⚠️ **Arbitrage en attente — `PUT /api/interventions/{id}` contourne les filtres
+durs.** `CLAUDE.md` §9 affirmait qu'`AccepterAsync` était le seul endroit du
+code où une intervention change d'agent. C'est faux, et vérifié : le `PUT` écrit
+`AgentId` après avoir seulement vérifié que l'agent existe, et accepte avec un
+`204` un agent en arrêt maladie ce jour-là, absent de la liste des candidats. Un
+`Responsable` peut donc double-affecter un agent, l'affecter pendant son arrêt,
+ou violer son repos de 11 h, sans rien forcer ni forger. Deux issues possibles :
+
+1. **Geler `AgentId` sur le `PUT`**, comme `RemplacementsController` gèle déjà
+   `Statut` : le champ doit être renvoyé tel quel, et toute réaffectation passe
+   par le cycle de remplacement. Simple, mais impose un remplacement là où il
+   n'y a pas d'absence — réorganiser une semaine devient lourd.
+2. **Appliquer les filtres durs au `PUT`** quand `AgentId` change, et au `POST`
+   à la création. La réaffectation directe reste possible, mais jamais vers un
+   agent inéligible. Plus de code, et il faut une variante du moteur qui juge
+   une intervention pas encore enregistrée.
+
+Recommandation : la **2**. La **1** interdit un geste d'exploitation courant —
+« Marie prend le site de Paul mardi » sans absence de Paul — et une règle qui
+gêne le travail normal finit contournée par des créations-suppressions.
 
 ---
 
@@ -722,6 +762,10 @@ Quand un client demande « pourquoi ce montant ? », on peut répondre.
 | Base de test | PostgreSQL dédiée `klean_test` | Le fournisseur InMemory ne reproduit ni les filtres globaux, ni les contraintes, ni le refus des `DateTime` non datés — ce qu'on veut justement tester |
 | Cadrage `ChefEquipe` | Par le verbe à l'étape 8, par le périmètre à l'étape 19 | Le modèle dépend d'une information métier — périmètre en personnes ou en bâtiments — qu'un client donne et qu'un raisonnement ne produit pas. Deviner, c'est risquer une migration sur une table peuplée |
 | `Absence.Motif` | Interdit sur `Maladie`, conservé sur les autres types | Le champ est indispensable pour `Autre` et utile pour `Indisponibilite` : le supprimer pousserait à écrire le motif ailleurs. Restreindre l'accès par rôle serait plus faible — ça conserve la donnée de santé en ajoutant une porte devant, alors que la minimisation dit de ne pas la collecter. En AGPL auto-hébergé, le produit doit être sûr par défaut : aucun DPO en aval ne relira le schéma |
+| Détection d'impacts | Automatique à la création de l'absence, rejouable par endpoint | C'est l'interconnexion qui fait le produit. Une détection à déclencher à la main est une détection oubliée |
+| Proposition | Refuse un agent écarté par un filtre dur | Sans cette garde, les filtres durs sont décoratifs : il suffit de proposer à la main l'agent en arrêt maladie |
+| Acceptation | Revérifie l'éligibilité avant d'écrire | Entre la proposition et l'acceptation, une absence a pu être saisie |
+| Refus | Ramène en `Recherche` et efface l'agent | Le statut `Refuse` n'est jamais produit par le service. Limite V1 : sans table d'historique, le refus ne laisse pas de trace |
 | Repos de 11 h | Entre deux journées de travail, pas entre deux vacations du même jour | La règle sans restriction de jour interdisait d'enchaîner deux sites dans une matinée et vidait la liste des candidats sur tout planning réel. L'article L3131-1 porte sur le repos quotidien |
 | Expérience du site | Passages antérieurs seulement | Compter les passages à venir récompenserait le fait d'être déjà planifié, pas la connaissance du site |
 | Liste de candidats | Non paginée | Bornée par le nombre d'agents actifs, pas par la requête ; tronquer un classement le rend faux |

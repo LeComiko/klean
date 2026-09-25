@@ -1,6 +1,7 @@
 using Klean.Api.DTOs;
 using Klean.Api.Data;
 using Klean.Api.Models;
+using Klean.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,8 +14,13 @@ namespace Klean.Api.Controllers;
 public class AbsencesController : ControllerBase
 {
     private readonly KleanDbContext _db;
+    private readonly RemplacementService _cycle;
 
-    public AbsencesController(KleanDbContext db) => _db = db;
+    public AbsencesController(KleanDbContext db, RemplacementService cycle)
+    {
+        _db = db;
+        _cycle = cycle;
+    }
 
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
@@ -115,8 +121,30 @@ public class AbsencesController : ControllerBase
         _db.Absences.Add(absence);
         await _db.SaveChangesAsync();
 
-        // La détection d'impacts sur le planning arrive à l'étape 8.
+        // Détection d'impacts sur le planning, dans la foulée de la création :
+        // c'est l'interconnexion qui fait le produit (CLAUDE.md §1). Saisir une
+        // absence et devoir penser à cliquer ailleurs pour découvrir les
+        // vacations découvertes, c'est déjà avoir oublié de le faire.
+        await _cycle.DetecterImpactsAsync(absence.Id);
+
         return CreatedAtAction(nameof(Obtenir), new { id = absence.Id }, Vers(absence));
+    }
+
+    /// <summary>
+    /// Rattrapage : rejoue la détection d'impacts d'une absence déjà saisie.
+    /// Idempotent — un second appel crée zéro remplacement. Utile après une
+    /// modification des dates de l'absence, ou sur les absences saisies avant
+    /// que la détection automatique n'existe.
+    /// </summary>
+    [Authorize(Roles = RolesKlean.Exploitation)]
+    [HttpPost("{id:guid}/detecter-impacts")]
+    public async Task<ActionResult<DetectionDto>> DetecterImpacts(Guid id)
+    {
+        var crees = await _cycle.DetecterImpactsAsync(id);
+
+        return crees is null
+            ? NotFound()
+            : Ok(new DetectionDto { RemplacementsCrees = crees.Value });
     }
 
     [Authorize(Roles = RolesKlean.Exploitation)]
