@@ -187,10 +187,19 @@ Mécanisme en trois parties, toutes nécessaires :
    où `TenantFiltrageActif` et `TenantEntrepriseId` sont des **propriétés
    privées d'instance du DbContext**. Voir le piège §10.
 
-3. **`SaveChangesAsync` surchargé** : affecte automatiquement
-   `EntrepriseId` aux entités à l'état `Added` dont la valeur est
-   `Guid.Empty`. Un utilisateur ne peut donc pas créer de données pour une
-   autre entreprise, même en forgeant la requête.
+3. **`SaveChangesAsync` surchargé** : **force** `EntrepriseId` à la valeur du
+   jeton sur toute entité à l'état `Added`, **sans condition**. Et
+   `EntrepriseId` ne figure dans aucun `XxxCreateDto` : sa seule source
+   légitime est le jeton.
+
+   ⚠️ Une version antérieure de ce paragraphe n'écrasait la valeur que si elle
+   valait `Guid.Empty`, et en concluait qu'un utilisateur ne pouvait pas créer
+   de données pour une autre entreprise même en forgeant la requête. La
+   conclusion ne découlait pas du mécanisme : un `POST` portant l'identifiant
+   **réel** d'une autre entreprise n'était pas écrasé, et la ligne était créée
+   dans le tenant de cette entreprise. Les filtres de lecture empêchaient de la
+   relire ; l'écriture inter-tenant passait. Ne jamais conditionner cette
+   affectation.
 
 `EntrepriseId` est **dénormalisé** sur les sept entités qui ne l'ont pas
 naturellement (Site, Contrat, Prestation, Intervention, Absence,
