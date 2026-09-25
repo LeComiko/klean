@@ -241,11 +241,14 @@ candidats classés par score décroissant.
 
 **Filtres durs** (l'agent n'apparaît pas du tout) :
 - `Actif == false`
-- une absence chevauche le créneau
+- une absence couvre le **jour** de l'intervention. Comparaison au jour et non
+  à la minute : une absence saisie « du 7 au 9 » arrive avec les heures à zéro,
+  et un chevauchement strict laisserait l'agent candidat le 9 à 8 h 30.
 - l'agent est déjà affecté à une intervention chevauchante (statuts
   `Planifiee` ou `EnCours` uniquement)
-- repos légal : une autre intervention se termine moins de 11 h avant, ou
-  commence moins de 11 h après
+- repos légal : une intervention d'un **autre jour** se termine moins de 11 h
+  avant, ou commence moins de 11 h après. Tous les statuts comptent sauf
+  `Annulee` : une vacation terminée hier soir a bel et bien été travaillée.
 
 **Score**, moyenne pondérée de trois notes sur 100 :
 
@@ -262,9 +265,30 @@ subir.
 Les compétences sont volontairement absentes de la V1 — l'entité dédiée
 n'existe pas.
 
-⚠️ Sur un planning réellement rempli, la règle de repos de 11 h peut exclure
-beaucoup d'agents. À vérifier avec le jeu de données de test : si la liste
-des candidats revient vide, c'est la première piste.
+**Expérience du site** ne compte que les passages **antérieurs** à
+l'intervention, tous statuts sauf `Annulee` : un agent déjà planifié trois fois
+la semaine prochaine ne connaît pas encore le site, et compter ces passages
+reviendrait à récompenser le fait d'être déjà planifié.
+
+**Charge de la semaine** se calcule du lundi au dimanche, sur les durées
+estimées des prestations, tous statuts sauf `Annulee`.
+
+⚠️ **Correction d'une faille de la version précédente de cette section.** Le
+repos de 11 h y était écrit sans restriction de jour. Appliqué tel quel, il
+interdit à un agent d'enchaîner deux sites dans la même matinée : une vacation
+à 11 h tombe à 30 minutes de la fin de celle de 8 h 30, donc à moins de 11 h,
+donc l'agent disparaît de la liste. Sur un planning réellement rempli la liste
+des candidats revenait quasiment toujours vide — le symptôme que cette section
+annonçait, dont la cause était la règle elle-même et non le jeu de données. Le
+repos quotidien de l'article L3131-1 s'intercale entre deux **journées** de
+travail, pas entre deux tâches d'une même journée : deux vacations du même jour
+sont exemptées, seul le chevauchement les sépare. Le test
+`Agent_affecte_le_meme_jour_hors_chevauchement_reste_candidat` garde cette
+exemption ; sans elle, il échoue.
+
+⚠️ La liste des candidats n'est **pas paginée**, contrairement aux onze listes
+de l'étape 8 : sa taille est bornée par le nombre d'agents actifs de
+l'entreprise, pas par la requête, et tronquer un classement le rend faux.
 
 ---
 

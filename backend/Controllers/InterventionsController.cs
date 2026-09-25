@@ -1,6 +1,7 @@
 using Klean.Api.DTOs;
 using Klean.Api.Data;
 using Klean.Api.Models;
+using Klean.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,8 +14,13 @@ namespace Klean.Api.Controllers;
 public class InterventionsController : ControllerBase
 {
     private readonly KleanDbContext _db;
+    private readonly AffectationService _affectation;
 
-    public InterventionsController(KleanDbContext db) => _db = db;
+    public InterventionsController(KleanDbContext db, AffectationService affectation)
+    {
+        _db = db;
+        _affectation = affectation;
+    }
 
     [Authorize(Roles = RolesKlean.InterneEtAgent)]
     [HttpGet]
@@ -70,6 +76,26 @@ public class InterventionsController : ControllerBase
             .FirstOrDefaultAsync();
 
         return intervention is null ? NotFound() : Ok(intervention);
+    }
+
+    /// <summary>
+    /// Agents candidats à cette intervention, classés par score décroissant.
+    ///
+    /// Réservé aux rôles internes : la liste nomme des agents, et la matrice des
+    /// droits ne donne aucune lecture sur les agents à <c>Agent</c> ni à
+    /// <c>ClientSyndic</c>.
+    ///
+    /// Sans enveloppe de pagination, contrairement aux onze listes de l'étape 8 :
+    /// la taille est bornée par le nombre d'agents actifs de l'entreprise, pas
+    /// par la requête, et tronquer un classement le rend faux.
+    /// </summary>
+    [Authorize(Roles = RolesKlean.Interne)]
+    [HttpGet("{id:guid}/candidats")]
+    public async Task<ActionResult<IEnumerable<CandidatDto>>> Candidats(Guid id)
+    {
+        var candidats = await _affectation.GetCandidatsAsync(id);
+
+        return candidats is null ? NotFound() : Ok(candidats);
     }
 
     [Authorize(Roles = RolesKlean.Exploitation)]

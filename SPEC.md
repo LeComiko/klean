@@ -376,8 +376,28 @@ sans contrainte `CHECK`, ajouter une valeur ne demande aucune migration.
 - `GET /api/interventions/{id}/candidats`
 - `Program.cs` : `AddScoped<AffectationService>()`
 
-**Validation** — avec le jeu de données de l'étape 11 : un agent proche et
-expérimenté sort en tête ; un agent en absence n'apparaît pas du tout.
+- `backend.Tests/AffectationTests.cs` : un test par filtre dur, un par note
+
+**Validation** — 25 tests, sans attendre le jeu de données de l'étape 11 :
+un agent proche et expérimenté sort en tête · un agent en absence, inactif, ou
+déjà affecté sur un créneau chevauchant n'apparaît pas du tout · les trois notes
+valent le chiffre calculé à la main, pas « plus de zéro » · Haversine donne
+4,1 km entre Notre-Dame et la Tour Eiffel · une intervention inconnue renvoie
+**404**, une intervention sans candidat renvoie **200** et une liste vide ·
+`Agent` et `ClientSyndic` reçoivent **403**.
+
+Treize sabotages du service ont été rejoués, chacun rattrapé par le ou les
+tests attendus : exemption du même jour, filtre d'absence, comparaison au jour,
+filtre `Actif`, passages à venir, pondération, chevauchement, rayon terrestre,
+seuil de 30 km, charge pleine, note neutre, plafond de dix passages, lundi
+comme premier jour de semaine.
+
+⚠️ **Correction d'une faille de `CLAUDE.md` §8.** La règle de repos y était
+écrite sans restriction de jour, ce qui interdit à un agent d'enchaîner deux
+sites dans la même matinée — 30 minutes d'écart, donc moins de 11 h, donc
+exclusion. §8 annonçait le symptôme (« si la liste des candidats revient vide »)
+en l'imputant au jeu de données ; la cause était la règle. Le repos quotidien
+sépare deux journées de travail, pas deux tâches d'une même journée.
 
 ---
 
@@ -702,4 +722,8 @@ Quand un client demande « pourquoi ce montant ? », on peut répondre.
 | Base de test | PostgreSQL dédiée `klean_test` | Le fournisseur InMemory ne reproduit ni les filtres globaux, ni les contraintes, ni le refus des `DateTime` non datés — ce qu'on veut justement tester |
 | Cadrage `ChefEquipe` | Par le verbe à l'étape 8, par le périmètre à l'étape 19 | Le modèle dépend d'une information métier — périmètre en personnes ou en bâtiments — qu'un client donne et qu'un raisonnement ne produit pas. Deviner, c'est risquer une migration sur une table peuplée |
 | `Absence.Motif` | Interdit sur `Maladie`, conservé sur les autres types | Le champ est indispensable pour `Autre` et utile pour `Indisponibilite` : le supprimer pousserait à écrire le motif ailleurs. Restreindre l'accès par rôle serait plus faible — ça conserve la donnée de santé en ajoutant une porte devant, alors que la minimisation dit de ne pas la collecter. En AGPL auto-hébergé, le produit doit être sûr par défaut : aucun DPO en aval ne relira le schéma |
+| Repos de 11 h | Entre deux journées de travail, pas entre deux vacations du même jour | La règle sans restriction de jour interdisait d'enchaîner deux sites dans une matinée et vidait la liste des candidats sur tout planning réel. L'article L3131-1 porte sur le repos quotidien |
+| Expérience du site | Passages antérieurs seulement | Compter les passages à venir récompenserait le fait d'être déjà planifié, pas la connaissance du site |
+| Liste de candidats | Non paginée | Bornée par le nombre d'agents actifs, pas par la requête ; tronquer un classement le rend faux |
+| Candidats | Réservés aux rôles internes | La liste nomme des agents, et la matrice ne donne aucune lecture sur les agents à `Agent` ni à `ClientSyndic` |
 | Linter frontend | oxlint, pas ESLint | Couvre `exhaustive-deps` et `jsx-a11y`, les deux familles utiles ici ; une devDep au lieu de six, cohérent avec la discipline de dépendances. Limite acceptée : pas de règle personnalisée en JavaScript |

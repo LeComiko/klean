@@ -46,6 +46,7 @@ builder.Services.AddIdentity<Utilisateur, IdentityRole<Guid>>(options =>
 var jwt = new JwtService(builder.Configuration);
 builder.Services.AddSingleton(jwt);
 builder.Services.AddScoped<AmorcageService>();
+builder.Services.AddScoped<AffectationService>();
 
 // AddIdentity a déjà posé des schémas cookie par défaut, qui redirigent vers
 // /Account/Login au lieu de retourner 401. Les trois propriétés doivent être
