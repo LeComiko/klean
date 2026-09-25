@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend — build et tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: klean
+          POSTGRES_PASSWORD: klean
+          POSTGRES_DB: klean_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # La fabrique de test lit cette variable. Sans elle, elle déduirait le nom
+      # d'utilisateur du poste, ce qui n'a pas de sens sur un exécuteur.
+      KLEAN_TEST_CONNECTION: "Host=localhost;Port=5432;Database=klean_test;Username=klean;Password=klean"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restaurer
+        run: dotnet restore
+
+      - name: Construire
+        run: dotnet build --no-restore
+
+      - name: Tester
+        run: dotnet test --no-build --verbosity normal
+
+  frontend:
+    name: Frontend — build et linter
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Installer
+        run: npm ci
+        working-directory: frontend
+
+      - name: Linter
+        run: npm run lint
+        working-directory: frontend
+
+      - name: Construire
+        run: npm run build
+        working-directory: frontend

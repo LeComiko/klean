@@ -106,13 +106,43 @@ L'interface est servie sur <http://localhost:5173>. Le serveur de
 développement Vite redirige `/api` vers `http://localhost:5137` : le
 frontend n'appelle jamais l'URL absolue du backend.
 
+## Tests
+
+Les tests tournent contre une base PostgreSQL dédiée, à créer une fois :
+
+```bash
+createdb -h localhost -p 5432 klean_test
+```
+
+Puis, depuis la racine :
+
+```bash
+dotnet test
+```
+
+La base est migrée automatiquement au démarrage de la série, puis vidée et
+réamorcée avec **deux entreprises** avant chaque test — tout test d'isolation a
+besoin d'un tenant témoin.
+
+La fabrique de test pose ses propres valeurs de configuration par variables
+d'environnement : chaîne de connexion, clé JWT, comptes d'amorçage. Elle vérifie
+avant toute écriture que la base visée est bien `klean_test`, et refuse de
+continuer sinon. Sur un exécuteur d'intégration continue, surcharger
+`KLEAN_TEST_CONNECTION`.
+
+Aucune de ces dépendances de test n'est ajoutée au projet de production.
+
 ## Vérifications
 
 ```bash
-cd backend  && dotnet build      # doit être vert
+dotnet build                     # solution entière, doit être vert
+dotnet test                      # doit être vert
 cd frontend && npm run build     # tsc -b && vite build
 cd frontend && npm run lint
 ```
+
+L'intégration continue de `.github/workflows/ci.yml` exécute ces quatre
+commandes sur chaque poussée.
 
 ## Migrations
 

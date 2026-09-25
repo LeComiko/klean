@@ -7,8 +7,10 @@ Les conventions, la pile et les pièges sont dans `CLAUDE.md`.
 
 > **Renumérotation.** La cible a changé : d'outil interne, KLEAN devient un
 > produit mis à disposition d'entreprises tierces. Les étapes 1 à 5 sont
-> livrées et inchangées. L'étape 6 est réécrite — elle corrigeait une faille,
-> voir son avertissement. Trois étapes de solidité sont insérées après elle, et
+> livrées et inchangées. L'isolation multi-tenant est réécrite — elle corrigeait une faille,
+> voir son avertissement — et passe en étape 7, derrière le harnais de tests,
+> pour que ses trois tests naissent automatisés. Trois étapes de solidité
+> s'insèrent dans ce bloc, et
 > les anciennes étapes 7 à 12 deviennent 9, 10, 11, 13, 14, 15. Un bloc
 > d'avant-production suit, et l'étape 19 ferme la liste — elle attend une
 > réponse d'un client réel, pas du code.
@@ -44,7 +46,7 @@ périmètre doit être cadré avec une attention particulière : une erreur
 exposerait les données internes d'une entreprise à ses clients.
 
 ⚠️ Ce cadrage est un **second axe d'isolation**, indépendant du multi-tenant.
-Les filtres de l'étape 6 séparent les entreprises entre elles ; ils ne séparent
+Les filtres de l'étape 7 séparent les entreprises entre elles ; ils ne séparent
 pas deux clients d'une même entreprise de propreté. Sans l'étape 8, le syndic A
 voit les sites du syndic B.
 
@@ -155,7 +157,53 @@ token retourne le profil, sans token retourne **401 sans redirection**.
 
 ---
 
-# Étape 6 — Isolation multi-tenant
+# Étape 6 — Socle de tests et intégration continue
+
+Les critères de validation des étapes suivantes sont déjà rédigés comme des cas
+de test — « détection 1 remplacement, idempotence 0 au second appel, accepter
+sur `Recherche` → 400 ». Les exécuter à la main ne protège de rien : la
+vérification disparaît avec le terminal.
+
+Le harnais passe **avant** l'isolation, et c'est délibéré : les trois tests de
+l'étape 7 naissent alors automatisés au lieu d'être vérifiés à la main puis
+convertis. Cette étape existe pour que l'étape 11 ne puisse pas casser
+l'isolation de l'étape 7 en silence.
+
+**Périmètre**
+- Projet `backend.Tests/Klean.Api.Tests.csproj`, ajouté à `KLEAN.sln`
+- Dépendances, **de test uniquement** : `Microsoft.NET.Test.Sdk`, `xunit`,
+  `xunit.runner.visualstudio`, `Microsoft.AspNetCore.Mvc.Testing`. Pas de
+  Testcontainers, pas de bibliothèque d'assertions, pas de bibliothèque de
+  substituts — `WebApplicationFactory` et les assertions d'xUnit suffisent.
+  Aucune dépendance ajoutée au projet de production.
+- Base dédiée `klean_test`, migrée au démarrage de la série, vidée entre les
+  tests. **Pas de fournisseur InMemory** : il ne reproduit ni les filtres
+  globaux, ni les contraintes, ni le refus des `DateTime` non datés de Npgsql —
+  soit trois des choses qu'on veut précisément tester.
+- Fixture d'amorçage à **deux entreprises** : tout test d'isolation a besoin
+  d'un tenant témoin.
+- **Tests de référence sur l'existant** : les validations des étapes 3 à 5,
+  vérifiées à la main jusqu'ici, converties en tests. Aller-retour CRUD, 409 sur
+  suppression d'un agent porteur d'interventions, 400 sur enum invalide,
+  connexion, `moi` avec et sans jeton, verrouillage après cinq échecs. Ce qui a
+  été vérifié une fois doit le rester.
+- Intégration continue : `dotnet build`, `dotnet test`, `npm run build`,
+  `npm run lint` sur chaque poussée. Une suite que personne n'exécute ne vaut
+  rien.
+
+⚠️ La fabrique de test doit **écraser la chaîne de connexion après** les *user
+secrets*, sinon une série de tests vise la base de développement et la vide.
+C'est le seul endroit du projet où une erreur de configuration détruit des
+données.
+
+**Validation** : `dotnet test` vert sur les tests de référence. Et une preuve
+que le harnais détecte : casser volontairement une assertion doit faire rougir
+la série. Un harnais qui tourne sans rien vérifier est pire que pas de harnais,
+parce qu'il rassure.
+
+---
+
+# Étape 7 — Isolation multi-tenant
 
 **Périmètre**
 - `[Authorize]` sur les onze contrôleurs métier (pas sur `AuthController`)
@@ -178,43 +226,17 @@ interventions fantômes, absences, stocks injectés chez un concurrent. Le test 
 validation d'origine ne couvrait que le cas `00000000-...`, donc exactement
 celui qui fonctionnait.
 
-**Validation** — trois tests, les trois obligatoires :
+**Validation** — trois tests **automatisés** dans le harnais de l'étape 6, les
+trois obligatoires :
 1. Un administrateur ne voit **aucune** donnée d'une autre entreprise.
 2. Un POST sans `entrepriseId` crée l'enregistrement avec celui du jeton.
 3. Un POST portant l'`EntrepriseId` **réel** d'une autre entreprise ne crée
    rien dans cette entreprise. C'est le cas que le test d'origine ratait.
 
----
-
-# Étape 7 — Socle de tests et intégration continue
-
-Les critères de validation des étapes suivantes sont déjà rédigés comme des cas
-de test — « détection 1 remplacement, idempotence 0 au second appel, accepter
-sur `Recherche` → 400 ». Les exécuter à la main ne protège de rien : la
-vérification disparaît avec le terminal. Cette étape existe pour que l'étape 11
-ne puisse pas casser l'isolation de l'étape 6 en silence.
-
-**Périmètre**
-- Projet `backend.Tests/Klean.Api.Tests.csproj`, ajouté à `KLEAN.sln`
-- Dépendances, **de test uniquement** : `Microsoft.NET.Test.Sdk`, `xunit`,
-  `xunit.runner.visualstudio`, `Microsoft.AspNetCore.Mvc.Testing`. Pas de
-  Testcontainers, pas de bibliothèque d'assertions, pas de bibliothèque de
-  substituts — `WebApplicationFactory` et les assertions d'xUnit suffisent.
-  Aucune dépendance ajoutée au projet de production.
-- Base dédiée `klean_test`, migrée au démarrage de la série, vidée entre les
-  tests. **Pas de fournisseur InMemory** : il ne reproduit ni les filtres
-  globaux, ni les contraintes, ni le refus des `DateTime` non datés de Npgsql —
-  soit trois des choses qu'on veut précisément tester.
-- Fixture d'amorçage à **deux entreprises** : tout test d'isolation a besoin
-  d'un tenant témoin.
-- Les trois tests de l'étape 6 convertis, en premier.
-- Intégration continue : `dotnet build`, `dotnet test`, `npm run build`,
-  `npm run lint` sur chaque poussée. Une suite que personne n'exécute ne vaut
-  rien.
-
-**Validation** : `dotnet test` vert, les trois tests d'isolation passent, et
-un quatrième — retirer un filtre global — **échoue**. Le harnais doit prouver
-qu'il détecte, pas seulement qu'il tourne.
+Plus une quatrième vérification, sur le harnais lui-même : retirer un filtre
+global doit faire **échouer** le premier test. Un filtre qui laisse tout passer
+en silence est le piège documenté en §10 de `CLAUDE.md` ; il faut prouver que la
+série le voit.
 
 ---
 

@@ -305,6 +305,17 @@ du confort de test, pas une fonctionnalité.
 **Exécutable verrouillé.** `dotnet build` échoue avec `MSB3027` si l'API
 tourne encore. Préférer `dotnet watch run` pendant le développement.
 
+**`WebApplicationFactory` et le modèle d'hébergement minimal.** Les
+instructions de plus haut niveau de `Program.cs` s'exécutent — donc lisent
+`builder.Configuration` — **avant** que les délégués `ConfigureAppConfiguration`
+de la fabrique ne s'appliquent. Écraser une chaîne de connexion par
+`AddInMemoryCollection` arrive donc trop tard, échoue **en silence**, et la
+série de tests vise la base de développement, qu'elle vide entre chaque test.
+Les valeurs de test doivent passer par des **variables d'environnement**, posées
+avant la construction de l'hôte. Et la fabrique doit vérifier la base
+effectivement atteinte avant la première écriture : c'est le seul endroit du
+projet où une erreur de configuration détruit des données.
+
 **`Microsoft.OpenApi` 2.0 a supprimé le namespace `.Models`.**
 `OpenApiSecurityScheme`, `SecuritySchemeType` et `ParameterLocation` sont
 désormais directement dans `Microsoft.OpenApi`. Un `using
