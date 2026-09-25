@@ -296,6 +296,20 @@ du confort de test, pas une fonctionnalité.
 **Exécutable verrouillé.** `dotnet build` échoue avec `MSB3027` si l'API
 tourne encore. Préférer `dotnet watch run` pendant le développement.
 
+**`Microsoft.OpenApi` 2.0 a supprimé le namespace `.Models`.**
+`OpenApiSecurityScheme`, `SecuritySchemeType` et `ParameterLocation` sont
+désormais directement dans `Microsoft.OpenApi`. Un `using
+Microsoft.OpenApi.Models;` donne un CS0234 qui ressemble à une référence
+d'assembly manquante alors que le paquet est bien là.
+
+**`ValueGeneratedNever` et les clés d'Identity.** La boucle du `DbContext` qui
+force la génération des `Guid` côté application ne doit **jamais** attraper les
+entités d'Identity, `Utilisateur` compris : ni `UserManager` ni `RoleManager`
+ne posent l'`Id`, c'est le générateur d'EF qui le fait. Les basculer en `Never`
+leur donne toutes `Guid.Empty`, donc une collision de clé primaire au deuxième
+enregistrement créé — et l'amorçage échoue sur le deuxième rôle. Filtrer la
+boucle sur le namespace des entités métier, et exclure `Utilisateur`.
+
 **`dotnet-ef` et Homebrew.** L'outil global s'installe sans erreur mais
 refuse de démarrer : Homebrew place le runtime dans son Cellar, l'apphost le
 cherche à l'emplacement standard, et le message parle d'un runtime manquant

@@ -51,11 +51,36 @@ dotnet user-secrets set "ConnectionStrings:Klean" \
 Si votre installation PostgreSQL accepte l'authentification locale sans mot
 de passe, omettez le segment `Password`.
 
+### 3. Clé de signature et amorçage
+
+Le jeton JWT est signé en HMAC-SHA256 : la clé doit faire au moins 32 octets.
+
+```bash
+dotnet user-secrets set "Jwt:Cle" "$(openssl rand -base64 64)"
+dotnet user-secrets set "Jwt:Emetteur" "klean"
+dotnet user-secrets set "Jwt:Audience" "klean"
+```
+
+Au premier démarrage, si aucun utilisateur n'existe, l'application crée les
+cinq rôles, une entreprise et un compte administrateur à partir de ces
+valeurs :
+
+```bash
+dotnet user-secrets set "Amorcage:EmailAdmin" "admin@votre-domaine.fr"
+dotnet user-secrets set "Amorcage:MotDePasseAdmin" "VOTRE_MOT_DE_PASSE"
+dotnet user-secrets set "Amorcage:RaisonSocialeEntreprise" "VOTRE_RAISON_SOCIALE"
+dotnet user-secrets set "Amorcage:SiretEntreprise" "00000000000000"
+```
+
+Le mot de passe doit faire au moins dix caractères et contenir une majuscule,
+une minuscule et un chiffre. Aucun caractère spécial n'est exigé. Un compte se
+verrouille quinze minutes après cinq échecs de connexion.
+
 `appsettings.example.json` montre la forme attendue de la configuration.
 En production, utiliser des variables d'environnement, par exemple
-`ConnectionStrings__Klean`.
+`ConnectionStrings__Klean` et `Jwt__Cle`.
 
-### 3. Backend
+### 4. Backend
 
 ```bash
 cd backend
@@ -67,7 +92,7 @@ L'API écoute sur <http://localhost:5137>. En développement, Swagger est
 exposé sur <http://localhost:5137/swagger> et un point de contrôle répond
 sur `/api/sante`.
 
-### 4. Frontend
+### 5. Frontend
 
 Dans un second terminal :
 

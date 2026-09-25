@@ -1,9 +1,11 @@
 using Klean.Api.Models;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace Klean.Api.Data;
 
-public class KleanDbContext : DbContext
+public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>, Guid>
 {
     public KleanDbContext(DbContextOptions<KleanDbContext> options) : base(options)
     {
@@ -25,10 +27,16 @@ public class KleanDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // Les clés sont générées côté application (CLAUDE.md §5) : aucune valeur
-        // par défaut côté base, aucun aller-retour pour connaître l'identifiant.
+        // Les clés des entités métier sont générées côté application (CLAUDE.md §5).
+        // La boucle exclut délibérément les entités d'Identity, Utilisateur compris :
+        // ni UserManager ni RoleManager ne posent l'Id, c'est le générateur d'EF qui
+        // le fait. Les basculer en Never leur donnerait toutes Guid.Empty, donc une
+        // collision de clé primaire au deuxième enregistrement créé.
         foreach (var type in modelBuilder.Model.GetEntityTypes())
         {
+            if (type.ClrType.Namespace != "Klean.Api.Models") continue;
+            if (type.ClrType == typeof(Utilisateur)) continue;
+
             var cle = type.FindPrimaryKey()?.Properties;
             if (cle is { Count: 1 } && cle[0].ClrType == typeof(Guid))
             {
