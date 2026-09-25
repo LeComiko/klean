@@ -18,11 +18,17 @@ public class StocksController : ControllerBase
 
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<StockDto>>> Lister()
+    public async Task<ActionResult<PageDto<StockDto>>> Lister([FromQuery] PaginationDto pagination)
     {
-        var stocks = await _db.Stocks
+        var requete = _db.Stocks
             .AsNoTracking()
-            .OrderBy(s => s.ProduitId)
+            .OrderBy(s => s.ProduitId);
+
+        var total = await requete.CountAsync();
+
+        var stocks = await requete
+            .Skip(pagination.ANegliger)
+            .Take(pagination.Taille)
             .Select(s => new StockDto
             {
                 Id = s.Id,
@@ -34,7 +40,13 @@ public class StocksController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(stocks);
+        return Ok(new PageDto<StockDto>
+        {
+            Elements = stocks,
+            Total = total,
+            Page = pagination.Page,
+            Taille = pagination.Taille
+        });
     }
 
     [Authorize(Roles = RolesKlean.Interne)]

@@ -160,7 +160,7 @@ public class AutorisationsTests : IAsyncLifetime
         var agent = await _fixture.ClientDeRoleAsync(
             _admin, RolesKlean.Agent, "agent@test.local", agentId: _agentUn.Id);
 
-        var vues = await agent.GetFromJsonAsync<List<InterventionDto>>("/api/interventions");
+        var vues = await agent.ListerAsync<InterventionDto>("/api/interventions");
 
         Assert.NotNull(vues);
         Assert.Equal([sienne.Id], vues.Select(i => i.Id));
@@ -193,11 +193,11 @@ public class AutorisationsTests : IAsyncLifetime
         var syndic = await _fixture.ClientDeRoleAsync(
             _admin, RolesKlean.ClientSyndic, "syndic.a@test.local", clientId: _clientA.Id);
 
-        var clients = await syndic.GetFromJsonAsync<List<ClientDto>>("/api/clients");
+        var clients = await syndic.ListerAsync<ClientDto>("/api/clients");
         Assert.NotNull(clients);
         Assert.Equal([_clientA.Id], clients.Select(c => c.Id));
 
-        var sites = await syndic.GetFromJsonAsync<List<SiteDto>>("/api/sites");
+        var sites = await syndic.ListerAsync<SiteDto>("/api/sites");
         Assert.NotNull(sites);
         Assert.Equal([_siteA.Id], sites.Select(s => s.Id));
 
@@ -252,7 +252,7 @@ public class AutorisationsTests : IAsyncLifetime
             new EntrepriseCreateDto { RaisonSociale = "Intruse", Siret = "40000000000004" });
         Assert.Equal(HttpStatusCode.MethodNotAllowed, creation.StatusCode);
 
-        var sienne = await _admin.GetFromJsonAsync<List<EntrepriseDto>>("/api/entreprises");
+        var sienne = await _admin.ListerAsync<EntrepriseDto>("/api/entreprises");
         var suppression = await _admin.DeleteAsync($"/api/entreprises/{sienne![0].Id}");
         Assert.Equal(HttpStatusCode.MethodNotAllowed, suppression.StatusCode);
     }

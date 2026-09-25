@@ -18,11 +18,17 @@ public class ProduitsController : ControllerBase
 
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<ProduitDto>>> Lister()
+    public async Task<ActionResult<PageDto<ProduitDto>>> Lister([FromQuery] PaginationDto pagination)
     {
-        var produits = await _db.Produits
+        var requete = _db.Produits
             .AsNoTracking()
-            .OrderBy(p => p.Nom)
+            .OrderBy(p => p.Nom);
+
+        var total = await requete.CountAsync();
+
+        var produits = await requete
+            .Skip(pagination.ANegliger)
+            .Take(pagination.Taille)
             .Select(p => new ProduitDto
             {
                 Id = p.Id,
@@ -34,7 +40,13 @@ public class ProduitsController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(produits);
+        return Ok(new PageDto<ProduitDto>
+        {
+            Elements = produits,
+            Total = total,
+            Page = pagination.Page,
+            Taille = pagination.Taille
+        });
     }
 
     [Authorize(Roles = RolesKlean.Interne)]

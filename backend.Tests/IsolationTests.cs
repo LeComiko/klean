@@ -42,8 +42,8 @@ public class IsolationTests : IAsyncLifetime
         var chezAlpha = await CreerClient(_alpha, "Client d'Alpha");
         var chezBeta = await CreerClient(_beta, "Client de Beta");
 
-        var vusParAlpha = await _alpha.GetFromJsonAsync<List<ClientDto>>("/api/clients");
-        var vusParBeta = await _beta.GetFromJsonAsync<List<ClientDto>>("/api/clients");
+        var vusParAlpha = await _alpha.ListerAsync<ClientDto>("/api/clients");
+        var vusParBeta = await _beta.ListerAsync<ClientDto>("/api/clients");
 
         Assert.NotNull(vusParAlpha);
         Assert.NotNull(vusParBeta);
@@ -96,7 +96,7 @@ public class IsolationTests : IAsyncLifetime
         Assert.Equal(_fixture.EntrepriseAlpha, cree.EntrepriseId);
 
         // Et rien n'est apparu chez Beta.
-        var vusParBeta = await _beta.GetFromJsonAsync<List<ClientDto>>("/api/clients");
+        var vusParBeta = await _beta.ListerAsync<ClientDto>("/api/clients");
         Assert.NotNull(vusParBeta);
         Assert.Empty(vusParBeta);
     }
@@ -127,7 +127,7 @@ public class IsolationTests : IAsyncLifetime
         // Entreprise ne porte pas de colonne EntrepriseId : son propre Id est le
         // tenant. Sans filtre sur cet Id, cet endpoint exposerait la raison
         // sociale et le SIRET de tous les clients de l'instance.
-        var vuesParAlpha = await _alpha.GetFromJsonAsync<List<EntrepriseDto>>("/api/entreprises");
+        var vuesParAlpha = await _alpha.ListerAsync<EntrepriseDto>("/api/entreprises");
 
         Assert.NotNull(vuesParAlpha);
         Assert.Equal([_fixture.EntrepriseAlpha], vuesParAlpha.Select(e => e.Id));
@@ -238,7 +238,7 @@ public class IsolationTests : IAsyncLifetime
         }
 
         // Et Beta ne voit rien de plus.
-        var vusParBeta = await _beta.GetFromJsonAsync<List<ClientDto>>("/api/clients");
+        var vusParBeta = await _beta.ListerAsync<ClientDto>("/api/clients");
         Assert.NotNull(vusParBeta);
         Assert.Empty(vusParBeta);
     }

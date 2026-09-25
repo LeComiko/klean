@@ -18,11 +18,17 @@ public class ContratsController : ControllerBase
 
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<ContratDto>>> Lister()
+    public async Task<ActionResult<PageDto<ContratDto>>> Lister([FromQuery] PaginationDto pagination)
     {
-        var contrats = await _db.Contrats
+        var requete = _db.Contrats
             .AsNoTracking()
-            .OrderByDescending(c => c.DateDebut)
+            .OrderByDescending(c => c.DateDebut);
+
+        var total = await requete.CountAsync();
+
+        var contrats = await requete
+            .Skip(pagination.ANegliger)
+            .Take(pagination.Taille)
             .Select(c => new ContratDto
             {
                 Id = c.Id,
@@ -35,7 +41,13 @@ public class ContratsController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(contrats);
+        return Ok(new PageDto<ContratDto>
+        {
+            Elements = contrats,
+            Total = total,
+            Page = pagination.Page,
+            Taille = pagination.Taille
+        });
     }
 
     [Authorize(Roles = RolesKlean.Interne)]

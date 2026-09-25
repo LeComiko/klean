@@ -18,11 +18,17 @@ public class AgentsController : ControllerBase
 
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<AgentDto>>> Lister()
+    public async Task<ActionResult<PageDto<AgentDto>>> Lister([FromQuery] PaginationDto pagination)
     {
-        var agents = await _db.Agents
+        var requete = _db.Agents
             .AsNoTracking()
-            .OrderBy(a => a.Nom).ThenBy(a => a.Prenom)
+            .OrderBy(a => a.Nom).ThenBy(a => a.Prenom);
+
+        var total = await requete.CountAsync();
+
+        var agents = await requete
+            .Skip(pagination.ANegliger)
+            .Take(pagination.Taille)
             .Select(a => new AgentDto
             {
                 Id = a.Id,
@@ -39,7 +45,13 @@ public class AgentsController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(agents);
+        return Ok(new PageDto<AgentDto>
+        {
+            Elements = agents,
+            Total = total,
+            Page = pagination.Page,
+            Taille = pagination.Taille
+        });
     }
 
     [Authorize(Roles = RolesKlean.Interne)]

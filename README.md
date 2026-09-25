@@ -202,6 +202,16 @@ Points structurants :
 - **Authentification.** ASP.NET Core Identity et jeton JWT de 8 heures, sans
   jeton de rafraîchissement. Cinq rôles : administrateur, responsable
   d'exploitation, chef d'équipe, agent, client/syndic.
+- **Autorisations.** Chaque endpoint porte les rôles qui y ont droit. La matrice
+  complète est dans `SPEC.md`, étape 8. Deux axes d'isolation s'ajoutent au
+  multi-tenant, à l'intérieur d'une même entreprise : un compte client/syndic ne
+  voit que son client et ses sites, un compte agent que ses interventions. Les
+  trois axes sont appliqués par filtres globaux Entity Framework, jamais par du
+  code de contrôleur.
+- **Pagination.** Les onze listes acceptent `?page=1&taille=50` et renvoient
+  `{ elements, total, page, taille }`. La taille est plafonnée à 200 : sans
+  plafond, une seule requête suffirait à épuiser la mémoire du serveur. `total`
+  compte les lignes visibles par l'appelant, filtres appliqués.
 - **Aucune bibliothèque de composants** côté frontend. Le CSS est écrit à la
   main sur les variables de `src/styles/tokens.css`. `react-router-dom` est
   la seule dépendance frontend prévue au-delà de React.

@@ -18,11 +18,17 @@ public class EntreprisesController : ControllerBase
 
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<EntrepriseDto>>> Lister()
+    public async Task<ActionResult<PageDto<EntrepriseDto>>> Lister([FromQuery] PaginationDto pagination)
     {
-        var entreprises = await _db.Entreprises
+        var requete = _db.Entreprises
             .AsNoTracking()
-            .OrderBy(e => e.RaisonSociale)
+            .OrderBy(e => e.RaisonSociale);
+
+        var total = await requete.CountAsync();
+
+        var entreprises = await requete
+            .Skip(pagination.ANegliger)
+            .Take(pagination.Taille)
             .Select(e => new EntrepriseDto
             {
                 Id = e.Id,
@@ -32,7 +38,13 @@ public class EntreprisesController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(entreprises);
+        return Ok(new PageDto<EntrepriseDto>
+        {
+            Elements = entreprises,
+            Total = total,
+            Page = pagination.Page,
+            Taille = pagination.Taille
+        });
     }
 
     [Authorize(Roles = RolesKlean.Interne)]

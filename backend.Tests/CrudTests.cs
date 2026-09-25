@@ -258,7 +258,7 @@ public class CrudTests : IAsyncLifetime
         // entreprises clientes ne peuvent pas déclarer le même. La contrainte est
         // en base, hors portée des filtres, donc Alpha se heurte à celui de Beta
         // sans pouvoir le lire.
-        var sienne = await _client.GetFromJsonAsync<List<EntrepriseDto>>("/api/entreprises");
+        var sienne = await _client.ListerAsync<EntrepriseDto>("/api/entreprises");
         Assert.NotNull(sienne);
         var alpha = Assert.Single(sienne);
 

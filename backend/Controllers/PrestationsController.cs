@@ -18,11 +18,17 @@ public class PrestationsController : ControllerBase
 
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<PrestationDto>>> Lister()
+    public async Task<ActionResult<PageDto<PrestationDto>>> Lister([FromQuery] PaginationDto pagination)
     {
-        var prestations = await _db.Prestations
+        var requete = _db.Prestations
             .AsNoTracking()
-            .OrderBy(p => p.Libelle)
+            .OrderBy(p => p.Libelle);
+
+        var total = await requete.CountAsync();
+
+        var prestations = await requete
+            .Skip(pagination.ANegliger)
+            .Take(pagination.Taille)
             .Select(p => new PrestationDto
             {
                 Id = p.Id,
@@ -33,7 +39,13 @@ public class PrestationsController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(prestations);
+        return Ok(new PageDto<PrestationDto>
+        {
+            Elements = prestations,
+            Total = total,
+            Page = pagination.Page,
+            Taille = pagination.Taille
+        });
     }
 
     [Authorize(Roles = RolesKlean.Interne)]

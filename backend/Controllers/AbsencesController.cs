@@ -18,11 +18,17 @@ public class AbsencesController : ControllerBase
 
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<AbsenceDto>>> Lister()
+    public async Task<ActionResult<PageDto<AbsenceDto>>> Lister([FromQuery] PaginationDto pagination)
     {
-        var absences = await _db.Absences
+        var requete = _db.Absences
             .AsNoTracking()
-            .OrderByDescending(a => a.DateDebut)
+            .OrderByDescending(a => a.DateDebut);
+
+        var total = await requete.CountAsync();
+
+        var absences = await requete
+            .Skip(pagination.ANegliger)
+            .Take(pagination.Taille)
             .Select(a => new AbsenceDto
             {
                 Id = a.Id,
@@ -35,7 +41,13 @@ public class AbsencesController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(absences);
+        return Ok(new PageDto<AbsenceDto>
+        {
+            Elements = absences,
+            Total = total,
+            Page = pagination.Page,
+            Taille = pagination.Taille
+        });
     }
 
     [Authorize(Roles = RolesKlean.Interne)]

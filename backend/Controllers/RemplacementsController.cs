@@ -23,11 +23,17 @@ public class RemplacementsController : ControllerBase
 
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<RemplacementDto>>> Lister()
+    public async Task<ActionResult<PageDto<RemplacementDto>>> Lister([FromQuery] PaginationDto pagination)
     {
-        var remplacements = await _db.Remplacements
+        var requete = _db.Remplacements
             .AsNoTracking()
-            .OrderByDescending(r => r.DateCreation)
+            .OrderByDescending(r => r.DateCreation);
+
+        var total = await requete.CountAsync();
+
+        var remplacements = await requete
+            .Skip(pagination.ANegliger)
+            .Take(pagination.Taille)
             .Select(r => new RemplacementDto
             {
                 Id = r.Id,
@@ -41,7 +47,13 @@ public class RemplacementsController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(remplacements);
+        return Ok(new PageDto<RemplacementDto>
+        {
+            Elements = remplacements,
+            Total = total,
+            Page = pagination.Page,
+            Taille = pagination.Taille
+        });
     }
 
     [Authorize(Roles = RolesKlean.Interne)]

@@ -18,11 +18,17 @@ public class SitesController : ControllerBase
 
     [Authorize(Roles = RolesKlean.InterneEtClientSyndic)]
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<SiteDto>>> Lister()
+    public async Task<ActionResult<PageDto<SiteDto>>> Lister([FromQuery] PaginationDto pagination)
     {
-        var sites = await _db.Sites
+        var requete = _db.Sites
             .AsNoTracking()
-            .OrderBy(s => s.Nom)
+            .OrderBy(s => s.Nom);
+
+        var total = await requete.CountAsync();
+
+        var sites = await requete
+            .Skip(pagination.ANegliger)
+            .Take(pagination.Taille)
             .Select(s => new SiteDto
             {
                 Id = s.Id,
@@ -38,7 +44,13 @@ public class SitesController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(sites);
+        return Ok(new PageDto<SiteDto>
+        {
+            Elements = sites,
+            Total = total,
+            Page = pagination.Page,
+            Taille = pagination.Taille
+        });
     }
 
     [Authorize(Roles = RolesKlean.InterneEtClientSyndic)]
