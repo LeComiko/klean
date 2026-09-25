@@ -19,8 +19,6 @@ public class StockDto
 
 public class StockCreateDto
 {
-    public Guid EntrepriseId { get; set; }
-
     [Required]
     public Guid ProduitId { get; set; }
 

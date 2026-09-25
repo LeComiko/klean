@@ -22,8 +22,6 @@ public class InterventionDto
 
 public class InterventionCreateDto
 {
-    public Guid EntrepriseId { get; set; }
-
     [Required]
     public Guid PrestationId { get; set; }
 

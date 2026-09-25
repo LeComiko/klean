@@ -1,11 +1,13 @@
 using Klean.Api.DTOs;
 using Klean.Api.Data;
 using Klean.Api.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Klean.Api.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/absences")]
 public class AbsencesController : ControllerBase
@@ -76,7 +78,6 @@ public class AbsencesController : ControllerBase
 
         var absence = new Absence
         {
-            EntrepriseId = dto.EntrepriseId,
             AgentId = dto.AgentId,
             Type = type,
             DateDebut = Utc(dto.DateDebut),

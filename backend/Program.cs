@@ -15,6 +15,10 @@ var chaine = builder.Configuration.GetConnectionString("Klean")
     ?? throw new InvalidOperationException(
         "Chaîne de connexion « Klean » absente. Voir README.md, section Installation.");
 
+// Le tenant est lu dans la revendication du jeton, via le contexte HTTP.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ITenantContext, TenantContext>();
+
 builder.Services.AddDbContext<KleanDbContext>(options => options.UseNpgsql(chaine));
 
 builder.Services.AddIdentity<Utilisateur, IdentityRole<Guid>>(options =>

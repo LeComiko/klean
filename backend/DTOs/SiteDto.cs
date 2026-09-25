@@ -18,8 +18,6 @@ public class SiteDto
 
 public class SiteCreateDto
 {
-    public Guid EntrepriseId { get; set; }
-
     [Required]
     public Guid ClientId { get; set; }
 

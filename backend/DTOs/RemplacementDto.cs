@@ -31,8 +31,6 @@ public class RemplacementDto
 /// </summary>
 public class RemplacementCreateDto
 {
-    public Guid EntrepriseId { get; set; }
-
     [Required]
     public Guid InterventionId { get; set; }
 

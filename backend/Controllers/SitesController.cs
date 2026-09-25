@@ -1,11 +1,13 @@
 using Klean.Api.DTOs;
 using Klean.Api.Data;
 using Klean.Api.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Klean.Api.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/sites")]
 public class SitesController : ControllerBase
@@ -72,7 +74,6 @@ public class SitesController : ControllerBase
 
         var site = new Site
         {
-            EntrepriseId = dto.EntrepriseId,
             ClientId = dto.ClientId,
             Nom = dto.Nom,
             Adresse = dto.Adresse,

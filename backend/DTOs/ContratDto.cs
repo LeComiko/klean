@@ -15,8 +15,6 @@ public class ContratDto
 
 public class ContratCreateDto
 {
-    public Guid EntrepriseId { get; set; }
-
     [Required]
     public Guid SiteId { get; set; }
 

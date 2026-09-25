@@ -1,11 +1,13 @@
 using Klean.Api.DTOs;
 using Klean.Api.Data;
 using Klean.Api.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Klean.Api.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/stocks")]
 public class StocksController : ControllerBase
@@ -69,7 +71,6 @@ public class StocksController : ControllerBase
 
         var stock = new Stock
         {
-            EntrepriseId = dto.EntrepriseId,
             ProduitId = dto.ProduitId,
             TypeEmplacement = type,
             // EmplacementId est sans clé étrangère : selon le type, il pointe

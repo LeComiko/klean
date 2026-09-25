@@ -15,21 +15,29 @@ public class AmorcageService
     private readonly UserManager<Utilisateur> _utilisateurs;
     private readonly RoleManager<IdentityRole<Guid>> _roles;
     private readonly IConfiguration _configuration;
+    private readonly ITenantContext _tenant;
 
     public AmorcageService(
         KleanDbContext db,
         UserManager<Utilisateur> utilisateurs,
         RoleManager<IdentityRole<Guid>> roles,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ITenantContext tenant)
     {
         _db = db;
         _utilisateurs = utilisateurs;
         _roles = roles;
         _configuration = configuration;
+        _tenant = tenant;
     }
 
     public async Task ExecuterAsync()
     {
+        // En premier, avant toute requête : l'amorçage doit créer la première
+        // entreprise alors qu'aucun tenant n'existe encore, et relire les rôles
+        // et les comptes sans filtre.
+        _tenant.DesactiverFiltrage();
+
         foreach (var role in RolesKlean.Tous)
         {
             if (!await _roles.RoleExistsAsync(role))

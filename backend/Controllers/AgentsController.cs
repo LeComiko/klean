@@ -1,11 +1,13 @@
 using Klean.Api.DTOs;
 using Klean.Api.Data;
 using Klean.Api.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Klean.Api.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/agents")]
 public class AgentsController : ControllerBase
@@ -69,7 +71,6 @@ public class AgentsController : ControllerBase
     {
         var agent = new Agent
         {
-            EntrepriseId = dto.EntrepriseId,
             Nom = dto.Nom,
             Prenom = dto.Prenom,
             Email = dto.Email,

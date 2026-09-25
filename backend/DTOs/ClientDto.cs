@@ -20,12 +20,6 @@ public class ClientDto
 
 public class ClientCreateDto
 {
-    /// <summary>
-    /// À partir de l'étape 6, une valeur vide est remplacée par l'entreprise du
-    /// jeton : un client ne peut pas créer de données pour une autre entreprise.
-    /// </summary>
-    public Guid EntrepriseId { get; set; }
-
     [Required]
     [MaxLength(200)]
     public string Nom { get; set; } = string.Empty;

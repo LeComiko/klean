@@ -260,6 +260,15 @@ touchent les mêmes fichiers.
 - Pagination sur les onze `Lister()` : `?page=1&taille=50`, plafond de taille,
   réponse enveloppée `{ elements, total, page, taille }`. Sans plafond,
   `GET /api/interventions` est un vecteur d'épuisement de ressources.
+- **Gestion des comptes.** `AspNetUsers` n'est pas couverte par les filtres
+  globaux — Identity a besoin de requêtes non filtrées pour la connexion et le
+  contrôle d'unicité d'adresse. Tout endpoint listant ou cherchant des comptes
+  doit donc filtrer à la main sur `EntrepriseId`.
+- **`POST` et `DELETE` sur `/api/entreprises`** sont des opérations de
+  provisionnement d'instance, pas de gestion de tenant. En l'état, un
+  administrateur peut créer une entreprise qu'il ne verra jamais — le filtre la
+  masque aussitôt — et supprimer la sienne en cascade. À sortir de l'API
+  destinée aux tenants, ou à réserver à un rôle d'exploitation de l'instance.
 
 - **`ChefEquipe` est défini par le verbe, pas par le périmètre.** Lecture sur
   toute son entreprise, comme le responsable. Écriture limitée aux

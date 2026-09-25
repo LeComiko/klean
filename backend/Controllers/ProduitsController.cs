@@ -1,11 +1,13 @@
 using Klean.Api.DTOs;
 using Klean.Api.Data;
 using Klean.Api.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Klean.Api.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/produits")]
 public class ProduitsController : ControllerBase
@@ -59,7 +61,6 @@ public class ProduitsController : ControllerBase
     {
         var produit = new Produit
         {
-            EntrepriseId = dto.EntrepriseId,
             Nom = dto.Nom,
             Reference = dto.Reference,
             Unite = dto.Unite,

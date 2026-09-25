@@ -18,8 +18,6 @@ public class AbsenceDto
 
 public class AbsenceCreateDto
 {
-    public Guid EntrepriseId { get; set; }
-
     [Required]
     public Guid AgentId { get; set; }
 

@@ -13,8 +13,6 @@ public class PrestationDto
 
 public class PrestationCreateDto
 {
-    public Guid EntrepriseId { get; set; }
-
     [Required]
     public Guid ContratId { get; set; }
 

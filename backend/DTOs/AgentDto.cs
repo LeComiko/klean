@@ -19,8 +19,6 @@ public class AgentDto
 
 public class AgentCreateDto
 {
-    public Guid EntrepriseId { get; set; }
-
     [Required]
     [MaxLength(100)]
     public string Nom { get; set; } = string.Empty;

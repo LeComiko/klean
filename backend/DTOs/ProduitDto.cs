@@ -14,8 +14,6 @@ public class ProduitDto
 
 public class ProduitCreateDto
 {
-    public Guid EntrepriseId { get; set; }
-
     [Required]
     [MaxLength(200)]
     public string Nom { get; set; } = string.Empty;

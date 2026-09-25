@@ -1,11 +1,13 @@
 using Klean.Api.DTOs;
 using Klean.Api.Data;
 using Klean.Api.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Klean.Api.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/prestations")]
 public class PrestationsController : ControllerBase
@@ -62,7 +64,6 @@ public class PrestationsController : ControllerBase
 
         var prestation = new Prestation
         {
-            EntrepriseId = dto.EntrepriseId,
             ContratId = dto.ContratId,
             Libelle = dto.Libelle,
             DureeEstimeeMinutes = dto.DureeEstimeeMinutes

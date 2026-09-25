@@ -1,6 +1,7 @@
 using Klean.Api.DTOs;
 using Klean.Api.Data;
 using Klean.Api.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,7 @@ namespace Klean.Api.Controllers;
 /// proposer, accepter, refuser — est ajouté à l'étape 8 ; c'est lui qui doit
 /// être utilisé en exploitation, ce PUT reste un outil d'administration.
 /// </summary>
+[Authorize]
 [ApiController]
 [Route("api/remplacements")]
 public class RemplacementsController : ControllerBase
@@ -76,7 +78,6 @@ public class RemplacementsController : ControllerBase
 
         var remplacement = new Remplacement
         {
-            EntrepriseId = dto.EntrepriseId,
             InterventionId = dto.InterventionId,
             AbsenceId = dto.AbsenceId,
             AgentRemplacantId = dto.AgentRemplacantId,

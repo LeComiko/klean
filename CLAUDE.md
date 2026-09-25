@@ -178,7 +178,7 @@ Mécanisme en trois parties, toutes nécessaires :
    utilisé par l'amorçage qui doit créer la première entreprise avant
    qu'aucun tenant n'existe.
 
-2. **Filtres globaux EF Core** sur les dix entités portant `EntrepriseId` :
+2. **Filtres globaux EF Core**, **onze** au total :
    ```csharp
    modelBuilder.Entity<X>().HasQueryFilter(e =>
        !TenantFiltrageActif || TenantEntrepriseId == null
@@ -187,10 +187,36 @@ Mécanisme en trois parties, toutes nécessaires :
    où `TenantFiltrageActif` et `TenantEntrepriseId` sont des **propriétés
    privées d'instance du DbContext**. Voir le piège §10.
 
+   Dix filtres sur les entités portant `EntrepriseId`, **plus un sur
+   `Entreprise` elle-même**, sur son propre `Id` :
+   ```csharp
+   modelBuilder.Entity<Entreprise>().HasQueryFilter(e =>
+       !TenantFiltrageActif || TenantEntrepriseId == null
+       || e.Id == TenantEntrepriseId);
+   ```
+   ⚠️ Elle ne porte pas de colonne `EntrepriseId`, son identifiant **est** le
+   tenant — d'où l'oubli facile. Sans ce filtre, `GET /api/entreprises` expose
+   la raison sociale et le SIRET de toutes les entreprises de l'instance.
+
+   ⚠️ **`AspNetUsers` n'est pas filtrée**, et ne doit pas l'être : Identity
+   interroge les comptes hors de toute requête authentifiée — la connexion, par
+   définition — et sa validation d'unicité d'adresse repose sur des requêtes non
+   filtrées. Conséquence : tout endpoint listant ou cherchant des comptes doit
+   filtrer à la main sur `EntrepriseId`.
+
+   L'échappatoire `TenantEntrepriseId == null` n'est sûre **que parce que** les
+   onze contrôleurs métier portent `[Authorize]`. Retirer cet attribut sur un
+   seul d'entre eux ouvrirait l'accès anonyme à toutes les entreprises.
+
 3. **`SaveChangesAsync` surchargé** : **force** `EntrepriseId` à la valeur du
    jeton sur toute entité à l'état `Added`, **sans condition**. Et
    `EntrepriseId` ne figure dans aucun `XxxCreateDto` : sa seule source
    légitime est le jeton.
+
+   Le retrait d'`EntrepriseId` des `CreateDto` est la garde **principale** : le
+   liant ignore une propriété qui n'existe pas. Le forçage inconditionnel en est
+   la redondance, pour le cas où une valeur atteindrait l'entité autrement. Les
+   deux sont testées séparément.
 
    ⚠️ Une version antérieure de ce paragraphe n'écrasait la valeur que si elle
    valait `Guid.Empty`, et en concluait qu'un utilisateur ne pouvait pas créer

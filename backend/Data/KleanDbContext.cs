@@ -1,4 +1,5 @@
 using Klean.Api.Models;
+using Klean.Api.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -7,9 +8,29 @@ namespace Klean.Api.Data;
 
 public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>, Guid>
 {
-    public KleanDbContext(DbContextOptions<KleanDbContext> options) : base(options)
+    private readonly ITenantContext? _tenant;
+
+    public KleanDbContext(DbContextOptions<KleanDbContext> options, ITenantContext tenant)
+        : base(options) => _tenant = tenant;
+
+    /// <summary>
+    /// Sans tenant : le filtrage est inactif. Réservé à la migration de la base
+    /// de test, qui doit créer les tables avant que l'application ne démarre.
+    /// Volontairement <c>internal</c> — un contexte construit hors injection
+    /// contourne l'isolation, ce n'est pas un chemin à ouvrir.
+    /// </summary>
+    internal KleanDbContext(DbContextOptions<KleanDbContext> options) : base(options)
     {
     }
+
+    // Le filtre global doit traverser des propriétés d'INSTANCE du DbContext.
+    // OnModelCreating ne s'exécute qu'une fois par type de contexte, puis le
+    // modèle est mis en cache : un filtre qui capturerait une variable locale
+    // figerait l'instance du premier contexte créé — celui de l'amorçage, sur
+    // lequel le filtrage est désactivé — et laisserait tout passer en silence
+    // (CLAUDE.md §10).
+    private bool TenantFiltrageActif => _tenant?.FiltrageActif ?? false;
+    private Guid? TenantEntrepriseId => _tenant?.EntrepriseId;
 
     public DbSet<Entreprise> Entreprises => Set<Entreprise>();
     public DbSet<Client> Clients => Set<Client>();
@@ -112,6 +133,42 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
             .HasOne(e => e.AgentRemplacant).WithMany()
             .HasForeignKey(e => e.AgentRemplacantId).OnDelete(DeleteBehavior.Restrict);
 
+        // ---- Filtres globaux multi-tenant ----
+        //
+        // Entreprise est filtrée sur son PROPRE Id : elle ne porte pas de
+        // colonne EntrepriseId, son identifiant EST le tenant. Sans ce filtre,
+        // GET /api/entreprises listerait la raison sociale et le SIRET de toutes
+        // les entreprises de l'instance.
+        modelBuilder.Entity<Entreprise>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.Id == TenantEntrepriseId);
+
+        modelBuilder.Entity<Client>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+        modelBuilder.Entity<Site>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+        modelBuilder.Entity<Contrat>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+        modelBuilder.Entity<Prestation>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+        modelBuilder.Entity<Agent>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+        modelBuilder.Entity<Intervention>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+        modelBuilder.Entity<Absence>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+        modelBuilder.Entity<Remplacement>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+        modelBuilder.Entity<Produit>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+        modelBuilder.Entity<Stock>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+
+        // ⚠️ AspNetUsers n'est PAS filtrée. Identity interroge les comptes hors
+        // de toute requête authentifiée — la connexion, par définition — et sa
+        // validation d'unicité d'adresse repose sur des requêtes non filtrées.
+        // Conséquence : tout futur endpoint listant des comptes doit filtrer à
+        // la main sur EntrepriseId. À traiter à l'étape 8.
+
         // EntrepriseId est dénormalisé pour éviter les jointures de la vue planning
         // (CLAUDE.md §7) : il est indexé partout, c'est le prédicat de tous les filtres.
         modelBuilder.Entity<Client>().HasIndex(e => e.EntrepriseId);
@@ -126,5 +183,62 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
 
         // La requête de planning filtre sur l'entreprise et une semaine de dates.
         modelBuilder.Entity<Intervention>().HasIndex(e => new { e.EntrepriseId, e.DatePrevue });
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        AppliquerTenant();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        AppliquerTenant();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>
+    /// Impose le tenant du jeton sur toute écriture. Le forçage est
+    /// <b>inconditionnel</b> : n'écraser que <c>Guid.Empty</c> laisserait passer
+    /// un identifiant réel d'une autre entreprise fourni dans la requête, et la
+    /// ligne serait créée chez elle. Voir l'avertissement de CLAUDE.md §7.
+    /// </summary>
+    private void AppliquerTenant()
+    {
+        var entrepriseId = TenantEntrepriseId;
+
+        // Pas de tenant : amorçage, série de tests, ou requête anonyme. Les onze
+        // contrôleurs métier portant [Authorize], ce dernier cas n'atteint
+        // jamais les données.
+        if (!TenantFiltrageActif || entrepriseId is null)
+        {
+            return;
+        }
+
+        foreach (var entree in ChangeTracker.Entries())
+        {
+            var propriete = entree.Metadata.FindProperty("EntrepriseId");
+            if (propriete is null || propriete.ClrType != typeof(Guid))
+            {
+                continue;
+            }
+
+            var valeur = entree.Property(propriete.Name);
+
+            if (entree.State == EntityState.Added)
+            {
+                valeur.CurrentValue = entrepriseId.Value;
+            }
+            else if (entree.State == EntityState.Modified && valeur.IsModified)
+            {
+                // La ligne a été chargée à travers le filtre : sa valeur
+                // d'origine est celle du tenant. On la restaure plutôt que de
+                // laisser une mise à jour déplacer une ligne d'un tenant à
+                // l'autre.
+                valeur.CurrentValue = valeur.OriginalValue;
+                valeur.IsModified = false;
+            }
+        }
     }
 }

@@ -24,11 +24,8 @@ public class CrudTests : IAsyncLifetime
     [Fact]
     public async Task Chaine_complete_creee_puis_relue()
     {
-        var entreprise = _fixture.EntrepriseAlpha;
-
         var client = await Creer<ClientDto>("/api/clients", new ClientCreateDto
         {
-            EntrepriseId = entreprise,
             Nom = "Syndic Bellevue",
             Type = "Syndic",
             Ville = "Paris"
@@ -37,7 +34,6 @@ public class CrudTests : IAsyncLifetime
 
         var site = await Creer<SiteDto>("/api/sites", new SiteCreateDto
         {
-            EntrepriseId = entreprise,
             ClientId = client.Id,
             Nom = "Résidence Bellevue",
             Adresse = "12 rue de Vaugirard",
@@ -52,7 +48,6 @@ public class CrudTests : IAsyncLifetime
 
         var contrat = await Creer<ContratDto>("/api/contrats", new ContratCreateDto
         {
-            EntrepriseId = entreprise,
             SiteId = site.Id,
             DateDebut = new DateTime(2026, 1, 1),
             Frequence = "Lundi, mercredi, vendredi"
@@ -61,7 +56,6 @@ public class CrudTests : IAsyncLifetime
 
         var prestation = await Creer<PrestationDto>("/api/prestations", new PrestationCreateDto
         {
-            EntrepriseId = entreprise,
             ContratId = contrat.Id,
             Libelle = "Nettoyage parties communes",
             DureeEstimeeMinutes = 120
@@ -70,7 +64,6 @@ public class CrudTests : IAsyncLifetime
 
         var agent = await Creer<AgentDto>("/api/agents", new AgentCreateDto
         {
-            EntrepriseId = entreprise,
             Nom = "Diallo",
             Prenom = "Aminata",
             DateEmbauche = new DateTime(2024, 3, 15),
@@ -80,7 +73,6 @@ public class CrudTests : IAsyncLifetime
 
         var intervention = await Creer<InterventionDto>("/api/interventions", new InterventionCreateDto
         {
-            EntrepriseId = entreprise,
             PrestationId = prestation.Id,
             AgentId = agent.Id,
             DatePrevue = new DateTime(2026, 9, 7),
@@ -106,7 +98,6 @@ public class CrudTests : IAsyncLifetime
         // contrôleurs (CLAUDE.md §10) : sans elle, cette création échoue.
         var agent = await Creer<AgentDto>("/api/agents", new AgentCreateDto
         {
-            EntrepriseId = _fixture.EntrepriseAlpha,
             Nom = "Nguyen",
             Prenom = "Linh",
             DateEmbauche = new DateTime(2024, 3, 15)
@@ -126,7 +117,6 @@ public class CrudTests : IAsyncLifetime
 
         var intervention = await Creer<InterventionDto>("/api/interventions", new InterventionCreateDto
         {
-            EntrepriseId = _fixture.EntrepriseAlpha,
             PrestationId = prestation.Id,
             AgentId = null,
             DatePrevue = new DateTime(2026, 9, 8),
@@ -144,13 +134,11 @@ public class CrudTests : IAsyncLifetime
         string route, string valeurInvalide, string debutDuMessage)
     {
         object corps = route == "/api/clients"
-            ? new ClientCreateDto { EntrepriseId = _fixture.EntrepriseAlpha, Nom = "X", Type = valeurInvalide }
+            ? new ClientCreateDto { Nom = "X", Type = valeurInvalide }
             : new StockCreateDto
             {
-                EntrepriseId = _fixture.EntrepriseAlpha,
                 ProduitId = (await Creer<ProduitDto>("/api/produits", new ProduitCreateDto
                 {
-                    EntrepriseId = _fixture.EntrepriseAlpha,
                     Nom = "Détergent",
                     Unite = "litre",
                     SeuilAlerte = 10m
@@ -173,7 +161,6 @@ public class CrudTests : IAsyncLifetime
     {
         var reponse = await _client.PostAsJsonAsync("/api/sites", new SiteCreateDto
         {
-            EntrepriseId = _fixture.EntrepriseAlpha,
             ClientId = Guid.NewGuid(),
             Nom = "X",
             Adresse = "Y",
@@ -192,7 +179,6 @@ public class CrudTests : IAsyncLifetime
 
         var reponse = await _client.PostAsJsonAsync("/api/contrats", new ContratCreateDto
         {
-            EntrepriseId = _fixture.EntrepriseAlpha,
             SiteId = site.Id,
             DateDebut = new DateTime(2026, 6, 1),
             DateFin = new DateTime(2026, 1, 1),
@@ -228,7 +214,6 @@ public class CrudTests : IAsyncLifetime
 
         var agent = await Creer<AgentDto>("/api/agents", new AgentCreateDto
         {
-            EntrepriseId = _fixture.EntrepriseAlpha,
             Nom = "Bloque",
             Prenom = "Agent",
             DateEmbauche = new DateTime(2024, 1, 1)
@@ -236,7 +221,6 @@ public class CrudTests : IAsyncLifetime
 
         await Creer<InterventionDto>("/api/interventions", new InterventionCreateDto
         {
-            EntrepriseId = _fixture.EntrepriseAlpha,
             PrestationId = prestation.Id,
             AgentId = agent.Id,
             DatePrevue = new DateTime(2026, 9, 7),
@@ -288,7 +272,6 @@ public class CrudTests : IAsyncLifetime
     {
         var reponse = await _client.PostAsJsonAsync("/api/sites", new SiteCreateDto
         {
-            EntrepriseId = _fixture.EntrepriseAlpha,
             ClientId = Guid.NewGuid(),
             Nom = "X",
             Adresse = "Y",
@@ -315,14 +298,12 @@ public class CrudTests : IAsyncLifetime
     {
         var client = await Creer<ClientDto>("/api/clients", new ClientCreateDto
         {
-            EntrepriseId = _fixture.EntrepriseAlpha,
             Nom = "Client " + Guid.NewGuid().ToString("N")[..8],
             Type = "Copropriete"
         });
 
         return await Creer<SiteDto>("/api/sites", new SiteCreateDto
         {
-            EntrepriseId = _fixture.EntrepriseAlpha,
             ClientId = client.Id,
             Nom = "Site de test",
             Adresse = "1 rue du Test",
@@ -337,7 +318,6 @@ public class CrudTests : IAsyncLifetime
 
         var contrat = await Creer<ContratDto>("/api/contrats", new ContratCreateDto
         {
-            EntrepriseId = _fixture.EntrepriseAlpha,
             SiteId = site.Id,
             DateDebut = new DateTime(2026, 1, 1),
             Frequence = "Mardi, jeudi"
@@ -345,7 +325,6 @@ public class CrudTests : IAsyncLifetime
 
         return await Creer<PrestationDto>("/api/prestations", new PrestationCreateDto
         {
-            EntrepriseId = _fixture.EntrepriseAlpha,
             ContratId = contrat.Id,
             Libelle = "Vitrerie",
             DureeEstimeeMinutes = 90
