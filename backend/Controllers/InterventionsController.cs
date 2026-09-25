@@ -117,6 +117,10 @@ public class InterventionsController : ControllerBase
             return BadRequest($"Agent {dto.AgentId.Value} inconnu.");
         }
 
+        var refus = await RefuserSiIneligible(dto, interventionAExclure: null,
+            "Créer la vacation sans agent, puis affecter quand le créneau est libre.");
+        if (refus is not null) return refus;
+
         var intervention = new Intervention
         {
             PrestationId = dto.PrestationId,
@@ -156,6 +160,10 @@ public class InterventionsController : ControllerBase
             return BadRequest($"Agent {dto.AgentId.Value} inconnu.");
         }
 
+        var refus = await RefuserSiIneligible(dto, interventionAExclure: id,
+            $"Voir GET /api/interventions/{id}/candidats.");
+        if (refus is not null) return refus;
+
         intervention.PrestationId = dto.PrestationId;
         intervention.AgentId = dto.AgentId;
         intervention.DatePrevue = DateTime.SpecifyKind(dto.DatePrevue, DateTimeKind.Utc);
@@ -185,6 +193,52 @@ public class InterventionsController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Refuse l'écriture si l'agent demandé ne peut pas tenir le créneau, sur la
+    /// création comme sur la modification.
+    ///
+    /// ⚠️ <b>Cette garde comble une faille réelle.</b> Avant elle, le PUT écrivait
+    /// <c>AgentId</c> après avoir seulement vérifié que l'agent existait : un agent
+    /// en arrêt maladie ce jour-là, absent de la liste des candidats, était accepté
+    /// avec un 204. Les quatre filtres durs du moteur d'affectation étaient donc
+    /// contournables par une requête parfaitement légitime d'un Responsable — sans
+    /// rien forger. <c>CLAUDE.md</c> §9 affirmait par ailleurs qu'<c>AccepterAsync</c>
+    /// était le seul endroit du code où une intervention change d'agent ; ce n'était
+    /// pas le cas.
+    ///
+    /// La vérification porte sur l'horaire <b>demandé</b>, pas seulement sur le
+    /// changement d'agent : déplacer une vacation en laissant le même agent peut
+    /// tout autant la rendre illégale. Elle s'applique donc à chaque écriture qui
+    /// porte un agent, même quand rien ne change — une ligne déjà illégale ne doit
+    /// pas pouvoir être réenregistrée telle quelle. Pour la débloquer, il reste
+    /// possible de la libérer d'abord, en envoyant <c>agentId</c> à null.
+    ///
+    /// Aucun drapeau de forçage : une échappatoire qui existe devient le chemin
+    /// normal dès la première fois qu'elle dépanne.
+    /// </summary>
+    private async Task<ActionResult?> RefuserSiIneligible(
+        InterventionCreateDto dto, Guid? interventionAExclure, string ouVoir)
+    {
+        if (!dto.AgentId.HasValue) return null;
+
+        var creneau = await _affectation.CreneauAsync(
+            dto.PrestationId, dto.DatePrevue, dto.HeurePrevue);
+
+        if (creneau is null)
+        {
+            return BadRequest(
+                $"Prestation {dto.PrestationId} sans contrat ni site rattaché : "
+                + "impossible de situer le créneau.");
+        }
+
+        var eligible = await _affectation.EstEligibleAsync(
+            dto.AgentId.Value, creneau.Value, interventionAExclure);
+
+        return eligible
+            ? null
+            : BadRequest(AffectationService.MessageIneligibilite(dto.AgentId.Value, ouVoir));
     }
 
     private static InterventionDto Vers(Intervention i) => new()

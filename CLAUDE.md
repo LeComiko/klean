@@ -290,6 +290,27 @@ exemption ; sans elle, il échoue.
 de l'étape 8 : sa taille est bornée par le nombre d'agents actifs de
 l'entreprise, pas par la requête, et tronquer un classement le rend faux.
 
+**Les filtres durs gardent aussi les écritures.** Le moteur ne sert pas
+seulement à proposer : `EstEligibleAsync(agentId, creneau, interventionAExclure)`
+est appelé par `POST` et `PUT /api/interventions` dès que la requête porte un
+`agentId`, et refuse en 400. Trois conséquences à connaître :
+
+1. Le moteur raisonne sur un **`Creneau`** — site, coordonnées, jour, heure,
+   durée — et non sur un identifiant d'intervention. Sans cela le `POST` serait
+   hors de portée : à l'instant où l'on juge l'agent, la vacation n'a pas encore
+   d'identifiant.
+2. `interventionAExclure` est indispensable sur le `PUT` : sans elle,
+   l'intervention se compte elle-même comme occupation et son propre titulaire
+   est exclu par chevauchement avec sa propre vacation.
+3. La vérification porte sur l'horaire **demandé**, et s'applique à chaque
+   écriture portant un agent — pas seulement quand l'agent change. Déplacer une
+   vacation en gardant le même agent peut tout autant la rendre illégale.
+   Conséquence assumée : une ligne déjà illégale ne peut pas être réenregistrée
+   telle quelle ; il faut d'abord la libérer en envoyant `agentId` à null.
+
+Pas de drapeau de forçage. Une échappatoire qui existe devient le chemin normal
+dès la première fois qu'elle dépanne.
+
 ---
 
 ## 9. Cycle de remplacement
@@ -334,8 +355,14 @@ empiriquement — un agent en arrêt maladie ce jour-là, absent de la liste des
 candidats, est accepté par le `PUT` avec un `204`. Les filtres durs du moteur
 d'affectation sont donc contournables par une requête légitime d'un
 `Responsable`. `AccepterAsync` est le seul endroit **du cycle de remplacement**
-qui change l'agent ; ce n'est pas le seul du code. Arbitrage en attente, voir la
-fin de l'étape 10 de `SPEC.md`.
+qui change l'agent ; ce n'est pas le seul du code.
+
+**Corrigé à l'étape 10 bis**, sans geler `AgentId` : la réaffectation directe
+reste un geste normal d'exploitation — « Marie prend le site de Paul mardi »,
+sans absence de Paul — mais elle passe désormais par les mêmes filtres durs. La
+garantie n'est plus « un seul chemin écrit l'agent », elle est **« aucun chemin
+n'affecte un agent inéligible »**, ce qui est à la fois plus vrai et plus utile.
+Voir §8, *les filtres durs gardent aussi les écritures*.
 
 Pas de mode « remplacement automatique » : sans notifications ni application
 agent, il n'y a personne à contacter.

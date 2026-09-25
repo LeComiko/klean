@@ -6,7 +6,29 @@ using Microsoft.EntityFrameworkCore;
 namespace Klean.Api.Services;
 
 /// <summary>
-/// Classe les agents candidats à une intervention (CLAUDE.md §8).
+/// Créneau à pourvoir : tout ce dont les filtres durs et le score ont besoin,
+/// sans supposer qu'une intervention existe déjà en base.
+///
+/// C'est cette distinction qui permet de valider une <b>création</b> : à l'instant
+/// où l'on décide si un agent peut prendre la vacation, la vacation n'a pas encore
+/// d'identifiant. Faire porter le moteur sur un identifiant d'intervention laissait
+/// nécessairement le POST hors de portée des filtres.
+/// </summary>
+/// <param name="Jour">Minuit UTC du jour de la vacation.</param>
+public readonly record struct Creneau(
+    Guid SiteId,
+    double SiteLatitude,
+    double SiteLongitude,
+    DateTime Jour,
+    TimeSpan Heure,
+    int DureeMinutes)
+{
+    public DateTime Debut => Jour + Heure;
+    public DateTime Fin => Debut.AddMinutes(DureeMinutes);
+}
+
+/// <summary>
+/// Classe les agents candidats à un créneau (CLAUDE.md §8).
 ///
 /// Deux temps nettement séparés : des <b>filtres durs</b> qui retirent un agent
 /// de la liste, puis un <b>score</b> qui ordonne ceux qui restent. Un agent
@@ -28,7 +50,7 @@ public class AffectationService
     /// <summary>Rayon terrestre moyen, en kilomètres.</summary>
     private const double RayonTerreKm = 6371;
 
-    /// <summary>Repos légal entre deux vacations.</summary>
+    /// <summary>Repos légal entre deux journées de travail.</summary>
     private const double ReposHeures = 11;
 
     private const int PassagesPourNoteMaximale = 10;
@@ -42,41 +64,108 @@ public class AffectationService
     /// <summary>Note attribuée quand l'agent n'a pas de coordonnées.</summary>
     private const double NoteDistanceNeutre = 50;
 
+    // ------------------------------------------------------------ surface publique
+
     /// <summary>
-    /// Candidats classés par score décroissant, ou <c>null</c> si l'intervention
-    /// n'existe pas — le contrôleur en fait un 404.
+    /// Candidats à une intervention existante, classés par score décroissant, ou
+    /// <c>null</c> si l'intervention n'existe pas — le contrôleur en fait un 404.
     /// </summary>
     public async Task<List<CandidatDto>?> GetCandidatsAsync(Guid interventionId)
     {
         var cible = await _db.Interventions
             .AsNoTracking()
             .Where(i => i.Id == interventionId)
-            .Select(i => new
-            {
-                i.Id,
-                i.DatePrevue,
-                i.HeurePrevue,
-                DureeMinutes = i.Prestation!.DureeEstimeeMinutes,
-                SiteId = i.Prestation!.Contrat!.SiteId,
-                SiteLatitude = i.Prestation!.Contrat!.Site!.Latitude,
-                SiteLongitude = i.Prestation!.Contrat!.Site!.Longitude
-            })
+            .Select(i => new { i.Id, i.PrestationId, i.DatePrevue, i.HeurePrevue })
             .FirstOrDefaultAsync();
 
         if (cible is null) return null;
 
-        // Le créneau à pourvoir. DatePrevue porte le jour, HeurePrevue l'heure :
-        // les deux se recomposent ici, une fois, plutôt qu'à chaque comparaison.
-        var jour = DateTime.SpecifyKind(cible.DatePrevue.Date, DateTimeKind.Utc);
-        var debut = jour + cible.HeurePrevue;
-        var fin = debut.AddMinutes(cible.DureeMinutes);
+        var creneau = await CreneauAsync(cible.PrestationId, cible.DatePrevue, cible.HeurePrevue);
+        if (creneau is null) return null;
+
+        // L'intervention à pourvoir ne doit pas se compter elle-même comme
+        // occupation, sinon son titulaire actuel serait exclu par chevauchement
+        // avec sa propre vacation.
+        return await CandidatsAsync(creneau.Value, cible.Id);
+    }
+
+    /// <summary>
+    /// Compose un créneau à partir d'une prestation et d'un horaire. La prestation
+    /// porte la durée, son contrat porte le site. <c>null</c> si la prestation est
+    /// inconnue — ou hors du tenant, ce qui revient au même.
+    /// </summary>
+    public async Task<Creneau?> CreneauAsync(Guid prestationId, DateTime datePrevue, TimeSpan heurePrevue)
+    {
+        var donnees = await _db.Prestations
+            .AsNoTracking()
+            .Where(p => p.Id == prestationId)
+            .Select(p => new
+            {
+                p.DureeEstimeeMinutes,
+                SiteId = p.Contrat!.SiteId,
+                Latitude = p.Contrat!.Site!.Latitude,
+                Longitude = p.Contrat!.Site!.Longitude
+            })
+            .FirstOrDefaultAsync();
+
+        if (donnees is null) return null;
+
+        return new Creneau(
+            donnees.SiteId,
+            donnees.Latitude,
+            donnees.Longitude,
+            DateTime.SpecifyKind(datePrevue.Date, DateTimeKind.Utc),
+            heurePrevue,
+            donnees.DureeEstimeeMinutes);
+    }
+
+    /// <summary>
+    /// L'agent peut-il tenir ce créneau ?
+    ///
+    /// Passe par la liste complète des candidats, plutôt que par une copie
+    /// allégée des filtres : la garde et la liste ne peuvent alors pas diverger.
+    /// Une seconde implémentation des quatre filtres durs finirait par s'écarter
+    /// de la première, et c'est exactement l'écart qui laisse passer un agent
+    /// inéligible. Le coût est de calculer un classement pour n'en lire qu'une
+    /// ligne ; sur les dizaines d'agents d'une entreprise de propreté, ce sont
+    /// trois requêtes indexées.
+    /// </summary>
+    /// <param name="interventionAExclure">
+    /// L'intervention en cours de modification, qui ne doit pas se compter
+    /// elle-même comme occupation. <c>null</c> à la création.
+    /// </param>
+    public async Task<bool> EstEligibleAsync(Guid agentId, Creneau creneau, Guid? interventionAExclure)
+    {
+        var candidats = await CandidatsAsync(creneau, interventionAExclure);
+
+        return candidats.Any(c => c.AgentId == agentId);
+    }
+
+    /// <summary>
+    /// Message de refus. Il énumère les quatre causes possibles parce que le
+    /// moteur ne sait pas dire laquelle s'applique : il produit une liste de
+    /// candidats, pas un diagnostic d'exclusion. Un « agent non éligible » sans
+    /// explication renverrait l'utilisateur à deviner.
+    /// </summary>
+    public static string MessageIneligibilite(Guid agentId, string? ouVoir = null) =>
+        $"L'agent {agentId} n'est pas candidat à ce créneau : il est inactif, absent "
+        + "ce jour-là, déjà affecté sur une vacation qui chevauche, ou son repos de "
+        + "11 h ne serait pas respecté."
+        + (ouVoir is null ? string.Empty : $" {ouVoir}");
+
+    // ---------------------------------------------------------------------- cœur
+
+    private async Task<List<CandidatDto>> CandidatsAsync(Creneau creneau, Guid? interventionAExclure)
+    {
+        var debut = creneau.Debut;
+        var fin = creneau.Fin;
 
         var reposDebut = debut.AddHours(-ReposHeures);
         var reposFin = fin.AddHours(ReposHeures);
 
         // Semaine du lundi au dimanche, pour la note de charge.
-        var decalageLundi = ((int)jour.DayOfWeek + 6) % 7;
-        var semaineDebut = jour.AddDays(-decalageLundi);
+        var decalageLundi = ((int)creneau.Jour.DayOfWeek + 6) % 7;
+        var semaineDebut = creneau.Jour.AddDays(-decalageLundi);
         var semaineFin = semaineDebut.AddDays(7);
 
         var agents = await _db.Agents
@@ -87,9 +176,10 @@ public class AffectationService
 
         if (agents.Count == 0) return [];
 
-        var absents = await AgentsAbsentsAsync(jour);
-        var occupations = await OccupationsAsync(cible.Id, reposDebut, reposFin, semaineDebut, semaineFin);
-        var passages = await PassagesParAgentAsync(cible.SiteId, jour);
+        var absents = await AgentsAbsentsAsync(creneau.Jour);
+        var occupations = await OccupationsAsync(
+            interventionAExclure, reposDebut, reposFin, semaineDebut, semaineFin);
+        var passages = await PassagesParAgentAsync(creneau.SiteId, creneau.Jour);
 
         var candidats = new List<CandidatDto>();
 
@@ -100,13 +190,13 @@ public class AffectationService
             var siennes = occupations.TryGetValue(agent.Id, out var liste) ? liste : [];
 
             if (siennes.Any(o => Chevauche(o, debut, fin))) continue;
-            if (siennes.Any(o => ReposInsuffisant(o, jour, debut, fin, reposDebut, reposFin))) continue;
+            if (siennes.Any(o => ReposInsuffisant(o, creneau.Jour, debut, fin, reposDebut, reposFin))) continue;
 
             var nombrePassages = passages.TryGetValue(agent.Id, out var n) ? n : 0;
 
             var distanceKm = agent.Latitude.HasValue && agent.Longitude.HasValue
                 ? Haversine(agent.Latitude.Value, agent.Longitude.Value,
-                            cible.SiteLatitude, cible.SiteLongitude)
+                            creneau.SiteLatitude, creneau.SiteLongitude)
                 : (double?)null;
 
             var heuresSemaine = siennes
@@ -151,7 +241,7 @@ public class AffectationService
     }
 
     /// <summary>
-    /// Agents dont une absence couvre le jour de l'intervention.
+    /// Agents dont une absence couvre le jour du créneau.
     ///
     /// Comparaison au jour et non à la minute, volontairement : une absence
     /// saisie « du 7 au 9 » arrive avec les heures à zéro, et un test de
@@ -179,22 +269,29 @@ public class AffectationService
     /// millions.
     /// </summary>
     private async Task<Dictionary<Guid, List<Occupation>>> OccupationsAsync(
-        Guid interventionId, DateTime reposDebut, DateTime reposFin,
+        Guid? interventionAExclure, DateTime reposDebut, DateTime reposFin,
         DateTime semaineDebut, DateTime semaineFin)
     {
+        // Guid.Empty n'est l'identifiant de rien : toutes les clés métier sont
+        // posées par l'application avec Guid.NewGuid(). Il sert donc de « aucune
+        // exclusion » sans compliquer la traduction SQL.
+        var exclure = interventionAExclure ?? Guid.Empty;
+
         // Le filtrage SQL porte sur DatePrevue, donc au jour : la fenêtre est
         // élargie aux journées entières, le chevauchement exact est tranché
         // ensuite à la minute.
-        var borneBasse = (reposDebut < semaineDebut ? reposDebut : semaineDebut).Date;
-        var borneHaute = (reposFin > semaineFin ? reposFin : semaineFin).Date;
+        var borneBasse = DateTime.SpecifyKind(
+            (reposDebut < semaineDebut ? reposDebut : semaineDebut).Date, DateTimeKind.Utc);
+        var borneHaute = DateTime.SpecifyKind(
+            (reposFin > semaineFin ? reposFin : semaineFin).Date, DateTimeKind.Utc);
 
         var lignes = await _db.Interventions
             .AsNoTracking()
-            .Where(i => i.Id != interventionId
+            .Where(i => i.Id != exclure
                         && i.AgentId != null
                         && i.Statut != StatutIntervention.Annulee
-                        && i.DatePrevue >= DateTime.SpecifyKind(borneBasse, DateTimeKind.Utc)
-                        && i.DatePrevue <= DateTime.SpecifyKind(borneHaute, DateTimeKind.Utc))
+                        && i.DatePrevue >= borneBasse
+                        && i.DatePrevue <= borneHaute)
             .Select(i => new
             {
                 AgentId = i.AgentId!.Value,
@@ -245,9 +342,9 @@ public class AffectationService
     /// <summary>
     /// Repos légal de 11 h, entre deux <b>journées</b> de travail.
     ///
-    /// ⚠️ <b>Écart assumé avec la lettre de CLAUDE.md §8</b>, qui écrit « une
-    /// autre intervention se termine moins de 11 h avant, ou commence moins de
-    /// 11 h après » sans restriction de jour. Appliquée telle quelle, la règle
+    /// ⚠️ <b>Écart assumé avec la lettre initiale de CLAUDE.md §8</b>, qui écrivait
+    /// « une autre intervention se termine moins de 11 h avant, ou commence moins
+    /// de 11 h après » sans restriction de jour. Appliquée telle quelle, la règle
     /// interdit à un agent d'enchaîner deux sites dans la même matinée : une
     /// vacation à 11 h tombe à 30 minutes de la fin de celle de 8 h 30, donc à
     /// moins de 11 h, donc l'agent disparaît de la liste. C'est précisément le

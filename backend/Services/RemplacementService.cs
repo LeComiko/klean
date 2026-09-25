@@ -267,10 +267,13 @@ public class RemplacementService
         $"Transition « {action} » impossible depuis le statut « {actuel} ». "
         + $"Statut attendu : {attendus}.";
 
+    /// <summary>
+    /// Même message que celui des écritures directes sur une intervention : une
+    /// seule formulation pour une seule règle, quel que soit le chemin.
+    /// </summary>
     private static string PasCandidat(Guid agentId, Guid remplacementId) =>
-        $"L'agent {agentId} n'est pas candidat à cette intervention : il est inactif, "
-        + "absent ce jour-là, déjà affecté sur un créneau qui chevauche, ou son repos "
-        + $"de 11 h ne serait pas respecté. Voir GET /api/remplacements/{remplacementId}/candidats.";
+        AffectationService.MessageIneligibilite(agentId,
+            $"Voir GET /api/remplacements/{remplacementId}/candidats.");
 
     private static RemplacementDto Vers(Remplacement r) => new()
     {

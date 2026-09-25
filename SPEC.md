@@ -438,26 +438,64 @@ un score nul — sinon les filtres durs sont décoratifs. Et `accepter` revérif
 l'éligibilité : entre la proposition et l'acceptation, une absence a pu être
 saisie.
 
-⚠️ **Arbitrage en attente — `PUT /api/interventions/{id}` contourne les filtres
-durs.** `CLAUDE.md` §9 affirmait qu'`AccepterAsync` était le seul endroit du
-code où une intervention change d'agent. C'est faux, et vérifié : le `PUT` écrit
-`AgentId` après avoir seulement vérifié que l'agent existe, et accepte avec un
-`204` un agent en arrêt maladie ce jour-là, absent de la liste des candidats. Un
-`Responsable` peut donc double-affecter un agent, l'affecter pendant son arrêt,
-ou violer son repos de 11 h, sans rien forcer ni forger. Deux issues possibles :
+⚠️ **Faille trouvée à cette étape, corrigée à l'étape 10 bis.** `CLAUDE.md` §9
+affirmait qu'`AccepterAsync` était le seul endroit du code où une intervention
+change d'agent. C'était faux, et vérifié : le `PUT` écrivait `AgentId` après
+avoir seulement vérifié que l'agent existe, et acceptait avec un `204` un agent
+en arrêt maladie ce jour-là, absent de la liste des candidats. Un `Responsable`
+pouvait donc double-affecter un agent, l'affecter pendant son arrêt, ou violer
+son repos de 11 h, sans rien forcer ni forger.
 
-1. **Geler `AgentId` sur le `PUT`**, comme `RemplacementsController` gèle déjà
-   `Statut` : le champ doit être renvoyé tel quel, et toute réaffectation passe
-   par le cycle de remplacement. Simple, mais impose un remplacement là où il
-   n'y a pas d'absence — réorganiser une semaine devient lourd.
-2. **Appliquer les filtres durs au `PUT`** quand `AgentId` change, et au `POST`
-   à la création. La réaffectation directe reste possible, mais jamais vers un
-   agent inéligible. Plus de code, et il faut une variante du moteur qui juge
-   une intervention pas encore enregistrée.
+---
 
-Recommandation : la **2**. La **1** interdit un geste d'exploitation courant —
-« Marie prend le site de Paul mardi » sans absence de Paul — et une règle qui
-gêne le travail normal finit contournée par des créations-suppressions.
+# Étape 10 bis — Éligibilité sur toutes les écritures
+
+**Périmètre**
+- `Services/AffectationService.cs` : extraction d'un `Creneau`, plus
+  `CreneauAsync` et `EstEligibleAsync`
+- `Controllers/InterventionsController.cs` : garde sur `POST` et sur `PUT`
+- `Services/RemplacementService.cs` : message d'inéligibilité mutualisé
+- `backend.Tests/EligibiliteTests.cs`
+
+**La garantie change de nature.** Elle n'est plus « un seul chemin écrit
+l'agent » — intenable, et fausse — mais **« aucun chemin n'affecte un agent
+inéligible »**. Le `PUT` continue donc d'accepter une réaffectation directe :
+« Marie prend le site de Paul mardi », sans absence de Paul, est un geste
+courant d'exploitation. Geler `AgentId` l'aurait interdit, et une règle qui gêne
+le travail normal finit contournée par des suppressions-recréations, qui elles
+ne passent par aucun contrôle.
+
+**Trois points de conception**
+1. Le moteur raisonne désormais sur un `Creneau` — site, coordonnées, jour,
+   heure, durée — et non sur un identifiant d'intervention. Sans cela le `POST`
+   restait hors de portée : quand on juge l'agent, la vacation n'a pas encore
+   d'identifiant.
+2. `EstEligibleAsync` passe par la liste complète des candidats au lieu de
+   réimplémenter les quatre filtres. Une seconde implémentation finirait par
+   s'écarter de la première, et c'est exactement cet écart qui laisse passer un
+   agent inéligible.
+3. La vérification porte sur l'horaire demandé et s'applique à chaque écriture
+   portant un agent, pas seulement quand l'agent change : déplacer une vacation
+   en gardant le même agent peut tout autant la rendre illégale. Une ligne déjà
+   illégale ne peut donc pas être réenregistrée telle quelle — il faut la
+   libérer d'abord, en envoyant `agentId` à null. C'est l'unique échappatoire,
+   et elle ne contourne rien.
+
+**Aucun drapeau de forçage.** Une échappatoire qui existe devient le chemin
+normal dès la première fois qu'elle dépanne. Si le besoin d'affecter en urgence
+un agent formellement inéligible se confirme, il mérite son propre geste tracé,
+pas un paramètre sur le CRUD.
+
+**Validation** — 13 tests : les quatre filtres durs refusés à la création · deux
+sites dans la même journée toujours acceptés · une vacation sans agent toujours
+acceptée · l'agent en arrêt maladie refusé sur le `PUT` alors qu'il l'était
+accepté avant · la réaffectation légitime toujours possible · le déplacement qui
+rend le titulaire inéligible refusé · le `PUT` qui ne touche pas à l'agent
+toujours accepté · la libération toujours possible · le message nomme les quatre
+causes · l'agent d'un autre tenant reste « inconnu » avant tout jugement.
+
+Cinq sabotages rejoués, dont **l'erreur naturelle** : ne vérifier que lorsque
+`AgentId` change. Elle est rattrapée par le test du déplacement d'horaire.
 
 ---
 
@@ -762,6 +800,10 @@ Quand un client demande « pourquoi ce montant ? », on peut répondre.
 | Base de test | PostgreSQL dédiée `klean_test` | Le fournisseur InMemory ne reproduit ni les filtres globaux, ni les contraintes, ni le refus des `DateTime` non datés — ce qu'on veut justement tester |
 | Cadrage `ChefEquipe` | Par le verbe à l'étape 8, par le périmètre à l'étape 19 | Le modèle dépend d'une information métier — périmètre en personnes ou en bâtiments — qu'un client donne et qu'un raisonnement ne produit pas. Deviner, c'est risquer une migration sur une table peuplée |
 | `Absence.Motif` | Interdit sur `Maladie`, conservé sur les autres types | Le champ est indispensable pour `Autre` et utile pour `Indisponibilite` : le supprimer pousserait à écrire le motif ailleurs. Restreindre l'accès par rôle serait plus faible — ça conserve la donnée de santé en ajoutant une porte devant, alors que la minimisation dit de ne pas la collecter. En AGPL auto-hébergé, le produit doit être sûr par défaut : aucun DPO en aval ne relira le schéma |
+| Filtres durs | Appliqués à toute écriture portant un agent, pas seulement au cycle | `PUT /api/interventions` les contournait : un agent en arrêt maladie était accepté avec un 204. La garantie utile est « aucun chemin n'affecte un agent inéligible », pas « un seul chemin écrit l'agent » |
+| Réaffectation directe | Reste autorisée sur le `PUT` | Geler `AgentId` interdirait « Marie prend le site de Paul mardi », geste courant sans absence. Une règle qui gêne le travail normal finit contournée par des suppressions-recréations, hors de tout contrôle |
+| Forçage d'affectation | Aucun drapeau | Une échappatoire qui existe devient le chemin normal dès qu'elle dépanne. Un besoin d'urgence réel mériterait un geste tracé, pas un paramètre sur le CRUD |
+| Vérification d'éligibilité | Passe par la liste complète des candidats | Une seconde implémentation des quatre filtres s'écarterait de la première, et c'est l'écart qui laisse passer un agent inéligible |
 | Détection d'impacts | Automatique à la création de l'absence, rejouable par endpoint | C'est l'interconnexion qui fait le produit. Une détection à déclencher à la main est une détection oubliée |
 | Proposition | Refuse un agent écarté par un filtre dur | Sans cette garde, les filtres durs sont décoratifs : il suffit de proposer à la main l'agent en arrêt maladie |
 | Acceptation | Revérifie l'éligibilité avant d'écrire | Entre la proposition et l'acceptation, une absence a pu être saisie |
