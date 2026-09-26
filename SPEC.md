@@ -584,10 +584,64 @@ définitif au lieu d'être réécrit ensuite.
 SMTP doit donc rester optionnelle, et son absence produire une erreur explicite
 au démarrage plutôt qu'un échec silencieux à l'envoi.
 
-**Validation** : désactiver un compte coupe l'accès à la requête suivante. Un
-jeton de rafraîchissement révoqué ne délivre plus rien. Le parcours de
-réinitialisation fonctionne de bout en bout. La limitation de débit répond 429.
-Tous vérifiés par des tests.
+**Lot A — session révocable.** Livré.
+
+- `Models/JetonRafraichissement.cs`, migration `SessionsRevocables` : une table,
+  deux index, aucune opération destructrice
+- `Services/ServiceSession.cs` : émission, rotation, révocation, cookies
+- `Middleware/VerificationCsrf.cs` : double soumission
+- `Program.cs` : lecture du cookie, contrôle `Actif` et `SecurityStamp`
+- `Controllers/AuthController.cs` : `connexion`, `rafraichir`, `deconnexion`
+- `backend.Tests/SessionTests.cs` : 21 tests
+
+Trois points hors du périmètre littéral, qui découlent de ses décisions :
+`rafraichir` (sans quoi le jeton de rafraîchissement ne sert à rien),
+`deconnexion` (sans quoi « révocable » reste théorique), et **l'abandon de
+l'en-tête `Authorization`** — aucun jeton n'étant plus remis au client, personne
+ne pourrait s'en servir, et un second chemin d'authentification est un second
+chemin à auditer.
+
+⚠️ **Une affirmation fausse, corrigée par un test.** J'ai d'abord écrit que poser
+`contexte.Token` depuis le cookie suffisait à fermer l'en-tête `Authorization`.
+C'est faux : `JwtBearerHandler` retombe sur l'en-tête quand `Token` reste vide. Le
+chemin `Bearer` restait donc grand ouvert, silencieusement. Corrigé par un
+`NoResult()` explicite, consigné dans `CLAUDE.md` §10.
+
+⚠️ **Fenêtre assumée après déconnexion.** Un JWT signé vaut jusqu'à son
+expiration : rien côté serveur ne le rétracte. La déconnexion efface les cookies
+et révoque le jeton de rafraîchissement — un porteur normal est bien déconnecté —
+mais un jeton d'accès **déjà exfiltré** reste utilisable au plus quinze minutes,
+contre huit heures avant cette étape. Deux tests figent la propriété et son
+contrepoint : la **désactivation du compte**, elle, ferme immédiatement même un
+jeton copié, et c'est la raison d'être du contrôle par requête.
+
+Fermer cette fenêtre demanderait de porter l'identifiant de session dans le jeton
+et de la vérifier à chaque requête, soit une **seconde** lecture par requête en
+plus de celle sur `AspNetUsers`. Le gain ne concerne que le cas où un jeton a déjà
+été volé, pendant au plus quinze minutes. À trancher si le besoin apparaît ; en
+attendant, la propriété est documentée plutôt que subie.
+
+**Validation du lot A** — 21 tests. Désactiver un compte coupe l'accès à la
+requête suivante · changer le mot de passe invalide les jetons déjà émis · un
+compte désactivé ne peut plus rafraîchir · la rotation change le jeton sans
+repousser l'échéance absolue · rejouer un jeton coupe **toute** la session ·
+un jeton expiré ne délivre plus rien · la déconnexion révoque en base et efface
+les trois cookies · les attributs `HttpOnly`, `Secure`, `SameSite=Strict` sont
+vérifiés un par un · le cookie anti-CSRF est le seul lisible par le script · le
+cookie de rafraîchissement est limité à `/api/auth` · une écriture sans en-tête
+anti-CSRF donne **403**, avec en-tête **201** (témoin) · une lecture et la
+connexion en sont dispensées · l'en-tête `Authorization` n'est plus accepté.
+
+Onze sabotages rejoués, chacun rattrapé : contrôle `Actif`, contrôle
+`SecurityStamp`, `NoResult()`, détection de rejeu, échéance absolue, `HttpOnly`,
+`SameSite`, chemin du cookie de rafraîchissement, révocation à la déconnexion,
+vérification CSRF désactivée, vérification CSRF étendue aux lectures.
+
+**Lot B** — réinitialisation de mot de passe, limitation de débit,
+`IdentityErrorDescriber` en français, SMTP optionnel. À venir.
+
+**Validation du lot B** : le parcours de réinitialisation fonctionne de bout en
+bout. La limitation de débit répond 429. Tous vérifiés par des tests.
 
 ---
 
@@ -850,6 +904,13 @@ Quand un client demande « pourquoi ce montant ? », on peut répondre.
 | Base de test | PostgreSQL dédiée `klean_test` | Le fournisseur InMemory ne reproduit ni les filtres globaux, ni les contraintes, ni le refus des `DateTime` non datés — ce qu'on veut justement tester |
 | Cadrage `ChefEquipe` | Par le verbe à l'étape 8, par le périmètre à l'étape 19 | Le modèle dépend d'une information métier — périmètre en personnes ou en bâtiments — qu'un client donne et qu'un raisonnement ne produit pas. Deviner, c'est risquer une migration sur une table peuplée |
 | `Absence.Motif` | Interdit sur `Maladie`, conservé sur les autres types | Le champ est indispensable pour `Autre` et utile pour `Indisponibilite` : le supprimer pousserait à écrire le motif ailleurs. Restreindre l'accès par rôle serait plus faible — ça conserve la donnée de santé en ajoutant une porte devant, alors que la minimisation dit de ne pas la collecter. En AGPL auto-hébergé, le produit doit être sûr par défaut : aucun DPO en aval ne relira le schéma |
+| Jeton d'accès | 15 min, cookie `HttpOnly` `Secure` `SameSite=Strict` | Le `localStorage` exposait un porteur de 8 h à la première XSS. La durée courte borne la fenêtre si le contrôle de révocation était un jour contourné |
+| En-tête `Authorization` | Plus accepté | Aucun jeton n'est remis au client, donc personne ne peut s'en servir ; un second chemin d'authentification est un second chemin à auditer |
+| Révocation | `Actif` et `SecurityStamp` à chaque requête | Une lecture par clé primaire contre une révocation immédiate. Sans elle, désactiver un compte le laissait actif jusqu'à l'expiration du jeton |
+| Jeton de rafraîchissement | Opaque, persisté par empreinte SHA-256 | Révocable, contrairement à un JWT signé. Une fuite de la table ne permet pas de rejouer les sessions |
+| Rejeu d'un jeton consommé | Coupe toutes les sessions du compte | Sans cette réaction, la rotation ne protège de rien : un attaquant qui a copié un jeton s'en sert en parallèle du porteur légitime |
+| Durée de session | 14 jours absolus, non prolongés par la rotation | Une échéance repoussée à chaque usage ne finit jamais |
+| CSRF | Double soumission, sur les écritures portant un cookie de session | `SameSite=Strict` bloque l'essentiel mais dépend du navigateur. Inutile sans cookie : rien à détourner |
 | Paramètre `lundi` | Obligatoire, aucune valeur par défaut | Une valeur tirée de l'horloge du serveur rend la réponse dépendante du moment de l'appel et les tests dépendants du jour où ils tournent |
 | Agrégats du planning | Calculés par le serveur | Deux vacations sans agent n'ont pas de ligne : un client qui additionne les lignes trouve 30 heures au lieu de 34, et deux clients finissent par ne pas afficher le même total |
 | Lignes d'agents | Tous les agents actifs, plus les inactifs portant encore une vacation | Une grille sans ligne vide ne dit pas qui est libre ; un inactif dont les heures comptent sans ligne rend le planning non additionnable |

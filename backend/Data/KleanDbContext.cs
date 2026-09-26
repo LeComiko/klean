@@ -49,6 +49,13 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
     public DbSet<Produit> Produits => Set<Produit>();
     public DbSet<Stock> Stocks => Set<Stock>();
 
+    /// <summary>
+    /// Sessions révocables. Volontairement hors du filtrage multi-tenant : le
+    /// rafraîchissement s'exécute sans requête authentifiée. Voir le commentaire
+    /// de l'entité.
+    /// </summary>
+    public DbSet<JetonRafraichissement> JetonsRafraichissement => Set<JetonRafraichissement>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -178,7 +185,12 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         // de toute requête authentifiée — la connexion, par définition — et sa
         // validation d'unicité d'adresse repose sur des requêtes non filtrées.
         // Conséquence : tout futur endpoint listant des comptes doit filtrer à
-        // la main sur EntrepriseId. À traiter à l'étape 8.
+        // la main sur EntrepriseId. Aucun n'existe à ce jour.
+        //
+        // JetonsRafraichissement n'est pas filtrée non plus, et pour une raison
+        // voisine : le rafraîchissement s'exécute sans requête authentifiée,
+        // puisque le jeton d'accès vient d'expirer. La recherche porte sur une
+        // empreinte de 256 bits, qui tient lieu de cadrage.
 
         // EntrepriseId est dénormalisé pour éviter les jointures de la vue planning
         // (CLAUDE.md §7) : il est indexé partout, c'est le prédicat de tous les filtres.
@@ -194,6 +206,18 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
 
         // La requête de planning filtre sur l'entreprise et une semaine de dates.
         modelBuilder.Entity<Intervention>().HasIndex(e => new { e.EntrepriseId, e.DatePrevue });
+
+        // Le rafraîchissement cherche par empreinte, et la révocation en masse
+        // par utilisateur. Unique : deux sessions ne peuvent pas partager une
+        // empreinte, et l'index le garantit au lieu de l'espérer.
+        modelBuilder.Entity<JetonRafraichissement>().HasIndex(e => e.Empreinte).IsUnique();
+        modelBuilder.Entity<JetonRafraichissement>().HasIndex(e => e.UtilisateurId);
+
+        // Supprimer un compte emporte ses sessions : une session orpheline
+        // n'authentifie plus personne, la garder n'a aucun sens.
+        modelBuilder.Entity<JetonRafraichissement>()
+            .HasOne(e => e.Utilisateur).WithMany()
+            .HasForeignKey(e => e.UtilisateurId).OnDelete(DeleteBehavior.Cascade);
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)

@@ -57,6 +57,24 @@ public class FabriqueApi : WebApplicationFactory<Program>
     }
 
     /// <summary>
+    /// Client de test parlant <c>https</c>.
+    ///
+    /// ⚠️ Le schéma n'est pas décoratif. Les cookies de session portent
+    /// <c>Secure</c> — sans condition, y compris en développement — et
+    /// <c>CookieContainer</c> respecte cet attribut : en <c>http</c> il stocke les
+    /// cookies mais ne les renvoie jamais, et toute la série échoue en 401 sans
+    /// que rien n'indique pourquoi. <c>TestServer</c> ignore le transport, le
+    /// schéma ne coûte donc rien d'autre que d'être écrit.
+    /// </summary>
+    public HttpClient CreerClient(bool suivreRedirections = true, bool gererCookies = true) =>
+        CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost/"),
+            AllowAutoRedirect = suivreRedirections,
+            HandleCookies = gererCookies
+        });
+
+    /// <summary>
     /// Vérifie que la configuration effective pointe bien vers la base de test.
     /// Appelé par la fixture avant toute écriture : une garde, pas une assertion
     /// décorative.

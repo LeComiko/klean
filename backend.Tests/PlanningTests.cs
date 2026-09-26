@@ -178,7 +178,7 @@ public class PlanningTests : IAsyncLifetime
 
         var planning = await Planning(Lundi);
 
-        var absente = Assert.Single(planning.NonPourvues.Where(n => n.AgentId == _keita.Id));
+        var absente = Assert.Single(planning.NonPourvues, n => n.AgentId == _keita.Id);
         Assert.Equal("Agent absent", absente.Cause);
         Assert.Equal(Jeudi, absente.Date.Date);
 

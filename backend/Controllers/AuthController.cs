@@ -17,23 +17,27 @@ public class AuthController : ControllerBase
     private readonly KleanDbContext _db;
     private readonly UserManager<Utilisateur> _utilisateurs;
     private readonly SignInManager<Utilisateur> _connexions;
-    private readonly JwtService _jwt;
+    private readonly ServiceSession _session;
 
     public AuthController(
         KleanDbContext db,
         UserManager<Utilisateur> utilisateurs,
         SignInManager<Utilisateur> connexions,
-        JwtService jwt)
+        ServiceSession session)
     {
         _db = db;
         _utilisateurs = utilisateurs;
         _connexions = connexions;
-        _jwt = jwt;
+        _session = session;
     }
 
+    /// <summary>
+    /// Connexion. Pose les trois cookies de session et ne renvoie <b>aucun</b>
+    /// jeton dans le corps.
+    /// </summary>
     [AllowAnonymous]
     [HttpPost("connexion")]
-    public async Task<ActionResult<JetonDto>> Connexion(ConnexionDto dto)
+    public async Task<ActionResult<SessionDto>> Connexion(ConnexionDto dto)
     {
         var utilisateur = await _utilisateurs.FindByEmailAsync(dto.Email);
 
@@ -62,14 +66,42 @@ public class AuthController : ControllerBase
             return Unauthorized("Identifiants invalides.");
         }
 
-        var roles = await _utilisateurs.GetRolesAsync(utilisateur);
+        return Ok(await _session.OuvrirAsync(HttpContext, utilisateur));
+    }
 
-        return Ok(new JetonDto
-        {
-            Jeton = _jwt.Generer(utilisateur, roles),
-            Expiration = DateTime.UtcNow.Add(JwtService.Duree),
-            Profil = Vers(utilisateur, roles)
-        });
+    /// <summary>
+    /// Renouvelle le jeton d'accès à partir du cookie de rafraîchissement, et fait
+    /// tourner ce dernier.
+    ///
+    /// Anonyme par construction : le jeton d'accès vient d'expirer, c'est tout
+    /// l'objet de l'appel. L'autorisation est portée par le cookie de
+    /// rafraîchissement, et la protection CSRF s'applique — le middleware la
+    /// déclenche sur la seule présence de ce cookie.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpPost("rafraichir")]
+    public async Task<ActionResult<SessionDto>> Rafraichir()
+    {
+        var resultat = await _session.RafraichirAsync(HttpContext);
+
+        return resultat.Valeur is null ? Unauthorized(resultat.Erreur) : Ok(resultat.Valeur);
+    }
+
+    /// <summary>
+    /// Déconnexion : révoque le jeton de rafraîchissement et efface les cookies.
+    ///
+    /// Anonyme délibérément. Exiger un jeton d'accès valide rendrait impossible la
+    /// fermeture propre d'une session dont l'accès a expiré — l'utilisateur
+    /// croirait s'être déconnecté alors que son jeton de rafraîchissement resterait
+    /// valable quatorze jours.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpPost("deconnexion")]
+    public async Task<IActionResult> Deconnexion()
+    {
+        await _session.FermerAsync(HttpContext);
+
+        return NoContent();
     }
 
     [Authorize(Roles = RolesKlean.Administrateur)]

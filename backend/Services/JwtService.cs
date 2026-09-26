@@ -7,14 +7,31 @@ using Microsoft.IdentityModel.Tokens;
 namespace Klean.Api.Services;
 
 /// <summary>
-/// Fabrique les jetons. HMAC-SHA256, 8 heures, pas de jeton de rafraîchissement
-/// (décision consignée dans SPEC.md).
+/// Fabrique les jetons d'accès. HMAC-SHA256, <b>quinze minutes</b>.
+///
+/// La durée courte est ce qui rend la révocation praticable : un JWT signé vaut
+/// jusqu'à son expiration quoi qu'il arrive côté serveur, donc plus il vit
+/// longtemps, plus une désactivation de compte reste théorique. Huit heures
+/// laissaient un compte désactivé pleinement actif pendant huit heures.
+///
+/// La révocation immédiate ne vient pas de la durée mais de la revendication
+/// <see cref="RevendicationEmpreinteSecurite"/>, vérifiée à chaque requête contre
+/// la base. La durée courte borne la fenêtre si cette vérification est un jour
+/// contournée ; c'est la ceinture, pas les bretelles.
 /// </summary>
 public class JwtService
 {
     public const string RevendicationEntrepriseId = "entrepriseId";
     public const string RevendicationAgentId = "agentId";
     public const string RevendicationClientId = "clientId";
+
+    /// <summary>
+    /// Copie du <c>SecurityStamp</c> d'Identity. Identity le régénère à tout
+    /// changement sensible — mot de passe, rôles, réinitialisation — et
+    /// <c>Program.cs</c> le compare à la base à chaque requête : un jeton porteur
+    /// d'une empreinte périmée est refusé sans attendre son expiration.
+    /// </summary>
+    public const string RevendicationEmpreinteSecurite = "empreinteSecurite";
 
     private readonly string _cle;
     private readonly string _emetteur;
@@ -36,7 +53,7 @@ public class JwtService
         _audience = configuration["Jwt:Audience"] ?? "klean";
     }
 
-    public static TimeSpan Duree => TimeSpan.FromHours(8);
+    public static TimeSpan DureeAcces => TimeSpan.FromMinutes(15);
 
     public SecurityKey CleDeSignature() => new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_cle));
 
@@ -53,7 +70,10 @@ public class JwtService
             new(ClaimTypes.Email, utilisateur.Email ?? string.Empty),
 
             // La revendication qui porte le multi-tenant (CLAUDE.md §6).
-            new(RevendicationEntrepriseId, utilisateur.EntrepriseId.ToString())
+            new(RevendicationEntrepriseId, utilisateur.EntrepriseId.ToString()),
+
+            // Ce qui rend le jeton révocable avant son expiration.
+            new(RevendicationEmpreinteSecurite, utilisateur.SecurityStamp ?? string.Empty)
         };
 
         if (utilisateur.AgentId.HasValue)
@@ -72,7 +92,7 @@ public class JwtService
             issuer: _emetteur,
             audience: _audience,
             claims: revendications,
-            expires: DateTime.UtcNow.Add(Duree),
+            expires: DateTime.UtcNow.Add(DureeAcces),
             signingCredentials: new SigningCredentials(CleDeSignature(), SecurityAlgorithms.HmacSha256));
 
         return new JwtSecurityTokenHandler().WriteToken(jeton);

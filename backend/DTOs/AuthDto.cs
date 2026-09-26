@@ -4,6 +4,7 @@ namespace Klean.Api.DTOs;
 
 public class ConnexionDto
 {
+
     [Required]
     [EmailAddress]
     public string Email { get; set; } = string.Empty;
@@ -12,10 +13,23 @@ public class ConnexionDto
     public string MotDePasse { get; set; } = string.Empty;
 }
 
-public class JetonDto
+/// <summary>
+/// Réponse d'une connexion ou d'un rafraîchissement.
+///
+/// ⚠️ <b>Ne contient aucun jeton, et ne doit jamais en contenir.</b> Le jeton
+/// d'accès part en cookie <c>HttpOnly</c> : le remettre aussi dans le corps le
+/// rendrait lisible par le script, ce qui annulerait exactement ce que le cookie
+/// apporte. Le client n'a besoin que de savoir <b>qui</b> il est et <b>quand</b>
+/// rafraîchir.
+/// </summary>
+public class SessionDto
 {
-    public string Jeton { get; set; } = string.Empty;
+    /// <summary>
+    /// Expiration du jeton d'accès. Sert au client à rafraîchir avant d'échouer,
+    /// plutôt qu'après.
+    /// </summary>
     public DateTime Expiration { get; set; }
+
     public ProfilDto Profil { get; set; } = new();
 }
 

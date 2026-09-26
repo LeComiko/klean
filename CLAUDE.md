@@ -89,8 +89,9 @@ KLEAN/
 │   ├── DTOs/            un fichier par entité, XxxDto + XxxCreateDto
 │   ├── Controllers/     un par entité + Auth + Planning
 │   ├── Services/        AffectationService, RemplacementService,
-│   │                    PlanningService, JwtService, AmorcageService,
-│   │                    TenantContext
+│   │                    PlanningService, JwtService, ServiceSession,
+│   │                    AmorcageService, TenantContext
+│   ├── Middleware/      VerificationCsrf
 │   ├── Migrations/
 │   └── Scripts/         SQL de maintenance
 └── frontend/src/
@@ -149,7 +150,23 @@ Les DTOs les exposent en `string` et utilisent `Enum.TryParse` avec un
 
 - Identity avec `Utilisateur : IdentityUser<Guid>`, portant `EntrepriseId`
   (obligatoire), `AgentId` et `ClientId` (nullables selon le rôle).
-- JWT signé HMAC-SHA256, 8 heures, pas de *refresh token*.
+- JWT signé HMAC-SHA256, **quinze minutes**, livré en **cookie `HttpOnly`
+  `Secure` `SameSite=Strict`**. Aucun jeton ne traverse le corps d'une réponse,
+  et l'en-tête `Authorization` n'est plus accepté : un seul chemin
+  d'authentification, donc un seul à auditer.
+- **Jeton de rafraîchissement** opaque de 256 bits, persisté par empreinte
+  SHA-256 dans `JetonsRafraichissement`, donc **révocable** — ce qu'un JWT signé
+  ne peut pas être. Rotation à chaque usage ; un jeton rejoué coupe toutes les
+  sessions du compte. Session absolue de quatorze jours, que la rotation ne
+  prolonge pas.
+- **Révocation immédiate** : `Actif` et `SecurityStamp` sont vérifiés à **chaque
+  requête** dans `OnTokenValidated`, au prix d'une lecture par clé primaire sur
+  `AspNetUsers`. Sans cela, désactiver un compte le laissait pleinement actif
+  jusqu'à l'expiration du jeton.
+- **Protection CSRF** par double soumission, conséquence directe du cookie :
+  `VerificationCsrf` exige l'en-tête `X-Klean-CSRF` égal au cookie `klean_csrf`
+  sur toute écriture accompagnée d'un cookie de session. Les lectures et la
+  connexion en sont dispensées.
 - Le token porte la revendication **`entrepriseId`** : c'est elle qui
   alimente le multi-tenant.
 - Cinq rôles dans une classe statique `RolesKlean` : Administrateur,
@@ -197,6 +214,13 @@ Mécanisme en trois parties, toutes nécessaires :
    ⚠️ Elle ne porte pas de colonne `EntrepriseId`, son identifiant **est** le
    tenant — d'où l'oubli facile. Sans ce filtre, `GET /api/entreprises` expose
    la raison sociale et le SIRET de toutes les entreprises de l'instance.
+
+   ⚠️ **`JetonsRafraichissement` n'est pas filtrée non plus**, et ne porte pas de
+   colonne `EntrepriseId`. Le rafraîchissement s'exécute **hors requête
+   authentifiée** — le jeton d'accès vient justement d'expirer — donc aucun tenant
+   n'est disponible pour filtrer. Le cadrage est assuré par la recherche sur une
+   empreinte de 256 bits, qui n'est pas devinable. L'entreprise se lit sur
+   l'utilisateur rattaché.
 
    ⚠️ **`AspNetUsers` n'est pas filtrée**, et ne doit pas l'être : Identity
    interroge les comptes hors de toute requête authentifiée — la connexion, par
@@ -415,6 +439,23 @@ Les valeurs de test doivent passer par des **variables d'environnement**, posée
 avant la construction de l'hôte. Et la fabrique doit vérifier la base
 effectivement atteinte avant la première écriture : c'est le seul endroit du
 projet où une erreur de configuration détruit des données.
+
+**`JwtBearerEvents.OnMessageReceived` ne ferme pas l'en-tête `Authorization`.**
+Poser `contexte.Token` depuis un cookie ne suffit pas : si la valeur est vide ou
+nulle, `JwtBearerHandler` **retombe sur l'en-tête `Authorization`** juste après.
+Un délégué qui lit un cookie absent laisse donc le chemin `Bearer` grand ouvert,
+silencieusement. Il faut court-circuiter explicitement :
+```csharp
+if (string.IsNullOrEmpty(jeton)) { contexte.NoResult(); return Task.CompletedTask; }
+```
+Trouvé par le test `L_entete_Authorization_n_est_plus_accepte`, après avoir
+affirmé l'inverse.
+
+**Cookies `Secure` et `CookieContainer` en test.** `CookieContainer` respecte
+l'attribut `Secure` : sur une adresse de base en `http`, il stocke les cookies et
+ne les renvoie **jamais**. Toute la série échoue alors en 401 sans que rien
+n'indique pourquoi. La fabrique de test doit donner une `BaseAddress` en
+`https` — `TestServer` ignore le transport, le schéma ne coûte rien.
 
 **`Microsoft.OpenApi` 2.0 a supprimé le namespace `.Models`.**
 `OpenApiSecurityScheme`, `SecuritySchemeType` et `ParameterLocation` sont

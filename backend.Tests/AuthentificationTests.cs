@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Klean.Api.DTOs;
 using Klean.Api.Models;
+using Klean.Api.Services;
 using Klean.Api.Tests.Infrastructure;
 
 namespace Klean.Api.Tests;
@@ -18,7 +19,7 @@ public class AuthentificationTests : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
-    public async Task Connexion_retourne_un_jeton_portant_entrepriseId()
+    public async Task Connexion_pose_un_jeton_portant_entrepriseId()
     {
         var client = _fixture.ClientAnonyme();
 
@@ -27,29 +28,52 @@ public class AuthentificationTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.OK, reponse.StatusCode);
 
-        var jeton = await reponse.Content.ReadFromJsonAsync<JetonDto>();
-        Assert.NotNull(jeton);
-        Assert.NotEmpty(jeton.Jeton);
-        Assert.Equal(_fixture.EntrepriseAlpha, jeton.Profil.EntrepriseId);
-        Assert.Contains(RolesKlean.Administrateur, jeton.Profil.Roles);
+        var session = await reponse.Content.ReadFromJsonAsync<SessionDto>();
+        Assert.NotNull(session);
+        Assert.Equal(_fixture.EntrepriseAlpha, session.Profil.EntrepriseId);
+        Assert.Contains(RolesKlean.Administrateur, session.Profil.Roles);
 
-        // La revendication entrepriseId est ce qui alimente le multi-tenant :
-        // elle doit être dans le jeton, pas seulement dans le profil renvoyé.
-        var revendications = RevendicationsDe(jeton.Jeton);
+        // La revendication entrepriseId alimente le multi-tenant : elle doit être
+        // dans le jeton, pas seulement dans le profil renvoyé. Le jeton se lit ici
+        // dans l'en-tête Set-Cookie, ce que fait un navigateur — et ce que le
+        // script de la page ne peut justement pas faire, le cookie étant HttpOnly.
+        var jeton = FixtureApi.ValeurDuCookie(reponse, ServiceSession.CookieAcces);
+        Assert.NotNull(jeton);
+
+        var revendications = RevendicationsDe(jeton);
         Assert.Equal(_fixture.EntrepriseAlpha.ToString(), revendications["entrepriseId"]);
+        Assert.False(string.IsNullOrEmpty(revendications["empreinteSecurite"]));
     }
 
     [Fact]
-    public async Task Jeton_expire_dans_environ_huit_heures()
+    public async Task Le_corps_de_la_reponse_ne_contient_aucun_jeton()
     {
+        // Remettre le jeton dans le corps annulerait exactement ce que le cookie
+        // HttpOnly apporte : il redeviendrait lisible par le script.
+        var client = _fixture.ClientAnonyme();
+
+        var reponse = await client.PostAsJsonAsync("/api/auth/connexion",
+            new ConnexionDto { Email = FixtureApi.AdminAlpha, MotDePasse = FixtureApi.MotDePasse });
+
+        var corps = await reponse.Content.ReadAsStringAsync();
+
+        Assert.DoesNotContain("jeton", corps, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("eyJ", corps);
+    }
+
+    [Fact]
+    public async Task Le_jeton_d_acces_expire_dans_environ_quinze_minutes()
+    {
+        // Quinze minutes et non huit heures : la durée courte borne la fenêtre si
+        // la vérification de révocation venait à être contournée.
         var client = _fixture.ClientAnonyme();
         var reponse = await client.PostAsJsonAsync("/api/auth/connexion",
             new ConnexionDto { Email = FixtureApi.AdminAlpha, MotDePasse = FixtureApi.MotDePasse });
 
-        var jeton = await reponse.Content.ReadFromJsonAsync<JetonDto>();
-        var restant = jeton!.Expiration - DateTime.UtcNow;
+        var session = await reponse.Content.ReadFromJsonAsync<SessionDto>();
+        var restant = session!.Expiration - DateTime.UtcNow;
 
-        Assert.InRange(restant.TotalHours, 7.9, 8.1);
+        Assert.InRange(restant.TotalMinutes, 14, 15.1);
     }
 
     [Fact]
@@ -82,15 +106,26 @@ public class AuthentificationTests : IAsyncLifetime
     [Fact]
     public async Task Jeton_altere_renvoie_401()
     {
-        var client = await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
-        var original = client.DefaultRequestHeaders.Authorization!.Parameter;
+        var connexion = await _fixture.ClientAnonyme().PostAsJsonAsync("/api/auth/connexion",
+            new ConnexionDto { Email = FixtureApi.AdminAlpha, MotDePasse = FixtureApi.MotDePasse });
 
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", original + "xyz");
+        var intact = FixtureApi.ValeurDuCookie(connexion, ServiceSession.CookieAcces);
+        Assert.NotNull(intact);
 
-        var reponse = await client.GetAsync("/api/auth/moi");
+        var manuel = _fixture.ClientSansCookies();
 
-        Assert.Equal(HttpStatusCode.Unauthorized, reponse.StatusCode);
+        // Témoin d'abord : le jeton intact, posé de la même façon, doit passer.
+        // Sans lui, un 401 prouverait seulement que l'en-tête Cookie manuel ne
+        // fonctionne pas — le test passerait pour la mauvaise raison.
+        var temoin = new HttpRequestMessage(HttpMethod.Get, "/api/auth/moi");
+        temoin.Headers.Add("Cookie", $"{ServiceSession.CookieAcces}={intact}");
+        Assert.Equal(HttpStatusCode.OK, (await manuel.SendAsync(temoin)).StatusCode);
+
+        // La signature ne couvre plus le contenu : refus.
+        var altere = new HttpRequestMessage(HttpMethod.Get, "/api/auth/moi");
+        altere.Headers.Add("Cookie", $"{ServiceSession.CookieAcces}={intact}xyz");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await manuel.SendAsync(altere)).StatusCode);
     }
 
     [Fact]

@@ -244,6 +244,49 @@ namespace Klean.Api.Migrations
                     b.ToTable("Interventions");
                 });
 
+            modelBuilder.Entity("Klean.Api.Models.JetonRafraichissement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AdresseIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("DateExpiration")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DateRevocation")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Empreinte")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("MotifRevocation")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("RemplacePar")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UtilisateurId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Empreinte")
+                        .IsUnique();
+
+                    b.HasIndex("UtilisateurId");
+
+                    b.ToTable("JetonsRafraichissement");
+                });
+
             modelBuilder.Entity("Klean.Api.Models.Prestation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -703,6 +746,17 @@ namespace Klean.Api.Migrations
                     b.Navigation("Agent");
 
                     b.Navigation("Prestation");
+                });
+
+            modelBuilder.Entity("Klean.Api.Models.JetonRafraichissement", b =>
+                {
+                    b.HasOne("Klean.Api.Models.Utilisateur", "Utilisateur")
+                        .WithMany()
+                        .HasForeignKey("UtilisateurId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Utilisateur");
                 });
 
             modelBuilder.Entity("Klean.Api.Models.Prestation", b =>
