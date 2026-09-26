@@ -513,8 +513,46 @@ a une absence chevauchant la date.
 
 ⚠️ Piège `DateTime.SpecifyKind` — voir `CLAUDE.md` §10.
 
-**Validation** : avec le jeu de test, 4 agents, 17 vacations, 34 heures,
-3 non pourvues.
+- `backend.Tests/PlanningTests.cs` : le jeu de référence et les bornes
+
+**Validation** — 21 tests. Le jeu de référence annoncé est atteint exactement :
+**4 agents, 17 vacations, 34 heures, 3 non pourvues**. Il est construit en
+fixture et non en script SQL — un script de démonstration dérive du schéma sans
+que rien ne le signale, alors qu'une fixture échoue le jour où le modèle change.
+
+Semaine du lundi 7 au dimanche 13 septembre 2026, vacations de deux heures :
+15 affectées à quatre agents, 2 jamais pourvues, et un arrêt maladie de Keita le
+jeudi qui découvre la troisième. L'absence est saisie **après** les vacations,
+comme dans la vie — posée avant, la garde d'éligibilité de l'étape 10 bis
+refuserait à juste titre d'affecter Keita ce jour-là.
+
+Autres points vérifiés : agents triés par nom · vacations triées par date puis
+heure · le total ne s'obtient pas en additionnant les lignes, puisque deux
+vacations n'ont pas d'agent · une vacation du dimanche est dedans, celle du lundi
+suivant non · une vacation `Annulee` sort du planning et des agrégats · un agent
+sans vacation garde une ligne vide, sinon la grille ne dit plus qui est libre ·
+un agent devenu inactif qui porte encore une vacation garde sa ligne, sinon ses
+heures comptent sans qu'aucune ligne ne les explique · le planning d'une autre
+entreprise ignore tout · `Agent` et `ClientSyndic` reçoivent **403**.
+
+Le planning et le cycle de remplacement décrivent le même trou : un test vérifie
+que la vacation non pourvue de Keita est bien celle du `Remplacement` créé par la
+détection d'impacts. Sans cela, l'écran montrerait une vacation à pourvoir que le
+panneau de remplacement ignore.
+
+Dix sabotages rejoués, dont **l'erreur naturelle** — calculer les totaux en
+additionnant les lignes d'agents — qui casse sept tests, et le retrait du
+`SpecifyKind`, qui en casse dix.
+
+**`lundi` est obligatoire, sans valeur par défaut.** Une valeur calculée sur
+l'horloge du serveur rendrait la réponse dépendante du moment de l'appel, donc
+les tests dépendants du jour où ils tournent, et l'écran incapable de dire quelle
+semaine il montre.
+
+**Réservé aux rôles internes.** La grille nomme tous les agents de l'entreprise :
+le filtre multi-tenant restreindrait bien les interventions d'un `Agent`, mais
+pas la colonne des noms. Un agent qui doit consulter son propre planning aura
+besoin d'un endpoint dédié — voir *Suite — non planifié*.
 
 ---
 
@@ -752,7 +790,10 @@ glissant, comportement lors d'une modification de contrat, jours fériés.
 
 **Écran agent mobile (PWA).** Une action par écran, cibles 56 px. Voir son
 intervention → consignes → démarrer → checklist → anomalie avec photo →
-terminer. Suppose les entités `Checklist` et `Anomalie`.
+terminer. Suppose les entités `Checklist` et `Anomalie`. Suppose aussi un
+`GET /api/planning/moi` : le planning général est réservé aux rôles internes
+parce que sa grille nomme tous les agents de l'entreprise, et le filtre
+multi-tenant ne restreint pas cette colonne.
 
 **Module stock.** L'entité pivot est `PrestationProduit` (PrestationId,
 ProduitId, QuantiteParIntervention). Sans elle, le stock se réduit à un
@@ -767,6 +808,15 @@ d'expérience du moteur, fondé sur l'historique réel.
 `ICertificationProvider` plutôt qu'un couplage direct à un prestataire.
 Règle absolue : ne jamais considérer une intervention comme réalisée au seul
 motif qu'elle était planifiée.
+
+**Jeu de démonstration installable.** Le `README` doit permettre à un inconnu de
+faire tourner le projet ; au premier lancement il n'a rien à regarder. Le jeu de
+référence existe en fixture de test — `PlanningTests.Semer()`, 4 agents et
+17 vacations — mais il n'est pas installable dans une base de développement. À
+cadrer avec le frontend, pas avant : c'est l'écran qui dira ce qu'il faut
+montrer. Forme à trancher alors, et le choix n'est pas neutre — un script SQL
+dérive du schéma en silence, une commande qui rejoue les mêmes appels HTTP que la
+fixture reste vraie par construction.
 
 **Portail conseil syndical.** Outil de transparence et de preuve, pas un ERP.
 
@@ -800,6 +850,11 @@ Quand un client demande « pourquoi ce montant ? », on peut répondre.
 | Base de test | PostgreSQL dédiée `klean_test` | Le fournisseur InMemory ne reproduit ni les filtres globaux, ni les contraintes, ni le refus des `DateTime` non datés — ce qu'on veut justement tester |
 | Cadrage `ChefEquipe` | Par le verbe à l'étape 8, par le périmètre à l'étape 19 | Le modèle dépend d'une information métier — périmètre en personnes ou en bâtiments — qu'un client donne et qu'un raisonnement ne produit pas. Deviner, c'est risquer une migration sur une table peuplée |
 | `Absence.Motif` | Interdit sur `Maladie`, conservé sur les autres types | Le champ est indispensable pour `Autre` et utile pour `Indisponibilite` : le supprimer pousserait à écrire le motif ailleurs. Restreindre l'accès par rôle serait plus faible — ça conserve la donnée de santé en ajoutant une porte devant, alors que la minimisation dit de ne pas la collecter. En AGPL auto-hébergé, le produit doit être sûr par défaut : aucun DPO en aval ne relira le schéma |
+| Paramètre `lundi` | Obligatoire, aucune valeur par défaut | Une valeur tirée de l'horloge du serveur rend la réponse dépendante du moment de l'appel et les tests dépendants du jour où ils tournent |
+| Agrégats du planning | Calculés par le serveur | Deux vacations sans agent n'ont pas de ligne : un client qui additionne les lignes trouve 30 heures au lieu de 34, et deux clients finissent par ne pas afficher le même total |
+| Lignes d'agents | Tous les agents actifs, plus les inactifs portant encore une vacation | Une grille sans ligne vide ne dit pas qui est libre ; un inactif dont les heures comptent sans ligne rend le planning non additionnable |
+| Vacation `Annulee` | Hors du planning et des agrégats | Ce n'est pas du travail, et elle sort déjà des filtres du moteur d'affectation |
+| Jeu de démonstration | En fixture de test, pas en script SQL | Un script de démonstration dérive du schéma sans que rien ne le signale ; une fixture échoue le jour où le modèle change |
 | Filtres durs | Appliqués à toute écriture portant un agent, pas seulement au cycle | `PUT /api/interventions` les contournait : un agent en arrêt maladie était accepté avec un 204. La garantie utile est « aucun chemin n'affecte un agent inéligible », pas « un seul chemin écrit l'agent » |
 | Réaffectation directe | Reste autorisée sur le `PUT` | Geler `AgentId` interdirait « Marie prend le site de Paul mardi », geste courant sans absence. Une règle qui gêne le travail normal finit contournée par des suppressions-recréations, hors de tout contrôle |
 | Forçage d'affectation | Aucun drapeau | Une échappatoire qui existe devient le chemin normal dès qu'elle dépanne. Un besoin d'urgence réel mériterait un geste tracé, pas un paramètre sur le CRUD |
