@@ -481,6 +481,36 @@ if (string.IsNullOrEmpty(jeton)) { contexte.NoResult(); return Task.CompletedTas
 Trouvé par le test `L_entete_Authorization_n_est_plus_accepte`, après avoir
 affirmé l'inverse.
 
+**Cookies `Secure` et `http://localhost` au navigateur.** Les trois cookies de
+session portent `Secure`. Chrome (depuis la 89) et Firefox traitent `localhost`
+comme une origine sûre et les acceptent en clair ; **Safari non**, il les jette
+sans rien dire. Le symptôme est déroutant et n'accuse jamais le cookie : la
+connexion **réussit** — le profil vient du corps de la réponse —, la navigation
+**fonctionne** — elle est en mémoire —, et le premier rechargement de page
+déconnecte, parce que `GET /api/auth/moi` est le premier appel qui exige
+réellement le retour d'un cookie. Chercher le défaut dans `AuthContext` est la
+fausse piste naturelle.
+
+Diagnostic sans outils de développement : la journalisation met
+`Microsoft.AspNetCore` à `Warning`, donc aucune trace de requête, **mais les
+requêtes SQL sont là**. Un appel authentifié laisse forcément un
+`SELECT … FROM "AspNetUsers" … WHERE a."Id" = @p` — la vérification
+`Actif`/`SecurityStamp` de chaque requête. Son absence prouve qu'aucun cookie
+n'est arrivé ; l'absence de lecture de `JetonsRafraichissement` prouve que le
+cookie de rafraîchissement n'est pas arrivé non plus.
+
+Contourné en développement dans `frontend/vite.config.ts`, qui retire l'attribut
+`Secure` — et **rien d'autre** — de `Set-Cookie` au passage du proxy. Placé là et
+pas dans `ServiceSession` délibérément : rendre l'attribut dépendant de
+l'environnement aurait obligé à affaiblir `SessionTests`, donc à supprimer la
+seule garde qui le protège. Ce fichier ne s'exécute que sous `vite dev` : le
+contournement est impossible en production par construction, pas par discipline.
+Il disparaîtra avec le HTTPS de l'étape 16.
+
+⚠️ Retirer l'attribut par `replace(/secure/gi, '')` mutile une valeur de cookie
+contenant « insecure » et un chemin nommé `/secure`. Découper sur `;` et comparer
+chaque attribut exactement.
+
 **Cookies `Secure` et `CookieContainer` en test.** `CookieContainer` respecte
 l'attribut `Secure` : sur une adresse de base en `http`, il stocke les cookies et
 ne les renvoie **jamais**. Toute la série échoue alors en 401 sans que rien
@@ -580,6 +610,12 @@ seule couleur saturée du système — la **terre cuite `#9C4221`** — au signa
 | texte-2 | `#6E6B64` | `#A3A099` |
 | texte-3 | `#8A867E` | `#7C7A73` |
 | hachure | `#D8D4CC` | — |
+| sur-brand | `#FFFFFF` | `#FFFFFF` |
+
+`sur-brand` est le texte posé **sur** un fond de marque. `surface` ne peut pas
+jouer ce rôle : il vaut `#191A18` en thème sombre, et le libellé d'une pastille
+active tombait alors à 3,32:1, sous le seuil AA. Le blanc tient 9,06:1 au-dessus
+de `#3F4A54` et 5,27:1 au-dessus de `#5E6E7A`.
 
 **Typographie.** Figtree pour l'interface, IBM Plex Mono pour **tout chiffre
 comparé en colonne** — heures, km, scores, quantités. La chasse fixe aligne

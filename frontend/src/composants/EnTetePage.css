@@ -1,0 +1,42 @@
+.en-tete-page {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--espace-6);
+  padding-bottom: var(--espace-4);
+  margin-bottom: var(--espace-6);
+  /* Pas d'ombre : la séparation passe par la bordure. */
+  border-bottom: 1px solid var(--border);
+}
+
+.en-tete-page__titre {
+  font-size: var(--titre-ecran-taille);
+  line-height: var(--titre-ecran-interligne);
+  font-weight: var(--titre-ecran-graisse);
+  letter-spacing: -0.01em;
+}
+
+.en-tete-page__sous-titre {
+  margin-top: var(--espace-1);
+  color: var(--texte-2);
+}
+
+.en-tete-page__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-2);
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .en-tete-page {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .en-tete-page__sous-titre {
+    /* Plancher mobile : jamais 11–12 px sur un mobile. */
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+}

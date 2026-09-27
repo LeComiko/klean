@@ -1,0 +1,25 @@
+.route-attente {
+  display: block;
+  padding: var(--espace-8);
+  color: var(--texte-2);
+}
+
+.route-refus {
+  max-width: 560px;
+  margin: var(--espace-12) auto;
+  padding: var(--espace-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-carte);
+}
+
+.route-refus__titre {
+  font-size: var(--titre-section-taille);
+  line-height: var(--titre-section-interligne);
+  font-weight: var(--titre-section-graisse);
+  margin-bottom: var(--espace-2);
+}
+
+.route-refus__texte {
+  color: var(--texte-2);
+}

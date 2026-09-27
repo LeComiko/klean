@@ -1,0 +1,129 @@
+.connexion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: var(--espace-6);
+  background: var(--canvas);
+}
+
+.connexion__attente {
+  display: block;
+  color: var(--texte-2);
+}
+
+.connexion__carte {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 400px;
+  padding: var(--espace-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-carte);
+}
+
+/* Pastille de marque, même gabarit que celle de la barre latérale. */
+.connexion__marque {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: var(--espace-4);
+  background: var(--brand);
+  color: var(--sur-brand);
+  border-radius: var(--rayon-bloc);
+  font-family: var(--police-chiffres);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.connexion__titre {
+  font-size: var(--titre-section-taille);
+  line-height: var(--titre-section-interligne);
+  font-weight: var(--titre-section-graisse);
+  letter-spacing: 0.06em;
+}
+
+.connexion__accroche {
+  margin-bottom: var(--espace-6);
+  color: var(--texte-2);
+}
+
+.connexion__etiquette {
+  margin-bottom: var(--espace-1);
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texte-2);
+}
+
+.connexion__champ {
+  height: var(--ligne-confortable);
+  margin-bottom: var(--espace-4);
+  padding: 0 var(--espace-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+}
+
+.connexion__champ:hover {
+  border-color: var(--brand);
+}
+
+.connexion__erreur {
+  margin-bottom: var(--espace-4);
+  padding: var(--espace-3);
+  color: var(--alerte);
+  background: var(--surface-2);
+  /* Trait pointillé : redondance non colorée du signal d'erreur. */
+  border: 1px dashed var(--alerte);
+  border-radius: var(--rayon-bloc);
+}
+
+.connexion__erreur-mot {
+  font-weight: 700;
+}
+
+.connexion__bouton {
+  height: var(--ligne-confortable);
+  background: var(--brand);
+  color: var(--sur-brand);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+}
+
+.connexion__bouton:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+
+.connexion__bouton:disabled {
+  cursor: progress;
+  /* L'état est déjà porté par le libellé (« Connexion… ») : il n'a pas besoin
+     de l'être aussi par un contraste dégradé, que §12 interdit sur tout texte.
+     --texte-3 sur --surface ne tenait que 3,63:1. */
+  background: var(--surface-2);
+  color: var(--texte-2);
+  border: 1px solid var(--border-fort);
+}
+
+@media (max-width: 720px) {
+  .connexion__accroche,
+  .connexion__champ,
+  .connexion__erreur {
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+
+  .connexion__champ {
+    height: var(--cible-tactile);
+  }
+
+  .connexion__bouton {
+    height: var(--bouton-primaire-mobile);
+    font-size: var(--corps-mobile-taille);
+  }
+}

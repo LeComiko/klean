@@ -1,0 +1,93 @@
+.navigation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: var(--largeur-navigation);
+  padding: var(--espace-3) 0;
+  background: var(--surface);
+  /* Séparation par la bordure, jamais par une ombre. */
+  border-right: 1px solid var(--border);
+}
+
+.navigation__marque {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: var(--espace-6);
+  background: var(--brand);
+  color: var(--sur-brand);
+  border-radius: var(--rayon-bloc);
+  font-family: var(--police-chiffres);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.navigation__liste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  flex: 1;
+}
+
+.navigation__pastille {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--rayon-bloc);
+  /* Le texte plein, pas un gris : §12 exige AA jusque sur les éléments de
+     navigation inactifs, et un --texte-3 sur --surface ne le tient pas. */
+  color: var(--texte);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-family: var(--police-chiffres);
+  font-size: var(--bloc-planning-taille);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+}
+
+.navigation__pastille:hover {
+  background: var(--brand-tint);
+  border-color: var(--border-fort);
+}
+
+.navigation__pastille--active {
+  background: var(--brand);
+  border-color: var(--brand-strong);
+  color: var(--sur-brand);
+}
+
+/* Redondance non colorée de l'état actif : un liséré à gauche, lisible en noir
+   et blanc comme par un daltonien. */
+.navigation__pastille--active::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  background: var(--brand);
+  border-radius: var(--rayon-pilule);
+}
+
+.navigation__sortie {
+  margin-top: var(--espace-4);
+  color: var(--texte);
+}
+
+.navigation__sortie:hover:not(:disabled) {
+  color: var(--alerte);
+  border-color: var(--alerte);
+  background: var(--surface-2);
+}
+
+.navigation__sortie:disabled {
+  cursor: progress;
+  color: var(--texte-2);
+}

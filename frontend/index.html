@@ -1,10 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+
+    <!--
+      Figtree pour l'interface, IBM Plex Mono pour tout chiffre comparé en
+      colonne (CLAUDE.md §12).
+
+      ⚠️ Étape 16 : ces deux origines devront figurer dans la directive CSP
+      (font-src et style-src), sinon les polices seront bloquées en production.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..700&family=IBM+Plex+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <title>KLEAN</title>
   </head>
   <body>
     <div id="root"></div>

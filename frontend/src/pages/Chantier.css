@@ -1,0 +1,8 @@
+.chantier {
+  max-width: 60ch;
+  padding: var(--espace-6);
+  color: var(--texte-2);
+  background: var(--surface);
+  border: 1px dashed var(--border-fort);
+  border-radius: var(--rayon-carte);
+}

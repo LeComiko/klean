@@ -1,0 +1,20 @@
+.disposition {
+  display: flex;
+  min-height: 100%;
+  background: var(--canvas);
+}
+
+.disposition__contenu {
+  flex: 1;
+  min-width: 0;
+  padding: var(--espace-6) var(--espace-8);
+  /* min-width: 0 est indispensable : sans lui une grille large — le planning de
+     l'étape 14 — pousse la barre latérale hors de l'écran au lieu de défiler. */
+  overflow-x: auto;
+}
+
+@media (max-width: 720px) {
+  .disposition__contenu {
+    padding: var(--espace-4);
+  }
+}
