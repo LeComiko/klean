@@ -54,6 +54,13 @@ Conséquences pratiques sur le code :
 - Le `README.md` doit permettre à un inconnu de faire tourner le projet en
   suivant les commandes telles quelles.
 - Pas de dépendance propriétaire, pas de service tiers obligatoire.
+  Conséquence concrète : la configuration **SMTP est optionnelle**. Son absence
+  n'empêche pas KLEAN de démarrer, elle désactive le seul parcours qui en dépend
+  — la réinitialisation de mot de passe, qui répond alors 503 avec la marche à
+  suivre. En revanche une configuration **incomplète** fait échouer le démarrage :
+  « pas configuré » est un choix d'exploitation, « configuré à moitié » est une
+  erreur, et la découvrir quand un responsable a perdu son mot de passe est le
+  pire moment.
 
 ---
 
@@ -90,7 +97,8 @@ KLEAN/
 │   ├── Controllers/     un par entité + Auth + Planning
 │   ├── Services/        AffectationService, RemplacementService,
 │   │                    PlanningService, JwtService, ServiceSession,
-│   │                    AmorcageService, TenantContext
+│   │                    AmorcageService, TenantContext, LimiteurDebit,
+│   │                    ServiceCourrielSmtp, DescripteurErreursFrancais
 │   ├── Middleware/      VerificationCsrf
 │   ├── Migrations/
 │   └── Scripts/         SQL de maintenance
@@ -178,6 +186,28 @@ Les DTOs les exposent en `string` et utilisent `Enum.TryParse` avec un
 - Règles de mot de passe : 10 caractères minimum, majuscule, minuscule,
   chiffre. Pas de caractère spécial exigé. Verrouillage après 5 échecs
   pendant 15 minutes.
+
+  ⚠️ **Aucun `[MinLength]` sur les DTOs de mot de passe.** La validation de
+  modèle d'ASP.NET s'exécute avant le contrôleur, donc avant Identity, et renvoie
+  son propre message **en anglais** que `DescripteurErreursFrancais` ne peut pas
+  atteindre. Elle dupliquerait en plus une règle dont Identity est l'autorité.
+  Identity valide, et parle français.
+- **Limitation de débit** par `LimiteurDebit`, fenêtre glissante, **par adresse
+  et par compte** sur `connexion`, `mot-de-passe-oublie` et `reinitialiser`.
+  Plafonds dans `PlafondsDebit`. Le verrouillage d'Identity est par compte : il
+  ne ralentit en rien le bourrage d'identifiants, un essai sur cent comptes.
+  Une tentative refusée n'est pas comptée, sinon réessayer prolongerait
+  indéfiniment le blocage. Compteur en mémoire de processus : derrière plusieurs
+  instances, la limite est par instance.
+- **Réinitialisation de mot de passe** : `POST /api/auth/mot-de-passe-oublie`
+  puis `POST /api/auth/reinitialiser`. Jeton Identity à usage unique, une heure.
+  La demande répond **202 quoi qu'il arrive** — compte inexistant, désactivé ou
+  valide — sinon l'endpoint devient un vérificateur d'adresses ouvert à tous. La
+  réussite régénère le `SecurityStamp` (donc tue les jetons d'accès) **et**
+  révoque toutes les sessions de rafraîchissement.
+- **Messages d'Identity en français** via `DescripteurErreursFrancais` : les
+  descriptions traversent l'API telles quelles, `AuthController` les recopie dans
+  ses `BadRequest`, et l'écran n'a aucun moyen de traduire un texte libre.
 - `UserName` doit être renseigné avec la même valeur que `Email` à chaque
   création de compte, sinon Identity refuse.
 
@@ -501,6 +531,13 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
 - Toutes les méthodes `async`, `AsNoTracking()` sur les lectures pures.
 - Services : classes concrètes, **pas d'interface**, pas de repository, pas
   d'AutoMapper, pas de logging ajouté.
+
+  Deux exceptions, et deux seulement : `ITenantContext` et `IServiceCourriel`.
+  Même justification dans les deux cas — la substitution est **nécessaire**, pas
+  décorative. Pour le courriel, l'alternative serait une classe concrète qui
+  « n'envoie pas vraiment » selon la configuration, ce qui ferait dépendre le
+  comportement de production d'un réglage, sur un chemin d'authentification.
+  Toute troisième interface de service doit être justifiée de la même façon.
 - Ne jamais contourner les filtres multi-tenant avec `IgnoreQueryFilters()`.
 
 **Frontend**

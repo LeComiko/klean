@@ -40,7 +40,17 @@ builder.Services.AddIdentity<Utilisateur, IdentityRole<Guid>>(options =>
         options.User.RequireUniqueEmail = true;
     })
     .AddEntityFrameworkStores<KleanDbContext>()
+    // Les descriptions d'erreur d'Identity traversent l'API telles quelles :
+    // sans ce descripteur, une interface entièrement française renvoie
+    // « Passwords must have at least one digit ».
+    .AddErrorDescriber<DescripteurErreursFrancais>()
     .AddDefaultTokenProviders();
+
+// Jeton de réinitialisation : une heure au lieu du jour par défaut. Assez pour
+// qu'un courriel arrive et soit lu, assez court pour qu'un lien oublié dans une
+// boîte partagée ne reste pas exploitable une journée entière.
+builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
+    options.TokenLifespan = TimeSpan.FromHours(1));
 
 // La clé est lue une fois : JwtService est sans état, il sert aussi bien à
 // fabriquer les jetons qu'à configurer leur validation.
@@ -48,6 +58,11 @@ var jwt = new JwtService(builder.Configuration);
 builder.Services.AddSingleton(jwt);
 builder.Services.AddScoped<AmorcageService>();
 builder.Services.AddScoped<ServiceSession>();
+
+// Singletons : le compteur de débit doit survivre aux requêtes, et la
+// configuration SMTP est lue une fois pour toutes.
+builder.Services.AddSingleton<LimiteurDebit>();
+builder.Services.AddSingleton<IServiceCourriel, ServiceCourrielSmtp>();
 builder.Services.AddScoped<AffectationService>();
 builder.Services.AddScoped<RemplacementService>();
 builder.Services.AddScoped<PlanningService>();
@@ -183,6 +198,12 @@ var app = builder.Build();
 using (var portee = app.Services.CreateScope())
 {
     await portee.ServiceProvider.GetRequiredService<AmorcageService>().ExecuterAsync();
+
+    // Résolution forcée : le constructeur valide la configuration SMTP et
+    // journalise son état. Sans cet appel, une configuration incomplète
+    // n'échouerait qu'au premier mot de passe oublié — soit au plus mauvais
+    // moment possible (SPEC.md étape 12).
+    portee.ServiceProvider.GetRequiredService<IServiceCourriel>();
 }
 
 if (app.Environment.IsDevelopment())

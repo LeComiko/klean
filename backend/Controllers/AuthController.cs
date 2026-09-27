@@ -18,17 +18,26 @@ public class AuthController : ControllerBase
     private readonly UserManager<Utilisateur> _utilisateurs;
     private readonly SignInManager<Utilisateur> _connexions;
     private readonly ServiceSession _session;
+    private readonly IServiceCourriel _courriel;
+    private readonly LimiteurDebit _debit;
+    private readonly IConfiguration _configuration;
 
     public AuthController(
         KleanDbContext db,
         UserManager<Utilisateur> utilisateurs,
         SignInManager<Utilisateur> connexions,
-        ServiceSession session)
+        ServiceSession session,
+        IServiceCourriel courriel,
+        LimiteurDebit debit,
+        IConfiguration configuration)
     {
         _db = db;
         _utilisateurs = utilisateurs;
         _connexions = connexions;
         _session = session;
+        _courriel = courriel;
+        _debit = debit;
+        _configuration = configuration;
     }
 
     /// <summary>
@@ -39,6 +48,13 @@ public class AuthController : ControllerBase
     [HttpPost("connexion")]
     public async Task<ActionResult<SessionDto>> Connexion(ConnexionDto dto)
     {
+        // Avant toute lecture en base : une requête refusée ne doit rien coûter.
+        var limite = LimiteAtteinte("connexion", dto.Email,
+            PlafondsDebit.ConnexionsParAdresse, PlafondsDebit.FenetreConnexionAdresse,
+            PlafondsDebit.ConnexionsParCompte, PlafondsDebit.FenetreConnexionCompte);
+
+        if (limite is not null) return limite;
+
         var utilisateur = await _utilisateurs.FindByEmailAsync(dto.Email);
 
         // Même réponse que pour un mot de passe faux : ne pas révéler quels
@@ -100,6 +116,99 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Deconnexion()
     {
         await _session.FermerAsync(HttpContext);
+
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Demande de réinitialisation. Envoie un lien à usage unique, valable une
+    /// heure.
+    ///
+    /// Répond <b>202 quoi qu'il arrive</b> dès lors que SMTP est configuré : que le
+    /// compte existe, soit désactivé, ou n'existe pas. Distinguer les cas ferait de
+    /// cet endpoint un vérificateur d'adresses ouvert à tous — on y saisit une
+    /// adresse, la réponse dit si elle a un compte.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpPost("mot-de-passe-oublie")]
+    public async Task<IActionResult> MotDePasseOublie(MotDePasseOublieDto dto)
+    {
+        var limite = LimiteAtteinte("oubli", dto.Email,
+            PlafondsDebit.OublisParAdresse, PlafondsDebit.FenetreOublis,
+            PlafondsDebit.OublisParCompte, PlafondsDebit.FenetreOublis);
+
+        if (limite is not null) return limite;
+
+        // Vérifié avant toute recherche de compte : le 503 ne dépend donc pas de
+        // l'adresse saisie, et ne révèle rien.
+        if (!_courriel.Configure)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                "La réinitialisation de mot de passe est indisponible : aucun serveur SMTP "
+                + "n'est configuré sur cette instance. Un administrateur doit renseigner "
+                + "Courriel:Hote, Courriel:Port et Courriel:Expediteur. En attendant, seul "
+                + "un administrateur peut débloquer un compte.");
+        }
+
+        var utilisateur = await _utilisateurs.FindByEmailAsync(dto.Email);
+
+        if (utilisateur is not null && utilisateur.Actif)
+        {
+            var jeton = await _utilisateurs.GeneratePasswordResetTokenAsync(utilisateur);
+
+            await _courriel.EnvoyerAsync(
+                dto.Email,
+                "KLEAN — réinitialisation de votre mot de passe",
+                CorpsDuCourriel(dto.Email, jeton));
+        }
+
+        return Accepted();
+    }
+
+    /// <summary>
+    /// Réinitialisation effective.
+    ///
+    /// Deux effets au-delà du changement de mot de passe, tous deux nécessaires :
+    /// Identity régénère le <c>SecurityStamp</c>, ce qui invalide immédiatement tous
+    /// les jetons d'accès en circulation ; et toutes les sessions de rafraîchissement
+    /// sont révoquées. Quelqu'un qui réinitialise son mot de passe le fait souvent
+    /// parce qu'il craint un accès illégitime — laisser les sessions ouvertes serait
+    /// répondre à côté.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpPost("reinitialiser")]
+    public async Task<IActionResult> Reinitialiser(ReinitialiserDto dto)
+    {
+        var limite = LimiteAtteinte("reinitialisation", null,
+            PlafondsDebit.ReinitialisationsParAdresse, PlafondsDebit.FenetreReinitialisations);
+
+        if (limite is not null) return limite;
+
+        var utilisateur = await _utilisateurs.FindByEmailAsync(dto.Email);
+
+        if (utilisateur is null)
+        {
+            return BadRequest(LienInvalide);
+        }
+
+        var resultat = await _utilisateurs.ResetPasswordAsync(
+            utilisateur, dto.Jeton, dto.NouveauMotDePasse);
+
+        if (!resultat.Succeeded)
+        {
+            // Un jeton refusé donne le message générique — sinon la réponse dirait
+            // « ce compte existe, mais votre jeton est faux ». Les règles de mot de
+            // passe, elles, doivent être dites : l'utilisateur ne peut pas corriger
+            // ce qu'il ne connaît pas.
+            if (resultat.Errors.Any(e => e.Code == nameof(IdentityErrorDescriber.InvalidToken)))
+            {
+                return BadRequest(LienInvalide);
+            }
+
+            return BadRequest(string.Join(" ; ", resultat.Errors.Select(e => e.Description)));
+        }
+
+        await _session.RevoquerToutAsync(utilisateur.Id, "Réinitialisation du mot de passe");
 
         return NoContent();
     }
@@ -191,6 +300,66 @@ public class AuthController : ControllerBase
 
         var roles = await _utilisateurs.GetRolesAsync(utilisateur);
         return Ok(Vers(utilisateur, roles));
+    }
+
+    private const string LienInvalide =
+        "Ce lien de réinitialisation est invalide ou a expiré. En demander un nouveau.";
+
+    /// <summary>
+    /// Applique les deux dimensions de limitation. Le message est le même dans les
+    /// deux cas : préciser laquelle a déclenché renseignerait un attaquant sur la
+    /// forme de la défense.
+    /// </summary>
+    private ActionResult? LimiteAtteinte(
+        string operation, string? compte,
+        int parAdresse, TimeSpan fenetreAdresse,
+        int? parCompte = null, TimeSpan? fenetreCompte = null)
+    {
+        var adresse = HttpContext.Connection.RemoteIpAddress?.ToString()
+                      ?? LimiteurDebit.AdresseInconnue;
+
+        if (!_debit.Autoriser($"{operation}:adresse:{adresse}", parAdresse, fenetreAdresse))
+        {
+            return TropDeTentatives();
+        }
+
+        if (parCompte is not null && !string.IsNullOrWhiteSpace(compte)
+            && !_debit.Autoriser(
+                $"{operation}:compte:{compte.ToLowerInvariant()}", parCompte.Value, fenetreCompte!.Value))
+        {
+            return TropDeTentatives();
+        }
+
+        return null;
+    }
+
+    private ActionResult TropDeTentatives() =>
+        StatusCode(StatusCodes.Status429TooManyRequests,
+            "Trop de tentatives. Réessayer dans quelques minutes.");
+
+    private string CorpsDuCourriel(string email, string jeton)
+    {
+        // Le jeton d'Identity contient des caractères réservés dans une URL.
+        var lien = _configuration["Frontend:Url"]?.TrimEnd('/') ?? "http://localhost:5173";
+
+        var url = $"{lien}/reinitialiser"
+                  + $"?email={Uri.EscapeDataString(email)}"
+                  + $"&jeton={Uri.EscapeDataString(jeton)}";
+
+        return $"""
+            Bonjour,
+
+            Une réinitialisation de mot de passe a été demandée pour ce compte KLEAN.
+
+            Pour choisir un nouveau mot de passe, suivre ce lien :
+
+            {url}
+
+            Ce lien est valable une heure et ne fonctionne qu'une fois.
+
+            Si vous n'êtes pas à l'origine de cette demande, ignorez ce message :
+            votre mot de passe actuel reste valable.
+            """;
     }
 
     private Guid? EntrepriseIdDuJeton()

@@ -67,6 +67,13 @@ public class FixtureApi : IAsyncLifetime
         using var portee = Fabrique.Services.CreateScope();
         var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
 
+        // La série partage une instance d'application : sans remise à zéro, les
+        // tentatives de connexion s'accumulent d'un test à l'autre et la série
+        // finit par se bloquer elle-même sur sa propre limitation de débit. Les
+        // tests exercent ainsi les vrais plafonds de production.
+        portee.ServiceProvider.GetRequiredService<LimiteurDebit>().Vider();
+        Fabrique.Courriels.Reinitialiser();
+
         await db.Database.ExecuteSqlRawAsync("""
             TRUNCATE TABLE
                 "Remplacements", "Absences", "Interventions", "Prestations",

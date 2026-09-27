@@ -1,7 +1,9 @@
 using Klean.Api.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Klean.Api.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Klean.Api.Tests.Infrastructure;
@@ -51,9 +53,26 @@ public class FabriqueApi : WebApplicationFactory<Program>
         Poser("Amorcage__SiretEntreprise", "00000000000001");
     }
 
+    /// <summary>
+    /// Courriels retenus au lieu d'être envoyés. Partagé par toute la série, remis
+    /// à zéro par la fixture entre chaque test.
+    /// </summary>
+    public ServiceCourrielDeTest Courriels { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+
+        // ⚠️ Ici, et pas dans le constructeur statique : la substitution de service
+        // fonctionne bien par ConfigureServices, contrairement à la configuration —
+        // les services sont construits après que ces délégués se sont appliqués.
+        // C'est la configuration, lue par les instructions de haut niveau de
+        // Program.cs, qui doit passer par des variables d'environnement.
+        builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<IServiceCourriel>();
+            services.AddSingleton<IServiceCourriel>(Courriels);
+        });
     }
 
     /// <summary>

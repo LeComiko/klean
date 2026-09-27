@@ -637,11 +637,62 @@ Onze sabotages rejoués, chacun rattrapé : contrôle `Actif`, contrôle
 `SameSite`, chemin du cookie de rafraîchissement, révocation à la déconnexion,
 vérification CSRF désactivée, vérification CSRF étendue aux lectures.
 
-**Lot B** — réinitialisation de mot de passe, limitation de débit,
-`IdentityErrorDescriber` en français, SMTP optionnel. À venir.
+**Lot B — mot de passe oublié, débit, français.** Livré.
 
-**Validation du lot B** : le parcours de réinitialisation fonctionne de bout en
-bout. La limitation de débit répond 429. Tous vérifiés par des tests.
+- `Services/IServiceCourriel.cs`, `ServiceCourrielSmtp.cs` : SMTP **optionnel**
+- `Services/LimiteurDebit.cs`, `PlafondsDebit` : fenêtre glissante
+- `Services/DescripteurErreursFrancais.cs`
+- `Controllers/AuthController.cs` : `mot-de-passe-oublie`, `reinitialiser`
+- `appsettings.example.json` : clés `Courriel` et `Frontend`
+- `backend.Tests/MotDePasseTests.cs`, `LimitationDebitTests.cs`
+
+**SMTP optionnel, en trois modes**, tous les trois vérifiés sur l'application
+réelle. *Absent* : démarrage normal, avertissement nommant les clés à renseigner
+et les endpoints désactivés, puis **503** avec la marche à suivre. *Incomplet* :
+**échec au démarrage** — « pas configuré » est un choix d'exploitation,
+« configuré à moitié » est une erreur, et la découvrir quand un responsable a
+perdu son mot de passe est le pire moment. *Complet* : démarrage et journal de la
+configuration effective.
+
+**Deux dimensions de limitation, pas une.** Le verrouillage d'Identity est par
+compte : cinq échecs, quinze minutes. Il ne ralentit donc **en rien** le scénario
+inverse — pulvériser un seul mot de passe probable sur cent comptes, un essai
+chacun. Les deux dimensions ont leur test, parce qu'une seule des deux laisse un
+trou entier. Une tentative refusée n'est pas comptée : sinon un client bloqué se
+prolonge indéfiniment sa propre punition en réessayant.
+
+⚠️ **`[MinLength]` retiré des DTOs de mot de passe.** La validation de modèle
+d'ASP.NET s'exécute avant le contrôleur, donc avant Identity, et renvoyait son
+message **en anglais** — que le descripteur français ne peut pas atteindre. Elle
+dupliquait en plus une règle dont Identity est l'autorité : deux longueurs
+minimales finissent par diverger. Trouvé par le test du mot de passe trop court,
+qui attendait du français et recevait un `ProblemDetails` anglais.
+
+⚠️ **`IServiceCourriel` déroge à `CLAUDE.md` §11.** C'est la deuxième interface de
+service du projet, avec `ITenantContext`, et la justification est la même : la
+substitution est nécessaire, aucun test ne doit envoyer de courriel.
+L'alternative — une classe concrète qui « n'envoie pas vraiment » selon la
+configuration — ferait dépendre le comportement de production d'un réglage, sur
+un chemin d'authentification. Inscrit dans §11 plutôt qu'introduit en silence.
+
+**Validation du lot B** — 21 tests. Parcours complet : demande → courriel → jeton
+→ nouveau mot de passe, l'ancien refusé · le lien porte l'adresse et le jeton
+encodés, et le jeton décodé est accepté · le jeton ne sert qu'une fois · la
+réinitialisation révoque **toutes** les sessions, accès et rafraîchissement · une
+adresse inconnue et un compte désactivé reçoivent **202 sans courriel** · une
+adresse inconnue et un jeton faux donnent le **même** message · le 503 ne dépend
+pas de l'adresse saisie · les règles de mot de passe et le doublon d'adresse sont
+en français · **429** par compte et par adresse, sur `connexion` et sur
+`mot-de-passe-oublie` · le plafond par compte bloque aussi le bon mot de passe ·
+un autre compte n'est pas bloqué par le premier · le message de 429 ne nomme pas
+la dimension atteinte.
+
+Onze sabotages rejoués, chacun rattrapé : 404 au lieu de 202 sur adresse
+inconnue, courriel envoyé à un compte désactivé, jeton invalide distingué du
+compte inconnu, sessions non révoquées, SMTP absent ignoré, limitation retirée de
+la connexion, dimension par compte retirée, limitation retirée du mot de passe
+oublié, message de 429 nommant la dimension, refus comptés, descripteur français
+retiré.
 
 ---
 
@@ -904,6 +955,13 @@ Quand un client demande « pourquoi ce montant ? », on peut répondre.
 | Base de test | PostgreSQL dédiée `klean_test` | Le fournisseur InMemory ne reproduit ni les filtres globaux, ni les contraintes, ni le refus des `DateTime` non datés — ce qu'on veut justement tester |
 | Cadrage `ChefEquipe` | Par le verbe à l'étape 8, par le périmètre à l'étape 19 | Le modèle dépend d'une information métier — périmètre en personnes ou en bâtiments — qu'un client donne et qu'un raisonnement ne produit pas. Deviner, c'est risquer une migration sur une table peuplée |
 | `Absence.Motif` | Interdit sur `Maladie`, conservé sur les autres types | Le champ est indispensable pour `Autre` et utile pour `Indisponibilite` : le supprimer pousserait à écrire le motif ailleurs. Restreindre l'accès par rôle serait plus faible — ça conserve la donnée de santé en ajoutant une porte devant, alors que la minimisation dit de ne pas la collecter. En AGPL auto-hébergé, le produit doit être sûr par défaut : aucun DPO en aval ne relira le schéma |
+| SMTP | Optionnel ; absent = 503, incomplet = échec au démarrage | `CLAUDE.md` §2 interdit d'imposer un service tiers. Mais une configuration à moitié faite est une erreur, et elle doit se voir au démarrage, pas au premier mot de passe oublié |
+| Limitation de débit | Par adresse **et** par compte | Le verrouillage d'Identity est par compte : il ne ralentit pas d'un essai sur cent comptes, qui est la forme réelle du bourrage d'identifiants |
+| Compteur de débit | En mémoire de processus | Un compteur partagé supposerait un service tiers. Limite assumée : derrière plusieurs instances, la limite est par instance |
+| Tentative refusée | Non comptée | Sinon réessayer prolonge indéfiniment le blocage, et la limitation devient un verrouillage définitif |
+| Mot de passe oublié | 202 quoi qu'il arrive | Distinguer ferait de l'endpoint un vérificateur d'adresses ouvert à tous |
+| Règles de mot de passe | Validées par Identity seule, pas par `[MinLength]` | La validation de modèle passe avant le contrôleur et renvoie de l'anglais que le descripteur français ne peut pas atteindre ; et deux règles pour une contrainte finissent par diverger |
+| Interfaces de service | `ITenantContext` et `IServiceCourriel`, pas d'autre | Substitution nécessaire, pas décorative. Une classe concrète qui « n'envoie pas vraiment » ferait dépendre la production d'un réglage |
 | Jeton d'accès | 15 min, cookie `HttpOnly` `Secure` `SameSite=Strict` | Le `localStorage` exposait un porteur de 8 h à la première XSS. La durée courte borne la fenêtre si le contrôle de révocation était un jour contourné |
 | En-tête `Authorization` | Plus accepté | Aucun jeton n'est remis au client, donc personne ne peut s'en servir ; un second chemin d'authentification est un second chemin à auditer |
 | Révocation | `Actif` et `SecurityStamp` à chaque requête | Une lecture par clé primaire contre une révocation immédiate. Sans elle, désactiver un compte le laissait actif jusqu'à l'expiration du jeton |

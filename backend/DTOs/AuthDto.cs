@@ -46,15 +46,48 @@ public class ProfilDto
     public IEnumerable<string> Roles { get; set; } = [];
 }
 
+public class MotDePasseOublieDto
+{
+    [Required]
+    [EmailAddress]
+    public string Email { get; set; } = string.Empty;
+}
+
+public class ReinitialiserDto
+{
+    [Required]
+    [EmailAddress]
+    public string Email { get; set; } = string.Empty;
+
+    /// <summary>Jeton reçu par courriel. À usage unique, valable une heure.</summary>
+    [Required]
+    public string Jeton { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 10 caractères minimum, une majuscule, une minuscule, un chiffre. Pas de
+    /// <c>[MinLength]</c> : voir <see cref="CompteCreateDto.MotDePasse"/>.
+    /// </summary>
+    [Required]
+    public string NouveauMotDePasse { get; set; } = string.Empty;
+}
+
 public class CompteCreateDto
 {
     [Required]
     [EmailAddress]
     public string Email { get; set; } = string.Empty;
 
-    /// <summary>10 caractères minimum, une majuscule, une minuscule, un chiffre.</summary>
+    /// <summary>
+    /// 10 caractères minimum, une majuscule, une minuscule, un chiffre.
+    ///
+    /// ⚠️ Pas de <c>[MinLength]</c> : la validation de modèle d'ASP.NET s'exécute
+    /// <b>avant</b> le contrôleur, donc avant Identity, et renvoie son propre message
+    /// <b>en anglais</b> que le descripteur d'erreurs français ne peut pas
+    /// atteindre. Elle dupliquerait en plus une règle dont Identity est l'autorité —
+    /// deux longueurs minimales finiraient par diverger. Identity valide, et parle
+    /// français.
+    /// </summary>
     [Required]
-    [MinLength(10)]
     public string MotDePasse { get; set; } = string.Empty;
 
     [Required]
