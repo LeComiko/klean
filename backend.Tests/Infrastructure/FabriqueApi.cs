@@ -51,7 +51,23 @@ public class FabriqueApi : WebApplicationFactory<Program>
         Poser("Amorcage__MotDePasseAdmin", "AmorcageTest2026");
         Poser("Amorcage__RaisonSocialeEntreprise", "Amorçage Test");
         Poser("Amorcage__SiretEntreprise", "00000000000001");
+
+        // Surface HTTP (étape 16). Une seule origine déclarée : il en faut une
+        // pour prouver qu'elle passe, et son unicité prouve que les autres non.
+        Poser("Cors__Origines__0", OrigineDeclaree);
+
+        // Port de destination de la redirection. Explicite, parce que TestServer
+        // n'a aucune adresse d'écoute dont le déduire — sans cette valeur
+        // UseHttpsRedirection laisse passer en clair avec un simple
+        // avertissement, et le test de redirection passerait au vert à l'envers.
+        Poser("Http__PortHttps", "443");
     }
+
+    /// <summary>Seule origine que la politique CORS de la série autorise.</summary>
+    public const string OrigineDeclaree = "https://klean-declare.test";
+
+    /// <summary>Origine qui ne figure nulle part dans la configuration.</summary>
+    public const string OrigineInconnue = "https://klean-pirate.test";
 
     /// <summary>
     /// Courriels retenus au lieu d'être envoyés. Partagé par toute la série, remis
@@ -59,9 +75,20 @@ public class FabriqueApi : WebApplicationFactory<Program>
     /// </summary>
     public ServiceCourrielDeTest Courriels { get; } = new();
 
+    private readonly string _environnement;
+
+    /// <summary>
+    /// <paramref name="environnement"/> n'est pas décoratif : trois comportements
+    /// de l'étape 16 — HSTS, redirection HTTPS, <c>RequireHttpsMetadata</c> — sont
+    /// <b>désactivés</b> en développement. Les éprouver demande un hôte qui n'y est
+    /// pas, et les éprouver sur l'hôte de développement les verrait toujours
+    /// absents, donc toujours au vert à l'envers.
+    /// </summary>
+    public FabriqueApi(string environnement = "Development") => _environnement = environnement;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Development");
+        builder.UseEnvironment(_environnement);
 
         // ⚠️ Ici, et pas dans le constructeur statique : la substitution de service
         // fonctionne bien par ConfigureServices, contrairement à la configuration —
@@ -91,6 +118,24 @@ public class FabriqueApi : WebApplicationFactory<Program>
             BaseAddress = new Uri("https://localhost/"),
             AllowAutoRedirect = suivreRedirections,
             HandleCookies = gererCookies
+        });
+
+    /// <summary>
+    /// Client parlant <c>http</c>, pour la seule chose qui l'exige : prouver qu'une
+    /// requête en clair est redirigée.
+    ///
+    /// ⚠️ Ne jamais s'en servir pour autre chose. <c>CookieContainer</c> respecte
+    /// l'attribut <c>Secure</c> : sur une adresse de base en <c>http</c> il stocke
+    /// les cookies et ne les renvoie jamais, et toute la série échouerait en 401
+    /// sans que rien n'indique pourquoi (CLAUDE.md §10). D'où la gestion des
+    /// cookies désactivée ici — il n'y a rien à gagner à la laisser en place.
+    /// </summary>
+    public HttpClient CreerClientHttp() =>
+        CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("http://localhost/"),
+            AllowAutoRedirect = false,
+            HandleCookies = false
         });
 
     /// <summary>

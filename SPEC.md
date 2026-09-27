@@ -944,6 +944,64 @@ détectés.
 **Validation** : une origine non déclarée est refusée. Les en-têtes sont
 présents. Une requête HTTP est redirigée hors développement.
 
+**Fait.** 20 tests — 16 dans `SurfaceHttpTests.cs`, 4 dans `SessionTests.cs` pour
+la déconnexion totale — et 14 sabotages, dont deux enseignements.
+
+**Ce que l'étape a décidé, et qui ne figurait pas dans le périmètre.**
+
+*Il y a deux politiques de sécurité du contenu, pas une.* Le périmètre les
+confondait. L'API ne sert que du JSON : sa politique est `default-src 'none'`, la
+plus stricte possible, et les origines de polices de la dette n°2 n'ont rien à y
+faire — elles appartiennent à la politique du **document**, que l'API ne sert pas.
+Les écrire dans la politique de l'API l'aurait affaiblie pour un besoin qu'elle
+n'a pas. La politique du document vit donc dans `frontend/csp.ts`, source unique
+lue par `vite.config.ts`, avec une variante de développement — le serveur de Vite
+exige `'unsafe-inline'` et `ws:`, et une politique unique aurait dû affaiblir la
+production pour le confort du développement. `npm run preview` sert la variante de
+production : c'est le seul endroit où l'on constate qu'elle ne bloque rien avant de
+déployer. Un en-tête écrit dans un `nginx.conf` aurait été invisible du dépôt et
+aurait divergé au premier `index.html` modifié.
+
+*La dette n°1 se paie côté Vite, pas côté backend.* Ce qui décide du sort d'un
+cookie `Secure` est l'origine que voit le **navigateur** ; le saut proxy → backend
+est en boucle locale sur la même machine et reste en clair. `vite dev` sert donc la
+page en https avec le certificat de développement .NET exporté en PEM — zéro
+dépendance npm — et le bloc qui retirait `Secure` a disparu.
+
+*Deux gardes sur la taille du corps.* `TestServer` ignore les options de Kestrel :
+la limite y était invisible, et la série a vu un corps de deux mégaoctets lu et lié
+en entier avant d'être refusé par un `[MaxLength(200)]` — après l'allocation que la
+limite existe pour éviter. D'où `LimiteCorpsRequete`, qui refuse sur
+`Content-Length` quel que soit le serveur. Kestrel reste nécessaire pour un corps
+en fragments, qui n'annonce pas sa taille. Les deux sont prouvées contre le vrai
+serveur : 413 avant l'authentification dans un cas, 413 de Kestrel pendant la
+lecture dans l'autre, 201 pour le témoin.
+
+**Deux enseignements des sabotages.**
+
+*Un témoin peut être vert pour la mauvaise raison.* « La déconnexion totale ne
+touche pas les autres comptes » vérifiait le `GET /api/auth/moi` de l'autre compte
+— or révoquer un jeton de rafraîchissement ne périme pas un jeton d'accès, qui est
+signé et vaut quinze minutes. Retirer la clause de compte de `RevoquerToutAsync`
+laissait le test vert. Le témoin porte désormais sur `POST /api/auth/rafraichir`.
+
+*`[Authorize]` seul est retirable de `deconnexion-totale`.* Le sabotage reste vert,
+parce que le contrôle d'identifiant du contrôleur couvre le même cas — et
+`OnTokenValidated` refuse déjà un jeton dont l'identifiant n'est pas exploitable.
+Retirer les deux gardes passe au rouge. La propriété est donc bien tenue, deux
+fois ; les deux sont conservées, `[Authorize]` parce que c'est la surface qu'on
+audite, le contrôle par symétrie avec `Moi()`.
+
+**Ce qui reste ouvert.** L'endpoint `deconnexion-totale` n'a pas de bouton :
+aucun écran de compte n'existe. Sa place est à l'étape 17, avec les écrans de
+données personnelles. En attendant il est appelable, et c'est déjà ce qui manquait.
+
+**Non vérifié.** L'absence de violation de la CSP de production **dans un
+navigateur** n'a pas pu être constatée — extension indisponible. Ce qui est prouvé
+est statique : la construction ne contient aucun script ni style en ligne, son CSS
+ne référence aucune ressource externe, et chacune des cinq ressources du document
+est couverte par une directive.
+
 ---
 
 # Étape 16 bis — Écrans de données de référence
@@ -1041,6 +1099,10 @@ décision produit.
   suppression.
 - Durées de conservation, par nature de donnée
 - Registre des traitements et cartographie des données
+- **Écran de compte**, qui est le premier de KLEAN à en avoir besoin : c'est là
+  que vivent le changement de mot de passe et le bouton *Déconnexion de tous les
+  appareils*. L'endpoint existe depuis l'étape 16 et n'a aucun bouton ; il n'avait
+  pas de place avant cet écran.
 
 ⚠️ Stocker les coordonnées du domicile d'un salarié pour le calcul de distance
 relève de la doctrine CNIL sur la géolocalisation des employés : c'est
@@ -1063,6 +1125,14 @@ requise. **Ce fichier ne remplace pas une relecture juridique.**
   migration
 - Secrets de production : variables d'environnement, et documentation de ce qui
   doit être tourné, quand et comment
+- **La politique de sécurité du contenu du document**, qui est un en-tête, donc
+  l'affaire de qui sert `frontend/dist/`. La chaîne à renvoyer est
+  `CspProduction` dans `frontend/csp.ts` — ne pas la recopier, la lire, sinon les
+  deux divergeront au premier `index.html` modifié. Servir le frontend et l'API
+  sous la même origine est le déploiement le plus simple et évite CORS entièrement.
+- **`UseExceptionHandler`.** Aujourd'hui une exception non rattrapée rend un 500
+  au corps vide hors développement, ce qui ne fuite rien mais ne laisse rien à
+  corréler non plus. C'est le pendant du point de journalisation ci-dessus.
 
 **Validation** : un inconnu déploie en suivant le fichier, sans aide.
 

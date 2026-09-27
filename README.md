@@ -97,7 +97,30 @@ L'API écoute sur <http://localhost:5137>. En développement, Swagger est
 exposé sur <http://localhost:5137/swagger> et un point de contrôle répond
 sur `/api/sante`.
 
-### 5. Frontend
+### 5. Certificat de développement
+
+Le serveur de développement du frontend sert la page en **https**, et il a
+besoin d'un certificat pour cela. Le plus simple est de réutiliser celui de
+.NET, exporté au format PEM :
+
+```bash
+dotnet dev-certs https --trust
+dotnet dev-certs https --export-path frontend/certs/localhost.pem \
+    --format PEM --no-password
+```
+
+Les deux fichiers produits ne sont pas versionnés.
+
+Pourquoi c'est nécessaire : les trois cookies de session portent l'attribut
+`Secure`, sans condition. Chrome et Firefox traitent `localhost` comme une
+origine sûre et les acceptent en clair ; **Safari non**, il les jette sans rien
+dire. Le symptôme n'accuse jamais le cookie — la connexion réussit, la
+navigation fonctionne, et le premier rechargement de page déconnecte.
+
+Sans certificat, `npm run dev` démarre quand même, en clair, avec un
+avertissement. Sous Chrome ou Firefox c'est utilisable ; sous Safari, non.
+
+### 6. Frontend
 
 Dans un second terminal :
 
@@ -107,9 +130,16 @@ npm install
 npm run dev
 ```
 
-L'interface est servie sur <http://localhost:5173>. Le serveur de
+L'interface est servie sur <https://localhost:5173>. Le serveur de
 développement Vite redirige `/api` vers `http://localhost:5137` : le
-frontend n'appelle jamais l'URL absolue du backend.
+frontend n'appelle jamais l'URL absolue du backend. Ce saut-là reste en clair
+délibérément — il est en boucle locale sur la même machine, et ce qui décide du
+sort d'un cookie `Secure` est l'origine que voit le navigateur.
+
+`npm run preview` sert la **construction de production** sur
+<https://localhost:4173>, avec la politique de sécurité du contenu de production.
+C'est le seul endroit où l'on constate qu'elle ne bloque ni la feuille de style
+ni les polices avant de déployer.
 
 ## Tests
 
@@ -234,9 +264,13 @@ Points structurants :
 - **Multi-tenant.** Chaque entité porte un `EntrepriseId`. Le tenant est lu
   dans la revendication `entrepriseId` du jeton JWT, appliqué par des filtres
   globaux Entity Framework, et affecté automatiquement à la création.
-- **Authentification.** ASP.NET Core Identity et jeton JWT de 8 heures, sans
-  jeton de rafraîchissement. Cinq rôles : administrateur, responsable
-  d'exploitation, chef d'équipe, agent, client/syndic.
+- **Authentification.** ASP.NET Core Identity et jeton JWT de **quinze
+  minutes**, livré dans un cookie `HttpOnly` `Secure` `SameSite=Strict` :
+  aucun jeton ne traverse le corps d'une réponse, et l'en-tête `Authorization`
+  n'est plus accepté. Le renouvellement passe par un jeton de rafraîchissement
+  opaque, persisté par empreinte, donc **révocable** — ce qu'un JWT signé ne peut
+  pas être. Cinq rôles : administrateur, responsable d'exploitation, chef
+  d'équipe, agent, client/syndic.
 - **Autorisations.** Chaque endpoint porte les rôles qui y ont droit. La matrice
   complète est dans `SPEC.md`, étape 8. Deux axes d'isolation s'ajoutent au
   multi-tenant, à l'intérieur d'une même entreprise : un compte client/syndic ne
@@ -251,8 +285,68 @@ Points structurants :
   main sur les variables de `src/styles/tokens.css`. `react-router-dom` est
   la seule dépendance frontend prévue au-delà de React.
 
+- **Surface HTTP.** Hors développement, l'API redirige le clair vers HTTPS et
+  annonce HSTS. Toute réponse porte `Content-Security-Policy`,
+  `X-Content-Type-Options`, `Referrer-Policy` et `X-Frame-Options`. Le corps
+  d'une requête est plafonné à un mégaoctet et sa durée à trente secondes.
+  Voir *Déploiement* ci-dessous.
+
 Le détail des conventions est dans `CLAUDE.md`, la feuille de route dans
 `SPEC.md`.
+
+## Déploiement
+
+Trois réglages à connaître avant d'exposer une instance. Tous ont un défaut sûr,
+et aucun ne contient de secret : ils vivent dans la configuration ordinaire, pas
+dans les *user secrets*. Le modèle complet est `backend/appsettings.example.json`.
+
+**Le plus simple est de servir le frontend et l'API sous la même origine.** La
+construction de `frontend/dist/` est un ensemble de fichiers statiques ; les
+servir derrière le même nom d'hôte que `/api` évite CORS entièrement, et évite
+aussi le piège décrit juste en dessous.
+
+### Origines autorisées
+
+```json
+"Cors": { "Origines": ["https://klean.votre-domaine.fr"] }
+```
+
+Vide ou absent, aucune origine tierce n'est autorisée. C'est le bon défaut.
+
+⚠️ Les cookies de session sont `SameSite=Strict`. Déclarer une origine ici **ne
+suffit pas** à faire fonctionner un frontend hébergé sur un *autre domaine
+enregistrable* : le navigateur n'enverrait aucun cookie, quelle que soit la
+politique CORS. Un déploiement à deux origines n'est viable qu'entre
+sous-domaines d'un même domaine.
+
+### Politique de sécurité du contenu
+
+Il y en a **deux**, différentes, et les confondre casse quelque chose dans les
+deux sens :
+
+- **L'API** pose la sienne elle-même, sur chaque réponse :
+  `default-src 'none'`, rien d'autre. Elle ne sert que du JSON. Aucune
+  configuration.
+- **Le document** a besoin de `fonts.googleapis.com` en `style-src` et de
+  `fonts.gstatic.com` en `font-src`, parce que `index.html` y charge Figtree et
+  IBM Plex Mono. La politique est écrite dans `frontend/csp.ts`, appliquée par
+  `npm run preview`, et c'est cette chaîne-là que le serveur web de production
+  doit renvoyer en en-tête `Content-Security-Policy`.
+
+⚠️ Ne pas recopier la politique de l'API sur le document : les polices seraient
+bloquées, et le défaut ne se verrait pas au développement, où le cache du
+navigateur les garde.
+
+### HTTPS
+
+```json
+"Http": { "PortHttps": 443, "TailleMaxCorpsOctets": 1048576, "DelaiRequeteSecondes": 30 }
+```
+
+Hors développement, l'API redirige toute requête en clair vers `PortHttps` et
+annonce HSTS pour un an. `IncludeSubDomains` est délibérément **absent** : une
+politique HSTS ne se retire pas avant son échéance, et une instance de KLEAN ne
+possède pas les autres sous-domaines de son hôte.
 
 ## Contribuer
 

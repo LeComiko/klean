@@ -121,6 +121,41 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Déconnexion de tous les appareils.
+    ///
+    /// Contrairement à <c>deconnexion</c>, celle-ci exige un jeton d'accès valide :
+    /// elle régénère le <c>SecurityStamp</c>, donc elle périme les sessions de tout
+    /// le compte, et un tel effet ne peut pas reposer sur le seul cookie de
+    /// rafraîchissement — qui est précisément ce qu'un attaquant aurait volé.
+    ///
+    /// Le geste que cet endpoint rend possible : « je crois que quelqu'un d'autre
+    /// est connecté à mon compte ». Sans lui, la seule réponse était d'attendre
+    /// quinze minutes en espérant que l'autre ne rafraîchisse pas, ou de passer par
+    /// une réinitialisation de mot de passe — qui exige un serveur SMTP, optionnel
+    /// sur cette instance (CLAUDE.md §2).
+    /// </summary>
+    [Authorize]
+    [HttpPost("deconnexion-totale")]
+    public async Task<IActionResult> DeconnexionTotale()
+    {
+        var id = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(id, out var utilisateurId))
+        {
+            return Unauthorized("Jeton sans identifiant exploitable.");
+        }
+
+        var utilisateur = await _utilisateurs.FindByIdAsync(utilisateurId.ToString());
+        if (utilisateur is null)
+        {
+            return NotFound();
+        }
+
+        await _session.FermerToutAsync(HttpContext, utilisateur);
+
+        return NoContent();
+    }
+
+    /// <summary>
     /// Demande de réinitialisation. Envoie un lien à usage unique, valable une
     /// heure.
     ///
@@ -340,7 +375,10 @@ public class AuthController : ControllerBase
     private string CorpsDuCourriel(string email, string jeton)
     {
         // Le jeton d'Identity contient des caractères réservés dans une URL.
-        var lien = _configuration["Frontend:Url"]?.TrimEnd('/') ?? "http://localhost:5173";
+        //
+        // Le repli vise https : depuis l'étape 16 le serveur de développement sert
+        // la page en https, et un lien en clair y échouerait.
+        var lien = _configuration["Frontend:Url"]?.TrimEnd('/') ?? "https://localhost:5173";
 
         var url = $"{lien}/reinitialiser"
                   + $"?email={Uri.EscapeDataString(email)}"

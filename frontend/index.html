@@ -9,8 +9,12 @@
       Figtree pour l'interface, IBM Plex Mono pour tout chiffre comparé en
       colonne (CLAUDE.md §12).
 
-      ⚠️ Étape 16 : ces deux origines devront figurer dans la directive CSP
-      (font-src et style-src), sinon les polices seront bloquées en production.
+      ⚠️ Ces deux origines figurent dans la politique de sécurité du contenu, à
+      `frontend/csp.ts` — fonts.googleapis.com en style-src, fonts.gstatic.com en
+      font-src. Ajouter ici une ressource d'une autre origine demande de l'y
+      déclarer aussi, sinon elle sera bloquée en production et nulle part ailleurs :
+      le serveur de développement porte une politique plus permissive, et le cache
+      du navigateur masque une police manquante.
     -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

@@ -19,6 +19,11 @@ secrets.json
 .env.*
 !.env.example
 
+# Certificat de développement exporté depuis celui de .NET, pour que vite dev
+# serve la page en https (cookies Secure, cf. CLAUDE.md §10). Jamais versionné :
+# une clé privée reste une clé privée, même de développement.
+frontend/certs/
+
 # ---------- Node ----------
 node_modules/
 dist/

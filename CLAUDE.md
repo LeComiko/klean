@@ -99,10 +99,12 @@ KLEAN/
 │   │                    PlanningService, JwtService, ServiceSession,
 │   │                    AmorcageService, TenantContext, LimiteurDebit,
 │   │                    ServiceCourrielSmtp, DescripteurErreursFrancais
-│   ├── Middleware/      VerificationCsrf
+│   ├── Middleware/      VerificationCsrf, EnTetesSecurite, LimiteCorpsRequete
 │   ├── Migrations/
 │   └── Scripts/         SQL de maintenance, jeu de démonstration
 └── frontend/
+    ├── csp.ts           les deux politiques de sécurité du contenu
+    ├── vite.config.ts   serveur https, proxy /api, en-têtes
     ├── scripts/         verifier-interface.mjs, tests.mjs
     └── src/
         ├── api/         wrappers fetch typés, client.test.ts
@@ -207,6 +209,19 @@ Les DTOs les exposent en `string` et utilisent `Enum.TryParse` avec un
   valide — sinon l'endpoint devient un vérificateur d'adresses ouvert à tous. La
   réussite régénère le `SecurityStamp` (donc tue les jetons d'accès) **et**
   révoque toutes les sessions de rafraîchissement.
+- **Déconnexion de tous les appareils** : `POST /api/auth/deconnexion-totale`,
+  qui exige un jeton d'accès valide — contrairement à `deconnexion`, tolérante par
+  nécessité. Elle régénère le `SecurityStamp` **et** révoque toutes les sessions de
+  rafraîchissement.
+
+  C'est la fermeture de la seule brèche assumée du cookie de 15 minutes : le jeton
+  d'accès est signé, donc rien ne le rappelle. Elle ne coûte **aucune lecture
+  supplémentaire par requête**, parce que la vérification existait déjà —
+  `OnTokenValidated` compare l'empreinte de sécurité à chaque appel. Il manquait le
+  geste qui change l'empreinte.
+
+  ⚠️ Elle tue aussi le jeton qui a servi à l'appeler. C'est voulu : « tous les
+  appareils » inclut celui-ci, et les cookies sont effacés dans la même réponse.
 - **Messages d'Identity en français** via `DescripteurErreursFrancais` : les
   descriptions traversent l'API telles quelles, `AuthController` les recopie dans
   ses `BadRequest`, et l'écran n'a aucun moyen de traduire un texte libre.
@@ -217,6 +232,66 @@ Tous les contrôleurs métier portent `[Authorize]`. Les restrictions par rôle
 viennent plus tard dans la feuille de route.
 
 ---
+
+## 6 bis. Surface HTTP
+
+Numérotée « bis » pour ne pas décaler les §7 à §14, référencés depuis des
+dizaines de commentaires du code.
+
+Tout est câblé dans `Program.cs`, et **l'ordre du pipeline est la
+fonctionnalité** : chaque ligne déplacée change ce qui est protégé sans rien
+casser de visible.
+
+```
+UseHsts + UseHttpsRedirection   hors développement seulement
+UseRequestTimeouts
+LimiteCorpsRequete              avant toute lecture de corps
+UseCors(« klean »)              avant la session : une origine interdite n'atteint rien
+UseSwagger + UseSwaggerUI       développement seulement
+EnTetesSecurite                 APRÈS Swagger, délibérément
+VerificationCsrf
+UseAuthentication / UseAuthorization
+```
+
+**`EnTetesSecurite` est enregistré après `UseSwaggerUI`.** L'interface de Swagger
+a besoin de script et de style en ligne, que la politique interdit ; elle
+court-circuite le pipeline, donc ses réponses n'atteignent jamais le middleware.
+L'ordre suffit, aucune exception de chemin à écrire.
+
+**Il y a deux politiques de sécurité du contenu, et il ne faut jamais recopier
+l'une sur l'autre.**
+
+| | Où | Contenu |
+|---|---|---|
+| API | `Middleware/EnTetesSecurite.cs` | `default-src 'none'` et rien d'autre |
+| Document | `frontend/csp.ts` | ouvre `style-src` sur `fonts.googleapis.com`, `font-src` sur `fonts.gstatic.com` |
+
+L'API ne rend que du JSON : rien ne doit jamais être chargé depuis une de ses
+réponses. Le document, lui, charge Figtree et IBM Plex Mono depuis Google Fonts,
+dont dépend toute la typographie de §12. Appliquer la politique de l'API au
+document bloque les polices — et le défaut **ne se voit pas au développement**,
+où le cache du navigateur les garde et où la politique servie est plus permissive.
+
+`frontend/csp.ts` porte les deux variantes. Celle de développement ajoute
+`'unsafe-inline'` et `ws:`, qu'exige le serveur de Vite ; c'est la raison de la
+séparation, une politique unique aurait dû affaiblir la production pour le confort
+du développement. `npm run preview` sert la variante de production — le seul
+endroit où l'on constate qu'elle ne bloque rien avant de déployer.
+
+**CORS** : politique nommée, origines lues dans `Cors:Origines`, **vide par
+défaut**. Une origine déclarée obtient `AllowCredentials`, indispensable puisque
+l'authentification passe par cookie — et incompatible avec une origine jokers, ce
+qu'ASP.NET refuse de lui-même.
+
+⚠️ Les cookies sont `SameSite=Strict`. Déclarer une origine ne suffit donc **pas**
+à faire fonctionner un frontend hébergé sur un autre domaine enregistrable : le
+navigateur n'enverrait aucun cookie. Le multi-origine n'est viable qu'entre
+sous-domaines d'un même domaine.
+
+**Deux gardes sur la taille du corps, et les deux sont nécessaires.**
+`LimiteCorpsRequete` refuse sur `Content-Length`, avant toute lecture et quel que
+soit le serveur ; la limite de Kestrel arrête un corps en fragments, qui n'annonce
+pas sa taille. Voir le piège correspondant en §10.
 
 ## 7. Multi-tenant
 
@@ -564,23 +639,61 @@ requêtes SQL sont là**. Un appel authentifié laisse forcément un
 n'est arrivé ; l'absence de lecture de `JetonsRafraichissement` prouve que le
 cookie de rafraîchissement n'est pas arrivé non plus.
 
-Contourné en développement dans `frontend/vite.config.ts`, qui retire l'attribut
-`Secure` — et **rien d'autre** — de `Set-Cookie` au passage du proxy. Placé là et
-pas dans `ServiceSession` délibérément : rendre l'attribut dépendant de
-l'environnement aurait obligé à affaiblir `SessionTests`, donc à supprimer la
-seule garde qui le protège. Ce fichier ne s'exécute que sous `vite dev` : le
-contournement est impossible en production par construction, pas par discipline.
-Il disparaîtra avec le HTTPS de l'étape 16.
+**Réglé à l'étape 16 : le serveur de développement sert la page en https.**
+`frontend/vite.config.ts` lit le certificat de développement .NET exporté en PEM
+dans `frontend/certs/`, non versionné. Voir le README, section *Certificat de
+développement*.
 
-⚠️ Retirer l'attribut par `replace(/secure/gi, '')` mutile une valeur de cookie
-contenant « insecure » et un chemin nommé `/secure`. Découper sur `;` et comparer
-chaque attribut exactement.
+Deux choses à ne pas refaire, parce qu'elles ont été essayées :
+
+- **Rendre l'attribut `Secure` dépendant de l'environnement**, dans
+  `ServiceSession`. Cela oblige à affaiblir `SessionTests`, donc à supprimer la
+  seule garde qui protège cet attribut, pour un confort de développement. Un
+  drapeau conditionnel sur un attribut de sécurité finit à `false` en production.
+- **Retirer l'attribut au passage du proxy**, ce qu'a fait ce fichier entre les
+  étapes 13 et 16. Cela masque l'effet sans traiter la cause, et fait différer le
+  développement de la production exactement là où c'est le plus coûteux. Au
+  passage : le faire par `replace(/secure/gi, '')` mutile une valeur de cookie
+  contenant « insecure » et un chemin nommé `/secure` — il fallait découper sur
+  `;` et comparer chaque attribut exactement.
+
+Le saut proxy → backend reste **en clair**, et c'est correct : ce qui décide du
+sort d'un cookie `Secure` est l'origine que voit le navigateur, et ce saut-là est
+en boucle locale sur la même machine.
 
 **Cookies `Secure` et `CookieContainer` en test.** `CookieContainer` respecte
 l'attribut `Secure` : sur une adresse de base en `http`, il stocke les cookies et
 ne les renvoie **jamais**. Toute la série échoue alors en 401 sans que rien
 n'indique pourquoi. La fabrique de test doit donner une `BaseAddress` en
 `https` — `TestServer` ignore le transport, le schéma ne coûte rien.
+
+**La surface HTTP ne s'éprouve pas comme le métier, et quatre choses la rendent
+verte à l'envers.** Chacune a été rencontrée à l'étape 16. Le point commun : un
+défaut de surface n'a **aucun symptôme fonctionnel**, donc un test mal ciblé
+passe, et rien d'autre ne le rattrapera.
+
+- **`TestServer` ignore les options de Kestrel.** Une limite posée par
+  `ConfigureKestrel` — taille maximale de corps, notamment — n'existe pas sous
+  `WebApplicationFactory` : la série a vu un corps de deux mégaoctets lu et lié en
+  entier, puis refusé par un `[MaxLength(200)]`, c'est-à-dire **après**
+  l'allocation que la limite existe pour éviter. D'où
+  `Middleware/LimiteCorpsRequete.cs`, qui refuse sur `Content-Length` quel que
+  soit le serveur. Kestrel reste nécessaire pour un corps en fragments, qui
+  n'annonce pas sa taille ; aucune des deux gardes ne couvre le cas de l'autre.
+- **HSTS exclut `localhost` par défaut**, ainsi que `127.0.0.1` et `[::1]`. Une
+  assertion d'absence sur un hôte nommé `localhost` réussit donc toujours, que
+  `UseHsts` soit là ou non. L'éprouver demande un autre nom d'hôte — `TestServer`
+  accepte n'importe lequel.
+- **`UseHttpsRedirection` ne redirige rien en silence** s'il ne connaît pas le
+  port de destination : il le cherche dans les adresses d'écoute, n'en trouve pas
+  sous `TestServer`, journalise un avertissement et laisse passer en clair. Poser
+  `HttpsRedirectionOptions.HttpsPort` explicitement.
+- **Révoquer un jeton de rafraîchissement ne périme pas le jeton d'accès.** C'est
+  toute la différence entre les deux, et elle se retourne contre le test qui
+  l'oublie : un témoin « l'autre compte fonctionne encore » écrit sur
+  `GET /api/auth/moi` reste vert même si ses sessions ont été coupées, parce que
+  son jeton d'accès est signé et vaut quinze minutes. Le témoin doit porter sur
+  `POST /api/auth/rafraichir`.
 
 **`Microsoft.OpenApi` 2.0 a supprimé le namespace `.Models`.**
 `OpenApiSecurityScheme`, `SecuritySchemeType` et `ParameterLocation` sont
@@ -731,11 +844,16 @@ Carte : fond surface, bordure 1 px, rayon 10, padding 24.
 ## 13. Commandes
 
 ```bash
+# Certificat de développement — une fois, avant le premier npm run dev
+dotnet dev-certs https --trust
+dotnet dev-certs https --export-path frontend/certs/localhost.pem \
+    --format PEM --no-password
+
 # Backend — laisser tourner dans son terminal
 cd backend && dotnet watch run        # http://localhost:5137
 
 # Frontend — second terminal
-cd frontend && npm run dev            # http://localhost:5173
+cd frontend && npm run dev            # https://localhost:5173
 
 # Vérifications
 cd backend && dotnet build
@@ -743,6 +861,7 @@ cd frontend && npm run lint
 cd frontend && npm run verifier       # système d'interface, §12
 cd frontend && npm test               # dates et session, cinq fuseaux
 cd frontend && npm run build          # tsc -b && vite build
+cd frontend && npm run preview        # https://localhost:4173, CSP de production
 
 # Migrations
 cd backend

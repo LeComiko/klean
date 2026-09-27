@@ -418,6 +418,120 @@ public class SessionTests : IAsyncLifetime
         (client ?? _fixture.ClientAnonyme()).PostAsJsonAsync("/api/auth/connexion",
             new ConnexionDto { Email = FixtureApi.AdminAlpha, MotDePasse = FixtureApi.MotDePasse });
 
+    // -----------------------------------------------------------------------
+    // Déconnexion de tous les appareils (étape 16)
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// La déconnexion totale tue l'autre appareil <b>immédiatement</b>.
+    ///
+    /// C'est la brèche assumée du lot A de l'étape 12 qui se ferme ici. Une
+    /// déconnexion ordinaire ne révoque que le jeton de rafraîchissement : le jeton
+    /// d'accès déjà émis reste valable jusqu'à quinze minutes, puisqu'il est signé
+    /// et que rien ne le rappelle.
+    ///
+    /// La fenêtre se ferme sans aucune lecture de plus par requête, parce que la
+    /// vérification existait déjà : <c>OnTokenValidated</c> compare l'empreinte de
+    /// sécurité du jeton à celle du compte à chaque appel. Il manquait le geste qui
+    /// change l'empreinte.
+    /// </summary>
+    [Fact]
+    public async Task La_deconnexion_totale_tue_immediatement_les_autres_appareils()
+    {
+        await _fixture.ReinitialiserAsync();
+
+        var telephone = await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
+        var ordinateur = await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
+
+        // Témoin de départ : les deux appareils fonctionnent. Sans cette
+        // vérification, un second client mal construit rendrait le test vert pour
+        // la mauvaise raison.
+        Assert.Equal(HttpStatusCode.OK, (await telephone.GetAsync("/api/auth/moi")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await ordinateur.GetAsync("/api/auth/moi")).StatusCode);
+
+        var fermeture = await ordinateur.PostAsync("/api/auth/deconnexion-totale", null);
+        Assert.Equal(HttpStatusCode.NoContent, fermeture.StatusCode);
+
+        // Le jeton d'accès du téléphone n'a pas expiré — il vient d'être émis — et
+        // il est pourtant refusé.
+        Assert.Equal(
+            HttpStatusCode.Unauthorized, (await telephone.GetAsync("/api/auth/moi")).StatusCode);
+    }
+
+    /// <summary>
+    /// Et elle coupe aussi le rafraîchissement de l'autre appareil.
+    ///
+    /// Sans cela la fermeture ne durerait que quinze minutes à l'envers : le
+    /// téléphone, refusé sur son jeton d'accès, en obtiendrait un neuf avec son
+    /// cookie de rafraîchissement intact.
+    /// </summary>
+    [Fact]
+    public async Task La_deconnexion_totale_coupe_aussi_le_rafraichissement()
+    {
+        await _fixture.ReinitialiserAsync();
+
+        var telephone = await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
+        var ordinateur = await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
+
+        await ordinateur.PostAsync("/api/auth/deconnexion-totale", null);
+
+        var reprise = await telephone.PostAsync("/api/auth/rafraichir", null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, reprise.StatusCode);
+    }
+
+    /// <summary>
+    /// Témoin indispensable : elle ne touche qu'un seul compte.
+    ///
+    /// <c>RevoquerToutAsync</c> filtre sur l'identifiant d'utilisateur, et
+    /// <c>JetonsRafraichissement</c> n'est <b>pas</b> couverte par les filtres
+    /// multi-tenant (CLAUDE.md §7) — c'est exactement la table où un oubli de
+    /// clause ferme les sessions de toute l'instance sans qu'aucun test métier ne
+    /// s'en aperçoive.
+    ///
+    /// ⚠️ Le témoin porte sur le <b>rafraîchissement</b> de Beta, pas sur une
+    /// lecture authentifiée. Une première version vérifiait son
+    /// <c>GET /api/auth/moi</c> et ne prouvait rien : révoquer le jeton de
+    /// rafraîchissement de Beta ne périme pas son jeton d'accès, qui est signé et
+    /// vaut quinze minutes. Le sabotage — retirer la clause de compte — la laissait
+    /// verte. C'est précisément la garantie qui manque au JWT, et elle se retourne
+    /// contre le test qui l'ignore.
+    /// </summary>
+    [Fact]
+    public async Task La_deconnexion_totale_ne_touche_pas_les_autres_comptes()
+    {
+        await _fixture.ReinitialiserAsync();
+
+        var alpha = await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
+        var beta = await _fixture.ClientConnecteAsync(FixtureApi.AdminBeta);
+
+        await alpha.PostAsync("/api/auth/deconnexion-totale", null);
+
+        var reprise = await beta.PostAsync("/api/auth/rafraichir", null);
+        Assert.Equal(HttpStatusCode.OK, reprise.StatusCode);
+
+        // Et son empreinte de sécurité n'a pas bougé non plus.
+        Assert.Equal(HttpStatusCode.OK, (await beta.GetAsync("/api/auth/moi")).StatusCode);
+    }
+
+    /// <summary>
+    /// Elle exige un jeton d'accès valide, contrairement à la déconnexion ordinaire.
+    ///
+    /// La distinction n'est pas cosmétique. Fermer toutes les sessions d'un compte
+    /// est un effet de bord global ; l'autoriser sur le seul cookie de
+    /// rafraîchissement, c'est l'autoriser à qui aurait volé précisément ce
+    /// cookie-là. La déconnexion ordinaire reste tolérante parce qu'elle n'affecte
+    /// que la session qui la demande.
+    /// </summary>
+    [Fact]
+    public async Task La_deconnexion_totale_refuse_une_requete_sans_jeton_d_acces()
+    {
+        var reponse = await _fixture.ClientAnonymeSansRedirection()
+            .PostAsync("/api/auth/deconnexion-totale", null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, reponse.StatusCode);
+    }
+
     /// <summary>
     /// Rejoue un jeton de rafraîchissement donné, cookies posés à la main. Le
     /// couple anti-CSRF est inventé : il doit seulement être cohérent avec

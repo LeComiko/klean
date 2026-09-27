@@ -160,8 +160,44 @@ public class ServiceSession
     }
 
     /// <summary>
+    /// Déconnexion de <b>tous les appareils</b>.
+    ///
+    /// C'est la réponse à la seule brèche assumée du lot A de l'étape 12 : une
+    /// déconnexion ordinaire révoque le jeton de rafraîchissement, mais le jeton
+    /// d'accès déjà émis reste valable jusqu'à quinze minutes — il est signé, et
+    /// rien ne le rappelle. La fenêtre était acceptée parce que la fermer en
+    /// permanence aurait coûté une lecture de plus par requête.
+    ///
+    /// Elle se ferme ici <b>sans rien coûter en régime normal</b> : régénérer le
+    /// <c>SecurityStamp</c> périme instantanément tous les jetons d'accès du compte,
+    /// parce que <c>OnTokenValidated</c> compare déjà l'empreinte du jeton à celle
+    /// du compte à chaque requête. La vérification existait ; il manquait le geste
+    /// qui la déclenche.
+    ///
+    /// Le jeton d'accès qui a servi à appeler cette méthode meurt avec les autres.
+    /// C'est voulu : « tous les appareils » inclut celui-ci, et les cookies sont
+    /// effacés dans la même réponse.
+    /// </summary>
+    /// <returns>Nombre de sessions de rafraîchissement coupées.</returns>
+    public async Task<int> FermerToutAsync(HttpContext contexte, Utilisateur utilisateur)
+    {
+        await _utilisateurs.UpdateSecurityStampAsync(utilisateur);
+
+        var coupees = await RevoquerToutAsync(
+            utilisateur.Id, "Déconnexion de tous les appareils");
+
+        EffacerCookies(contexte);
+
+        return coupees;
+    }
+
+    /// <summary>
     /// Coupe toutes les sessions actives d'un compte. Utilisée par la détection de
     /// rejeu, la désactivation d'un compte et la réinitialisation de mot de passe.
+    ///
+    /// ⚠️ Ne touche pas au <c>SecurityStamp</c> : les jetons d'accès en circulation
+    /// survivent jusqu'à leur échéance. Pour les tuer aussi, voir
+    /// <see cref="FermerToutAsync"/>.
     /// </summary>
     public async Task<int> RevoquerToutAsync(Guid utilisateurId, string motif)
     {
