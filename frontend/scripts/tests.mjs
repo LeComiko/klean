@@ -37,8 +37,19 @@ const Fuseaux = [
   'Pacific/Chatham',
 ]
 
-/** Séries dont le résultat dépend du fuseau : rejouées dans chacun. */
-const SensiblesAuFuseau = ['src/utils/dates.test.ts']
+/**
+ * Séries dont le résultat dépend du fuseau : rejouées dans chacun.
+ *
+ * ⚠️ `valeurs.test.ts` en fait partie, et ce n'est pas par précaution : `rendu`
+ * compose `jourIso`, `depuisChaineIso` et `formaterDateLongue` pour afficher une
+ * date de tableau. La mauvaise composition — `new Date(valeur).getDate()` — décale
+ * la colonne entière d'un jour à tout décalage négatif, et ne montre rien en
+ * Europe. Éprouver les trois fonctions séparément ne prouve pas leur assemblage.
+ */
+const SensiblesAuFuseau = [
+  { fichier: 'src/utils/dates.test.ts', libelle: 'dates.ts' },
+  { fichier: 'src/reference/valeurs.test.ts', libelle: 'valeurs.ts' },
+]
 
 /**
  * Séries indifférentes au fuseau : une seule exécution chacune.
@@ -51,6 +62,7 @@ const SensiblesAuFuseau = ['src/utils/dates.test.ts']
 const Indifferentes = [
   { fichier: 'src/api/client.test.ts', libelle: 'client.ts — session et CSRF' },
   { fichier: 'src/layout/sections.test.ts', libelle: 'sections.ts — navigation et arrivée' },
+  { fichier: 'src/reference/descriptions.test.ts', libelle: 'descriptions.ts — écrans de référence' },
 ]
 
 let echecs = 0
@@ -91,7 +103,13 @@ for (const serie of Indifferentes) {
 
 console.log('\n\u001b[1mSéries sensibles au fuseau\u001b[0m')
 for (const fuseau of Fuseaux) {
-  executer(`dates.ts — TZ=${fuseau}`, SensiblesAuFuseau, fuseau)
+  // ⚠️ Une exécution par fichier ici aussi, pour la même raison qu'au-dessus. Une
+  // première version groupait les deux séries par fuseau : une faute dans
+  // valeurs.test.ts était rapportée sous « dates.ts — TZ=Europe/Paris », ce qui
+  // envoie chercher dans le fichier le mieux éprouvé du dépôt.
+  for (const serie of SensiblesAuFuseau) {
+    executer(`${serie.libelle} — TZ=${fuseau}`, [serie.fichier], fuseau)
+  }
 }
 
 console.log(

@@ -107,15 +107,24 @@ KLEAN/
     ├── vite.config.ts   serveur https, proxy /api, en-têtes
     ├── scripts/         verifier-interface.mjs, tests.mjs
     └── src/
-        ├── api/         wrappers fetch typés, client.test.ts
+        ├── api/         wrappers fetch typés, client.test.ts, ressources.ts
         ├── auth/        AuthContext, RouteProtegee
         ├── composants/  un .tsx + un .css par composant
-        ├── layout/      Navigation, Disposition
-        ├── pages/       un fichier par écran
+        ├── layout/      Navigation, Disposition, sections.ts
+        ├── pages/       un fichier par écran, plus Reference.tsx
+        ├── reference/   descriptions.ts, valeurs.ts — le motif liste-et-formulaire
         ├── styles/      tokens.css
         ├── types/       interfaces TypeScript
         └── utils/       dates.ts, dates.test.ts
 ```
+
+**Trois sources uniques, et aucune ne se recopie.** `layout/sections.ts` porte la
+navigation, les routes et la destination d'arrivée ; `reference/descriptions.ts`
+porte les écrans de données de référence — libellés, colonnes, champs, droits ;
+`styles/tokens.css` porte tout le système d'interface de §12. Chacune est éprouvée
+par une série qui vérifie ses invariantes, parce qu'une divergence y prend une
+forme silencieuse : une pastille dont la route n'est pas gardée, un bouton qui
+répond 403, un jeton mal orthographié qu'aucun navigateur ne signale.
 
 ---
 
@@ -667,6 +676,31 @@ ne les renvoie **jamais**. Toute la série échoue alors en 401 sans que rien
 n'indique pourquoi. La fabrique de test doit donner une `BaseAddress` en
 `https` — `TestServer` ignore le transport, le schéma ne coûte rien.
 
+**Toute la chaîne du modèle est en `DeleteBehavior.Cascade`, et un `DELETE` rend
+204.** Mesuré contre le serveur : `DELETE /api/clients/{id}` sur un client qui porte
+un site a effacé le client, le site, son contrat, sa prestation **et** son
+intervention, en un appel, sans erreur ni avertissement. Le seul `Restrict` du
+modèle est sur `Intervention.AgentId` et `Remplacement.AgentRemplacantId` — d'où le
+409 quand on supprime un agent affecté.
+
+Jusqu'à l'étape 16 bis ce chemin n'existait que dans Swagger. Depuis, c'est un
+bouton dans une liste. Deux conséquences à ne pas perdre :
+
+- Une confirmation de suppression doit **nommer ce qu'elle emporte**, pas seulement
+  la ligne. C'est le champ `cascade` des descriptions, et une série vérifie qu'une
+  ressource qui a des enfants le déclare.
+- La question de fond — ces clés devraient-elles être en `Restrict` ? — n'est pas
+  tranchée. Elle demande une migration, donc un accord explicite (§14).
+
+**La validation de modèle d'ASP.NET répond en anglais, et pas seulement sur les
+mots de passe.** Le piège de §6 vaut pour **tous** les DTOs : `[Required]` et
+`[MaxLength]` produisent « The field Nom must be a string or array type with a
+maximum length of '200' », qui traverse l'API tel quel et qu'aucun écran ne peut
+traduire. La parade côté interface est de rendre ce refus inatteignable —
+`required` et `maxLength` sur la saisie, que le navigateur applique dans sa propre
+langue. D'où `longueurMax` dans chaque description, et la série qui vérifie qu'un
+champ de texte ne peut pas l'oublier.
+
 **La surface HTTP ne s'éprouve pas comme le métier, et quatre choses la rendent
 verte à l'envers.** Chacune a été rencontrée à l'étape 16. Le point commun : un
 défaut de surface n'a **aucun symptôme fonctionnel**, donc un test mal ciblé
@@ -756,6 +790,17 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
 - Le wrapper `src/api/client.ts` ajoute le token et purge la session sur 401.
 - Les composants de présentation reçoivent leurs données en props ; c'est la
   page qui orchestre les appels API.
+- **Un écran de données de référence ne s'écrit pas à la main.** Six listes et six
+  formulaires copiés-collés auraient six fois l'occasion de diverger de la matrice
+  des droits, et la divergence a une forme précise : un bouton d'enregistrement qui
+  répond 403. Une description dans `src/reference/descriptions.ts`, et
+  `src/pages/Reference.tsx` la rend. Ajouter une ressource, c'est ajouter une
+  description et une clé dans `sections.ts` — jamais un fichier de page.
+- **La logique de conversion sort du composant.** `src/reference/valeurs.ts` porte
+  le passage d'une ligne du serveur au formulaire et au corps JSON, parce que c'est
+  la seule partie qui écrit des données fausses au lieu d'afficher quelque chose de
+  faux : une chaîne vide au lieu d'un `null`, un nombre en chaîne, un jour décalé de
+  vingt-quatre heures. Enfermée dans un `.tsx`, elle n'est pas éprouvable.
 
 ---
 

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
+import { descriptionDe } from '../reference/descriptions.ts'
 import { Roles } from '../types/auth.ts'
 import { Sections, premiereSectionOuverte } from './sections.ts'
 
@@ -31,6 +32,70 @@ describe('sections — navigation et destination d’arrivée', () => {
     }
   })
 
+  describe('les sections qui portent une chaîne de ressources', () => {
+    const avecRessources = Sections.filter((section) => section.ressources !== undefined)
+
+    test('chaque clé de ressource existe dans descriptions.ts', () => {
+      for (const section of avecRessources) {
+        for (const cle of section.ressources ?? []) {
+          assert.notEqual(descriptionDe(cle), undefined, `${section.pastille} → ${cle}`)
+        }
+      }
+    })
+
+    test('le chemin d’une section est celui de sa première ressource', () => {
+      // C'est ce qui rend la destination d'arrivée atteignable : `App.tsx` ne monte
+      // aucune route pour le chemin de la section elle-même, seulement pour celui de
+      // chaque ressource. Un chemin de section qui ne correspond à aucune ressource
+      // donnerait une redirection vers une route inexistante — donc, par la route
+      // attrape-tout, une boucle vers l'accueil.
+      for (const section of avecRessources) {
+        const premiere = descriptionDe((section.ressources ?? [])[0] ?? '')
+
+        assert.equal(section.chemin, premiere?.chemin, section.pastille)
+      }
+    })
+
+    test('les rôles d’une section valent l’union des lectures de ses ressources', () => {
+      // L'invariante qui empêche les deux divergences symétriques : une pastille
+      // visible dont toutes les listes répondent 403, et une liste lisible dont la
+      // pastille est cachée.
+      for (const section of avecRessources) {
+        const union = new Set<string>()
+
+        for (const cle of section.ressources ?? []) {
+          for (const role of descriptionDe(cle)?.rolesLecture ?? []) union.add(role)
+        }
+
+        assert.deepEqual(
+          [...(section.roles ?? [])].sort(),
+          [...union].sort(),
+          section.pastille,
+        )
+      }
+    })
+
+    test('aucun chemin de ressource n’est monté deux fois', () => {
+      const chemins = avecRessources.flatMap((section) =>
+        (section.ressources ?? []).map((cle) => descriptionDe(cle)?.chemin ?? cle),
+      )
+
+      assert.equal(new Set(chemins).size, chemins.length, chemins.join(' '))
+    })
+
+    test('aucune section sans ressources ne collisionne avec une route de ressource', () => {
+      const deRessources = new Set(
+        avecRessources.flatMap((section) =>
+          (section.ressources ?? []).map((cle) => descriptionDe(cle)?.chemin),
+        ),
+      )
+
+      for (const section of Sections.filter((candidate) => candidate.ressources === undefined)) {
+        assert.equal(deRessources.has(section.chemin), false, section.chemin)
+      }
+    })
+  })
+
   describe('destination d’arrivée par rôle', () => {
     test('les trois rôles internes arrivent sur le planning', () => {
       for (const role of [Roles.Administrateur, Roles.Responsable, Roles.ChefEquipe]) {
@@ -38,7 +103,7 @@ describe('sections — navigation et destination d’arrivée', () => {
       }
     })
 
-    test('un ClientSyndic arrive sur Sites, la seule section qui lui est ouverte', () => {
+    test('un ClientSyndic arrive sur Clients, la seule section qui lui est ouverte', () => {
       // La matrice lui donne la lecture sur Clients et Sites, cadrée sur son propre
       // ClientId. Le planning nomme tous les agents de l'entreprise : il lui est
       // fermé.
@@ -46,8 +111,8 @@ describe('sections — navigation et destination d’arrivée', () => {
         (section) => section.roles === undefined || section.roles.includes(Roles.ClientSyndic),
       )
 
-      assert.deepEqual(ouvertes.map((section) => section.chemin), ['/sites'])
-      assert.equal(premiereSectionOuverte([Roles.ClientSyndic])?.chemin, '/sites')
+      assert.deepEqual(ouvertes.map((section) => section.chemin), ['/clients'])
+      assert.equal(premiereSectionOuverte([Roles.ClientSyndic])?.chemin, '/clients')
     })
 
     test('un Agent n’a aucune section, et c’est l’état documenté du produit', () => {

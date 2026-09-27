@@ -1038,9 +1038,60 @@ route**
   ressource
 - Clients, Sites, Agents
 
+**Lot A fait.** Trois ressources, un seul motif, et aucun fichier de page écrit par
+ressource. 55 tests frontend de plus — `descriptions.test.ts` 26, `valeurs.test.ts`
+30 × 5 fuseaux, `sections.test.ts` +5 — et 22 sabotages, tous détectés.
+
+*Aucun fichier backend touché*, et une chose n'a donc pas pu être faite : la
+**descente de niveau**. Aucun endpoint de liste n'accepte de filtre, seulement la
+pagination — « les sites de ce client » demande un `?clientId=` sur
+`GET /api/sites`, un `?siteId=` sur les contrats, un `?contratId=` sur les
+prestations, un `?agentId=` sur les absences. Le critère de validation n'en dépend
+pas, et la métadonnée de parenté est en place — elle alimente déjà la liste
+déroulante du champ de référence. À reprendre au lot B, qui ajoute justement les
+trois ressources concernées.
+
+**Deux défauts que l'étape a découverts, et qui ne venaient pas d'elle.**
+
+*Toute la chaîne du modèle est en `DeleteBehavior.Cascade`, et le `DELETE` rend 204.*
+Mesuré : supprimer un client a effacé le client, son site, son contrat, sa
+prestation et son intervention, en un appel, sans un mot. Jusqu'ici ce chemin
+n'existait que dans Swagger ; l'étape en fait un bouton de liste. Traité au niveau
+où cette étape peut le traiter : la confirmation **nomme ce qu'elle emporte**, en
+deux temps, et une série vérifie qu'une ressource qui a des enfants le déclare.
+⚠️ La question de fond — passer ces clés en `Restrict` — demande une migration, donc
+un accord explicite, et **reste ouverte**.
+
+*La validation de modèle d'ASP.NET répond en anglais sur tous les DTOs*, pas
+seulement ceux de mot de passe : « The field Nom must be a string or array type with
+a maximum length of '200' » traverse l'API tel quel. Rendu inatteignable plutôt que
+traduit — `longueurMax` dans chaque description, `maxLength` sur la saisie, et le
+navigateur refuse dans sa propre langue. Une série empêche un champ de texte de
+l'oublier.
+
+**Un enseignement des sabotages.** La conversion des valeurs a été **sortie du
+composant** dans `reference/valeurs.ts` : c'est la seule partie de l'étape qui écrit
+des données fausses au lieu d'afficher quelque chose de faux, et enfermée dans un
+`.tsx` elle n'était pas éprouvable. Le sabotage qui remplace la composition
+`jourIso` → `depuisChaineIso` → `formaterDateLongue` par un `new Date().getDate()`
+n'est rouge **qu'à America/Los_Angeles** : une intégration continue en UTC l'aurait
+livré. `dates.ts` était déjà rejoué dans cinq fuseaux ; éprouver trois fonctions
+séparément ne prouve pas leur assemblage.
+
+**Non vérifié.** Le critère de validation lui-même — un administrateur crée une
+entreprise de zéro **par l'interface seule** — n'a pas pu être exercé dans un
+navigateur, l'extension étant indisponible. Ce qui est prouvé est le contrat que les
+écrans utilisent, rejoué contre le vrai serveur avec les corps exacts que
+`valeurs.ts` produit : enveloppe de pagination, plafond de 200, création d'un client
+puis d'un site rattaché puis d'un agent, les cinq valeurs de `TypeClient`, les
+facultatifs à `null`, la date en `AAAA-MM-JJ` relue à minuit UTC, et les refus. Le
+clic reste à faire.
+
 **Périmètre, lot B**
 - Contrats, Prestations, Produits
 - **Absences**, et c'est le lot qui rend l'étape 15 utilisable
+- **Les filtres de liste** que la descente de niveau demande, sur les quatre
+  endpoints concernés — c'est du backend, et c'est ce qui manque au lot A
 
 **Décisions à respecter**
 

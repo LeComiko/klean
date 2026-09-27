@@ -1,0 +1,91 @@
+/* Liste à gauche, formulaire à droite : le même parti que le panneau de
+   candidats de l'étape 15. Saisir un site en gardant la liste sous les yeux évite
+   de créer deux fois « Résidence Bellevue ». */
+.reference {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espace-6);
+}
+
+.reference__principal {
+  flex: 1;
+  min-width: 0;
+}
+
+.reference__nouveau {
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-4);
+  background: var(--brand);
+  color: var(--sur-brand);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.reference__nouveau:hover {
+  background: var(--brand-strong);
+}
+
+/* <output> porte role="status" de façon implicite : l'annonce est lue par un
+   lecteur d'écran sans qu'on ajoute d'attribut, et display: block la sort du
+   flux en ligne. */
+.reference__annonce {
+  display: block;
+  margin-bottom: var(--espace-4);
+  padding: var(--espace-3) var(--espace-4);
+  background: var(--surface);
+  border: 1px solid var(--realise);
+  border-left: 3px solid var(--realise);
+  border-radius: var(--rayon-bloc);
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  font-weight: 600;
+  color: var(--texte);
+}
+
+.reference__alerte,
+.reference__erreur {
+  margin-bottom: var(--espace-4);
+  padding: var(--espace-3) var(--espace-4);
+  background: var(--surface);
+  border: 1px solid var(--alerte);
+  border-left: 3px solid var(--alerte);
+  border-radius: var(--rayon-bloc);
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  color: var(--texte);
+}
+
+.reference__alerte-mot {
+  color: var(--alerte);
+}
+
+.reference__attente {
+  display: block;
+  padding: var(--espace-8) var(--espace-6);
+  text-align: center;
+  color: var(--texte-2);
+}
+
+/* Sous 1100 px le formulaire passe dessous plutôt que de comprimer le tableau à
+   une largeur où les noms de sites se replient sur quatre lignes. */
+@media (max-width: 1100px) {
+  .reference {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 900px) {
+  .reference__nouveau {
+    height: var(--cible-tactile);
+    font-size: var(--corps-mobile-taille);
+  }
+
+  .reference__annonce,
+  .reference__alerte,
+  .reference__erreur {
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+}

@@ -1,0 +1,56 @@
+.sous-navigation {
+  margin-bottom: var(--espace-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.sous-navigation__liste {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--espace-1);
+}
+
+.sous-navigation__element {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-1);
+}
+
+.sous-navigation__fleche {
+  color: var(--texte-2);
+  font-size: var(--corps-taille);
+}
+
+.sous-navigation__onglet {
+  display: inline-flex;
+  align-items: center;
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-4);
+  color: var(--texte-2);
+  border-bottom: 2px solid transparent;
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  font-weight: 500;
+}
+
+.sous-navigation__onglet:hover {
+  color: var(--texte);
+  background: var(--surface-2);
+}
+
+/* L'onglet courant : couleur, graisse *et* filet de 2 px. NavLink pose en plus
+   aria-current="page", donc l'état est annoncé — il ne repose pas sur la seule
+   couleur (§12). */
+.sous-navigation__onglet--actif {
+  color: var(--texte);
+  border-bottom-color: var(--brand);
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .sous-navigation__onglet {
+    min-height: var(--cible-tactile);
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+}

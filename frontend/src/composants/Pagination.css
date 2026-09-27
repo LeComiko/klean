@@ -1,0 +1,75 @@
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espace-4);
+  margin-top: var(--espace-3);
+  padding: var(--espace-2) var(--espace-1);
+}
+
+.pagination__compte,
+.pagination__position {
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  color: var(--texte-2);
+}
+
+/* Chasse fixe sur tout chiffre comparé d'un affichage à l'autre : le compte
+   change à chaque page, et une chasse proportionnelle le fait sautiller. */
+.pagination__chiffres {
+  font-family: var(--police-chiffres);
+  color: var(--texte);
+  font-weight: 500;
+}
+
+.pagination__boutons {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-3);
+}
+
+.pagination__bouton {
+  height: var(--ligne-compacte);
+  padding: 0 var(--espace-4);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+}
+
+.pagination__bouton:hover:not(:disabled) {
+  background: var(--brand-tint);
+  border-color: var(--brand);
+}
+
+/* État désactivé porté par --texte-2, pas par un troisième gris : --texte-3 a été
+   retiré de §12, aucune de ses valeurs ne tenait AA. Le bouton est déjà éteint par
+   son curseur et par l'absence de survol. */
+.pagination__bouton:disabled {
+  color: var(--texte-2);
+  border-color: var(--border);
+  cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  .pagination {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--espace-3);
+  }
+
+  .pagination__boutons {
+    justify-content: space-between;
+  }
+
+  .pagination__bouton {
+    height: var(--cible-tactile);
+  }
+
+  .pagination__compte,
+  .pagination__position {
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+}

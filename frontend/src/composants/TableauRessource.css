@@ -1,0 +1,147 @@
+/* Défilement horizontal plutôt que troncature : six colonnes de noms propres ne
+   tiennent pas toujours, et abréger un nom de site est pire que faire défiler. */
+.tableau-ressource {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-carte);
+}
+
+.tableau-ressource__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tableau-ressource__entete {
+  position: sticky;
+  top: 0;
+  padding: var(--espace-3) var(--espace-4);
+  text-align: left;
+  white-space: nowrap;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-fort);
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texte-2);
+}
+
+.tableau-ressource__entete--chiffres {
+  text-align: right;
+}
+
+.tableau-ressource__ligne + .tableau-ressource__ligne .tableau-ressource__cellule {
+  border-top: 1px solid var(--border);
+}
+
+/* La ligne en cours de modification : fond de marque *et* liséré gauche. La
+   couleur ne porte jamais seule une information (§12). */
+.tableau-ressource__ligne--choisie .tableau-ressource__cellule {
+  background: var(--brand-tint);
+}
+
+.tableau-ressource__ligne--choisie .tableau-ressource__cellule--titre {
+  box-sizing: border-box;
+  border-left: 3px solid var(--brand);
+}
+
+.tableau-ressource__cellule {
+  padding: var(--espace-3) var(--espace-4);
+  text-align: left;
+  vertical-align: middle;
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  color: var(--texte);
+}
+
+/* Sur --brand-tint, --texte-2 tombe à 4,44:1 en thème clair, sous AA. Toute la
+   hiérarchie de ce tableau passe donc par la graisse, jamais par un gris. */
+.tableau-ressource__cellule--titre {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.tableau-ressource__cellule--chiffres {
+  text-align: right;
+  font-family: var(--police-chiffres);
+  font-variant-numeric: tabular-nums;
+}
+
+.tableau-ressource__cellule--actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--espace-2);
+  white-space: nowrap;
+}
+
+.tableau-ressource__action {
+  height: var(--ligne-compacte);
+  padding: 0 var(--espace-3);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-size: var(--ligne-tableau-taille);
+  font-weight: 600;
+}
+
+.tableau-ressource__action:hover:not(:disabled) {
+  background: var(--brand-tint);
+  border-color: var(--brand);
+}
+
+.tableau-ressource__action:disabled {
+  color: var(--texte-2);
+  border-color: var(--border);
+  cursor: not-allowed;
+}
+
+/* Le bouton destructeur porte la terre cuite, seule couleur saturée du système.
+   Il n'apparaît qu'après la première demande, jamais au repos : une liste où
+   chaque ligne offre « Confirmer » en permanence banalise le geste. */
+.tableau-ressource__action--danger {
+  color: var(--alerte);
+  border-color: var(--alerte);
+}
+
+.tableau-ressource__action--danger:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--alerte);
+}
+
+.tableau-ressource__question {
+  font-size: var(--ligne-tableau-taille);
+  font-weight: 600;
+  color: var(--alerte);
+  white-space: nowrap;
+}
+
+.tableau-ressource__vide {
+  padding: var(--espace-8) var(--espace-6);
+  text-align: center;
+  color: var(--texte-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-carte);
+}
+
+@media (max-width: 900px) {
+  .tableau-ressource__cellule,
+  .tableau-ressource__action {
+    /* Plancher mobile : jamais 11–13 px (§12). */
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+
+  .tableau-ressource__action {
+    height: var(--cible-tactile);
+  }
+
+  .tableau-ressource__cellule--actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}

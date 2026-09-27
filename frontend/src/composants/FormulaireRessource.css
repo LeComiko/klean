@@ -1,0 +1,245 @@
+.formulaire {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+  width: 380px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  padding: var(--espace-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-carte);
+}
+
+.formulaire__entete {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--espace-3);
+}
+
+.formulaire__titre {
+  font-size: var(--titre-section-taille);
+  line-height: var(--titre-section-interligne);
+  font-weight: var(--titre-section-graisse);
+}
+
+.formulaire__fermer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  color: var(--texte-2);
+  background: var(--surface);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-badge);
+}
+
+.formulaire__fermer:hover {
+  color: var(--texte);
+  border-color: var(--brand);
+}
+
+/* Le fait le plus important du panneau quand il s'applique : encadré et non
+   glissé en petit, parce qu'il explique l'absence du bouton d'enregistrement. */
+.formulaire__lecture-seule {
+  padding: var(--espace-3) var(--espace-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border-fort);
+  border-left: 3px solid var(--brand);
+  border-radius: var(--rayon-bloc);
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  color: var(--texte);
+}
+
+.formulaire__erreur {
+  padding: var(--espace-3) var(--espace-4);
+  background: var(--surface-2);
+  border: 1px solid var(--alerte);
+  border-left: 3px solid var(--alerte);
+  border-radius: var(--rayon-bloc);
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  color: var(--texte);
+}
+
+.formulaire__erreur-mot {
+  color: var(--alerte);
+}
+
+.formulaire__champs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+}
+
+.champ {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-1);
+}
+
+.champ--case {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--espace-3);
+  flex-wrap: wrap;
+}
+
+.champ--case .champ__libelle {
+  order: 2;
+}
+
+.champ--case .champ__aide {
+  order: 3;
+  flex-basis: 100%;
+}
+
+.champ__libelle {
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texte-2);
+}
+
+/* Le mot « obligatoire », pas un astérisque coloré : il se lit sans convention
+   préalable et survit à une lecture en niveaux de gris. */
+.champ__requis {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+
+.champ__saisie,
+.champ__zone,
+.champ__liste {
+  width: 100%;
+  padding: 0 var(--espace-3);
+  height: var(--ligne-confortable);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-family: var(--police);
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+}
+
+.champ__zone {
+  height: auto;
+  padding: var(--espace-3);
+  resize: vertical;
+}
+
+.champ__saisie:focus,
+.champ__zone:focus,
+.champ__liste:focus {
+  border-color: var(--brand);
+}
+
+/* Le champ éteint : fond de surface secondaire et bordure faible. Le texte reste
+   sur --texte, jamais sur un gris plus clair — c'est la valeur enregistrée, elle
+   doit rester lisible, et un Responsable ne voit ce formulaire qu'ainsi. */
+.champ__saisie:disabled,
+.champ__zone:disabled,
+.champ__liste:disabled {
+  background: var(--surface-2);
+  border-color: var(--border);
+  cursor: default;
+}
+
+.champ__case {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  accent-color: var(--brand);
+}
+
+/* Corps desktop, 14/20, et non l'échelle des étiquettes : une aide de champ est
+   du texte à lire, pas un intitulé à repérer. À 11 px sur deux lignes elle serait
+   sautée, ce qui reviendrait à ne pas l'écrire. */
+.champ__aide {
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  color: var(--texte-2);
+}
+
+.champ__avertissement {
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  font-weight: 600;
+  color: var(--alerte);
+}
+
+.formulaire__actions {
+  display: flex;
+  gap: var(--espace-3);
+}
+
+.formulaire__valider {
+  flex: 1;
+  height: var(--ligne-confortable);
+  background: var(--brand);
+  color: var(--sur-brand);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+}
+
+.formulaire__valider:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+
+.formulaire__valider:disabled {
+  background: var(--brand-strong);
+  cursor: progress;
+}
+
+.formulaire__annuler {
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-4);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+}
+
+.formulaire__annuler:hover:not(:disabled) {
+  background: var(--brand-tint);
+  border-color: var(--brand);
+}
+
+.formulaire__annuler:disabled {
+  color: var(--texte-2);
+  border-color: var(--border);
+  cursor: not-allowed;
+}
+
+@media (max-width: 1100px) {
+  .formulaire {
+    width: auto;
+    align-self: stretch;
+  }
+}
+
+@media (max-width: 900px) {
+  .champ__saisie,
+  .champ__zone,
+  .champ__liste,
+  .formulaire__valider,
+  .formulaire__annuler {
+    min-height: var(--cible-tactile);
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+
+  .champ__case {
+    width: 24px;
+    height: 24px;
+  }
+}
