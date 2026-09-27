@@ -141,13 +141,23 @@ public class AgentsController : ControllerBase
         }
         catch (DbUpdateException)
         {
-            // Restrict volontaire sur Intervention.AgentId et
-            // Remplacement.AgentRemplacantId : l'historique du planning ne doit
-            // pas disparaître avec l'agent (CLAUDE.md §7, migration InitialCreate).
+            // Restrict sur Intervention.AgentId et Remplacement.AgentRemplacantId
+            // depuis l'origine : l'historique du planning ne doit pas disparaître
+            // avec l'agent. Et sur Absence.AgentId depuis la migration
+            // SuppressionRestreinteSurLaChaineExploitation.
+            //
+            // ⚠️ Les deux comptes sont nécessaires. Ce message ne comptait que les
+            // interventions ; un agent bloqué par ses seules absences lisait donc
+            // « porte 0 intervention(s) et ne peut pas être supprimé », ce qui
+            // ressemble à un défaut du logiciel plutôt qu'à une règle.
             var interventions = await _db.Interventions.CountAsync(i => i.AgentId == id);
+            var absences = await _db.Absences.CountAsync(a => a.AgentId == id);
+
             return Conflict(
-                $"Cet agent porte {interventions} intervention(s) et ne peut pas être supprimé. " +
-                "Le passer à Actif = false pour l'écarter du planning.");
+                $"Cet agent porte {interventions} intervention(s) et {absences} absence(s), "
+                + "et ne peut pas être supprimé : son historique de planning et ses arrêts "
+                + "partiraient avec lui. Le passer à Actif = false l'écarte de tout "
+                + "classement de remplaçants sans rien perdre.");
         }
 
         return NoContent();

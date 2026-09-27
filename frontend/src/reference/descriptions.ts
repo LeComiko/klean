@@ -64,10 +64,6 @@ const Clients: DescriptionRessource = {
   // Le syndic lit son propre client, cadré par le deuxième axe d'isolation.
   rolesLecture: InterneEtClientSyndic,
   rolesEcriture: EcritureReference,
-
-  cascade:
-    'ses sites, leurs contrats, leurs prestations et toutes les interventions qui '
-    + 'en découlent',
 }
 
 const Sites: DescriptionRessource = {
@@ -134,8 +130,6 @@ const Sites: DescriptionRessource = {
   rolesEcriture: EcritureReference,
 
   parent: { ressource: 'clients', champ: 'clientId' },
-
-  cascade: 'ses contrats, leurs prestations et toutes les interventions qui en découlent',
 }
 
 const Agents: DescriptionRessource = {
@@ -189,13 +183,6 @@ const Agents: DescriptionRessource = {
 
   rolesLecture: RolesInternes,
   rolesEcriture: EcritureReference,
-
-  // Pas de `cascade`, et ce n'est pas un oubli : `Intervention.AgentId` et
-  // `Remplacement.AgentRemplacantId` sont les deux seules clés étrangères du
-  // modèle en `DeleteBehavior.Restrict`. Un agent qui porte une intervention ne se
-  // supprime pas — le serveur répond 409 et le message est affiché tel quel. C'est
-  // le bon choix pour l'intégrité du planning, et l'étape 17 y ajoutera un chemin
-  // d'anonymisation pour la demande d'effacement.
 }
 
 /**

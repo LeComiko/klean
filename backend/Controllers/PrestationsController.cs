@@ -125,7 +125,14 @@ public class PrestationsController : ControllerBase
         }
         catch (DbUpdateException)
         {
-            return Conflict("Suppression refusée par la base : des données rattachées l'empêchent.");
+            // Restrict depuis la migration SuppressionRestreinteSurLaChaineExploitation.
+            var interventions = await _db.Interventions.CountAsync(i => i.PrestationId == id);
+
+            return Conflict(
+                $"Cette prestation porte {interventions} intervention(s) et ne peut pas "
+                + "être supprimée : sa suppression effacerait des vacations du planning, "
+                + "certifiées comprises. Supprimer d'abord ces vacations, ou les "
+                + "annuler pour les conserver en historique.");
         }
 
         return NoContent();

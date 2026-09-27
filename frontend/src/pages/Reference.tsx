@@ -307,7 +307,6 @@ export function Reference({ description, fratrie }: Proprietes) {
               choisie={edition?.mode === 'ouverture' ? edition.ligne.id : null}
               rendu={celluleDe}
               etiquette={etiquetteDe}
-              cascade={description.cascade}
               libelleModifier={lectureSeule ? 'Voir' : 'Modifier'}
               onModifier={(ligne) => {
                 setEdition({ mode: 'ouverture', ligne })

@@ -213,36 +213,6 @@ describe('descriptions — structure', () => {
     }
   })
 
-  test('une cascade s’insère dans une phrase, sans majuscule ni point final', () => {
-    // Elle est interpolée dans « Supprimer « X » et {cascade} ? ». Une majuscule ou
-    // un point y produirait « Supprimer « X » et Ses sites. ? ».
-    for (const description of Descriptions) {
-      const cascade = description.cascade
-
-      if (cascade === undefined) continue
-
-      assert.ok(cascade.length > 10, description.cle)
-      assert.equal(cascade[0], cascade[0]?.toLowerCase(), description.cle)
-      assert.equal(cascade.endsWith('.'), false, description.cle)
-      assert.equal(cascade.endsWith('?'), false, description.cle)
-    }
-  })
-
-  test('les ressources qui ont des enfants déclarent leur cascade', () => {
-    // Toute la chaîne du modèle est en DeleteBehavior.Cascade : supprimer une ligne
-    // qui a des enfants les emporte, en 204 et sans un mot. Une description parente
-    // qui n'annonce rien produirait une confirmation qui mentirait par omission.
-    const parents = new Set(
-      Descriptions.map((description) => description.parent?.ressource).filter(
-        (cle): cle is string => cle !== undefined,
-      ),
-    )
-
-    for (const cle of parents) {
-      assert.notEqual(descriptionDe(cle)?.cascade, undefined, cle)
-    }
-  })
-
   test('seul un booléen porte un défaut booléen', () => {
     // Un `defaut: true` sur un champ texte partirait en `true` dans le corps JSON
     // et se ferait refuser par la liaison de modèle.

@@ -238,17 +238,168 @@ public class CrudTests : IAsyncLifetime
         Assert.Contains("Actif = false", message);
     }
 
+    /// <summary>
+    /// La suppression d'un parent est <b>refusée</b>, elle n'emporte plus ses
+    /// enfants.
+    ///
+    /// ⚠️ Ce test affirmait l'inverse jusqu'à la migration
+    /// <c>SuppressionRestreinteSurLaChaineExploitation</c>, et il passait : la
+    /// cascade était une décision, pas un oubli. Ce qui a changé n'est pas la
+    /// lecture du risque, c'est le contexte — l'étape 16 bis a fait de ce
+    /// <c>DELETE</c> un bouton dans une liste, là où il n'existait que dans
+    /// Swagger. Mesuré avant correction : un client supprimé emportait le client,
+    /// son site, son contrat, sa prestation et son intervention, en un appel, avec
+    /// un 204.
+    ///
+    /// Le nom de l'ancien test est conservé dans l'historique git ; celui-ci garde
+    /// la règle inverse, et le message doit rester exploitable — un refus qui ne
+    /// nomme ni ce qui bloque ni la sortie est un cul-de-sac, et la friction n'a de
+    /// valeur que si elle est franchissable.
+    /// </summary>
     [Fact]
-    public async Task Suppression_client_emporte_ses_sites_en_cascade()
+    public async Task Suppression_d_un_client_qui_porte_un_site_est_refusee()
     {
         var site = await ChaineSite();
-        var clientId = site.ClientId;
 
-        var suppression = await _client.DeleteAsync($"/api/clients/{clientId}");
-        Assert.Equal(HttpStatusCode.NoContent, suppression.StatusCode);
+        var suppression = await _client.DeleteAsync($"/api/clients/{site.ClientId}");
 
+        Assert.Equal(HttpStatusCode.Conflict, suppression.StatusCode);
+
+        var message = await suppression.Content.ReadAsStringAsync();
+        Assert.Contains("1 site", message);
+        Assert.Contains("Supprimer d'abord ses sites", message);
+
+        // Et le site est toujours là : c'est l'assertion qui compte.
         var siteRelu = await _client.GetAsync($"/api/sites/{site.Id}");
-        Assert.Equal(HttpStatusCode.NotFound, siteRelu.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, siteRelu.StatusCode);
+    }
+
+    /// <summary>
+    /// Témoin : un parent sans enfant se supprime toujours.
+    ///
+    /// Sans lui, une restriction posée sur la mauvaise colonne — ou un
+    /// <c>Conflict</c> rendu sans condition — ferait passer le test précédent en
+    /// interdisant toute suppression de l'application.
+    /// </summary>
+    [Fact]
+    public async Task Suppression_d_un_client_sans_site_est_acceptee()
+    {
+        var client = await Creer<ClientDto>("/api/clients", new ClientCreateDto
+        {
+            Nom = "Client sans site",
+            Type = "Autre"
+        });
+
+        var suppression = await _client.DeleteAsync($"/api/clients/{client.Id}");
+
+        Assert.Equal(HttpStatusCode.NoContent, suppression.StatusCode);
+        Assert.Equal(
+            HttpStatusCode.NotFound,
+            (await _client.GetAsync($"/api/clients/{client.Id}")).StatusCode);
+    }
+
+    /// <summary>
+    /// Toute la chaîne se vide de bas en haut, et <b>uniquement</b> dans cet ordre.
+    ///
+    /// C'est le parcours réel qu'impose la restriction, et le seul moyen de vérifier
+    /// que les cinq maillons sont bien posés : chaque refus prouve un maillon, chaque
+    /// réussite prouve qu'il n'est pas posé trop haut. Une restriction manquante au
+    /// milieu rendrait un 204 là où ce test attend un 409.
+    /// </summary>
+    [Fact]
+    public async Task La_chaine_ne_se_vide_que_de_bas_en_haut()
+    {
+        var prestation = await ChainePrestation();
+
+        var contrat = await _client.GetFromJsonAsync<ContratDto>(
+            $"/api/contrats/{prestation.ContratId}");
+        Assert.NotNull(contrat);
+
+        var site = await _client.GetFromJsonAsync<SiteDto>($"/api/sites/{contrat.SiteId}");
+        Assert.NotNull(site);
+
+        var intervention = await Creer<InterventionDto>("/api/interventions",
+            new InterventionCreateDto
+            {
+                PrestationId = prestation.Id,
+                DatePrevue = new DateTime(2026, 10, 6),
+                HeurePrevue = new TimeSpan(8, 0, 0),
+                Statut = "Planifiee"
+            });
+
+        // De haut en bas : chaque maillon refuse, et nomme son enfant.
+        await RefuseEnNommant($"/api/clients/{site.ClientId}", "1 site");
+        await RefuseEnNommant($"/api/sites/{site.Id}", "1 contrat");
+        await RefuseEnNommant($"/api/contrats/{contrat.Id}", "1 prestation");
+        await RefuseEnNommant($"/api/prestations/{prestation.Id}", "1 intervention");
+
+        // De bas en haut : tout passe, dans l'ordre inverse exact.
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await _client.DeleteAsync($"/api/interventions/{intervention.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await _client.DeleteAsync($"/api/prestations/{prestation.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await _client.DeleteAsync($"/api/contrats/{contrat.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await _client.DeleteAsync($"/api/sites/{site.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await _client.DeleteAsync($"/api/clients/{site.ClientId}")).StatusCode);
+    }
+
+    /// <summary>
+    /// Une absence bloque aussi la suppression de son agent, depuis la même
+    /// migration, et le message compte les deux — un agent bloqué par ses seules
+    /// absences lisait « porte 0 intervention(s) », ce qui ressemble à un défaut du
+    /// logiciel plutôt qu'à une règle.
+    /// </summary>
+    [Fact]
+    public async Task Une_absence_seule_bloque_la_suppression_de_son_agent()
+    {
+        var agent = await Creer<AgentDto>("/api/agents", new AgentCreateDto
+        {
+            Nom = "Sans",
+            Prenom = "Vacation",
+            DateEmbauche = new DateTime(2026, 1, 5)
+        });
+
+        await Creer<AbsenceDto>("/api/absences", new AbsenceCreateDto
+        {
+            AgentId = agent.Id,
+            Type = "Conge",
+            DateDebut = new DateTime(2026, 11, 2),
+            DateFin = new DateTime(2026, 11, 6)
+        });
+
+        var suppression = await _client.DeleteAsync($"/api/agents/{agent.Id}");
+
+        Assert.Equal(HttpStatusCode.Conflict, suppression.StatusCode);
+
+        var message = await suppression.Content.ReadAsStringAsync();
+        Assert.Contains("0 intervention(s)", message);
+        Assert.Contains("1 absence(s)", message);
+        Assert.Contains("Actif = false", message);
+    }
+
+    /// <summary>
+    /// Un refus doit nommer <b>deux</b> choses : ce qui bloque, et la sortie.
+    ///
+    /// ⚠️ La seconde assertion vient d'un sabotage passé inaperçu. Ce contrôle ne
+    /// vérifiait que le compte d'enfants, et vider le message de sa marche à suivre
+    /// laissait la série verte — alors que c'est toute la raison d'être de ces
+    /// messages. Un <c>Restrict</c> dont le refus ne dit pas par où sortir ne
+    /// protège pas les données, il bloque l'utilisateur : la friction n'a de valeur
+    /// que si elle est franchissable.
+    /// </summary>
+    private async Task RefuseEnNommant(string route, string attendu)
+    {
+        var reponse = await _client.DeleteAsync(route);
+
+        Assert.Equal(HttpStatusCode.Conflict, reponse.StatusCode);
+
+        var message = await reponse.Content.ReadAsStringAsync();
+
+        Assert.Contains(attendu, message);
+        Assert.Contains("Supprimer d'abord", message);
     }
 
     [Fact]

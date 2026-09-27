@@ -145,7 +145,13 @@ public class SitesController : ControllerBase
         }
         catch (DbUpdateException)
         {
-            return Conflict("Suppression refusée par la base : des données rattachées l'empêchent.");
+            // Restrict depuis la migration SuppressionRestreinteSurLaChaineExploitation.
+            var contrats = await _db.Contrats.CountAsync(c => c.SiteId == id);
+
+            return Conflict(
+                $"Ce site porte {contrats} contrat(s) et ne peut pas être supprimé : sa "
+                + "suppression effacerait aussi leurs prestations et toutes les "
+                + "interventions déjà planifiées. Supprimer d'abord ses contrats.");
         }
 
         return NoContent();

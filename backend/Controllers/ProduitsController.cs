@@ -119,7 +119,13 @@ public class ProduitsController : ControllerBase
         }
         catch (DbUpdateException)
         {
-            return Conflict("Suppression refusée par la base : des données rattachées l'empêchent.");
+            // Restrict depuis la migration SuppressionRestreinteSurLaChaineExploitation.
+            var stocks = await _db.Stocks.CountAsync(s => s.ProduitId == id);
+
+            return Conflict(
+                $"Ce produit porte {stocks} ligne(s) de stock et ne peut pas être "
+                + "supprimé : sa suppression effacerait les quantités relevées au dépôt, "
+                + "en véhicule et sur site. Supprimer d'abord ses lignes de stock.");
         }
 
         return NoContent();

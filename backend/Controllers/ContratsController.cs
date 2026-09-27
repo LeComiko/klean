@@ -143,7 +143,15 @@ public class ContratsController : ControllerBase
         }
         catch (DbUpdateException)
         {
-            return Conflict("Suppression refusée par la base : des données rattachées l'empêchent.");
+            // Restrict depuis la migration SuppressionRestreinteSurLaChaineExploitation.
+            var prestations = await _db.Prestations.CountAsync(p => p.ContratId == id);
+
+            return Conflict(
+                $"Ce contrat porte {prestations} prestation(s) et ne peut pas être "
+                + "supprimé : sa suppression effacerait aussi toutes les interventions "
+                + "déjà planifiées. Supprimer d'abord ses prestations. Pour arrêter un "
+                + "contrat sans perdre son historique, renseigner sa date de fin ou le "
+                + "passer à Actif = false.");
         }
 
         return NoContent();

@@ -90,7 +90,31 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
 
         modelBuilder.Entity<Entreprise>().HasIndex(e => e.Siret).IsUnique();
 
-        // Chaîne de rattachement : la suppression d'un parent emporte ses enfants.
+        // ---- Comportements de suppression ----
+        //
+        // Une seule règle, et elle se lit sans exception à retenir :
+        //
+        //   **Aucune suppression n'efface en silence une ligne que l'utilisateur
+        //   gère sur son propre écran.**
+        //
+        // ⚠️ La version précédente cascadait toute la chaîne du modèle. Mesuré
+        // contre le serveur avant correction : un `DELETE /api/clients/{id}` sur un
+        // client portant un site a effacé le client, le site, son contrat, sa
+        // prestation **et** son intervention, en un appel, avec un 204 et sans
+        // avertissement. Tant que ce chemin n'existait que dans Swagger, le risque
+        // était théorique ; l'étape 16 bis en a fait un bouton dans une liste.
+        //
+        // Ce que `Restrict` coûte : il faut vider de bas en haut. C'est plus
+        // pénible, et c'est le but — la friction est ici la fonctionnalité. Le
+        // serveur répond 409 avec « Suppression refusée par la base : des données
+        // rattachées l'empêchent », que l'écran affiche tel quel.
+
+        // Rattachement au tenant : **Cascade**, et c'est délibéré. Supprimer une
+        // entreprise est du provisionnement d'instance, pas de la gestion de
+        // tenant — `POST` et `DELETE /api/entreprises` ont été retirés à l'étape 8
+        // précisément pour cela. Aucun endpoint n'expose donc ce chemin, et le jour
+        // où un script de désinscription existera, c'est exactement la sémantique
+        // qu'il voudra. Y mettre `Restrict` protégerait une porte qui n'existe pas.
         modelBuilder.Entity<Client>()
             .HasOne(e => e.Entreprise).WithMany(e => e.Clients)
             .HasForeignKey(e => e.EntrepriseId).OnDelete(DeleteBehavior.Cascade);
@@ -103,30 +127,47 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
             .HasOne(e => e.Entreprise).WithMany(e => e.Produits)
             .HasForeignKey(e => e.EntrepriseId).OnDelete(DeleteBehavior.Cascade);
 
+        // Chaîne d'exploitation : **Restrict**. Chacune de ces lignes a son écran,
+        // son formulaire et son bouton de suppression depuis l'étape 16 bis. Perdre
+        // l'historique d'exploitation d'un client sur un clic n'est pas réparable
+        // sans sauvegarde.
         modelBuilder.Entity<Site>()
             .HasOne(e => e.Client).WithMany(e => e.Sites)
-            .HasForeignKey(e => e.ClientId).OnDelete(DeleteBehavior.Cascade);
+            .HasForeignKey(e => e.ClientId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<Contrat>()
             .HasOne(e => e.Site).WithMany(e => e.Contrats)
-            .HasForeignKey(e => e.SiteId).OnDelete(DeleteBehavior.Cascade);
+            .HasForeignKey(e => e.SiteId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<Prestation>()
             .HasOne(e => e.Contrat).WithMany(e => e.Prestations)
-            .HasForeignKey(e => e.ContratId).OnDelete(DeleteBehavior.Cascade);
+            .HasForeignKey(e => e.ContratId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<Intervention>()
             .HasOne(e => e.Prestation).WithMany(e => e.Interventions)
-            .HasForeignKey(e => e.PrestationId).OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<Absence>()
-            .HasOne(e => e.Agent).WithMany(e => e.Absences)
-            .HasForeignKey(e => e.AgentId).OnDelete(DeleteBehavior.Cascade);
+            .HasForeignKey(e => e.PrestationId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<Stock>()
             .HasOne(e => e.Produit).WithMany(e => e.Stocks)
-            .HasForeignKey(e => e.ProduitId).OnDelete(DeleteBehavior.Cascade);
+            .HasForeignKey(e => e.ProduitId).OnDelete(DeleteBehavior.Restrict);
 
+        // Une absence porte des dates à valeur légale, et l'étape 16 bis lot B lui
+        // donne son écran. Elle ne part donc pas avec son agent sans qu'on le
+        // demande — d'autant qu'un agent déjà planifié est de toute façon
+        // insupprimable, par la restriction sur `Intervention.AgentId` ci-dessous.
+        modelBuilder.Entity<Absence>()
+            .HasOne(e => e.Agent).WithMany(e => e.Absences)
+            .HasForeignKey(e => e.AgentId).OnDelete(DeleteBehavior.Restrict);
+
+        // Remplacement : **Cascade**, seule exception à la règle, et c'est la règle
+        // elle-même qui la donne. Un remplacement est de l'état **dérivé** : il est
+        // posé par `DetecterImpactsAsync` à partir d'une absence, ou ouvert sur une
+        // vacation, il n'a aucune existence propre et **aucun écran** ne le liste.
+        //
+        // `Restrict` produirait ici le pire résultat d'interface du produit : un 409
+        // nommant une ligne que l'utilisateur ne peut ni voir ni supprimer. Or
+        // supprimer une absence saisie par erreur est un geste normal, et l'écran
+        // des absences arrive au lot B.
         modelBuilder.Entity<Remplacement>()
             .HasOne(e => e.Intervention).WithMany(e => e.Remplacements)
             .HasForeignKey(e => e.InterventionId).OnDelete(DeleteBehavior.Cascade);
@@ -135,8 +176,11 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
             .HasOne(e => e.Absence).WithMany(e => e.Remplacements)
             .HasForeignKey(e => e.AbsenceId).OnDelete(DeleteBehavior.Cascade);
 
-        // Supprimer un agent ne doit pas effacer l'historique du planning :
-        // restriction plutôt que cascade ou mise à null silencieuse.
+        // Déjà en Restrict avant cette passe : supprimer un agent ne doit pas
+        // effacer l'historique du planning, ni mettre son affectation à null en
+        // silence. L'étape 17 y ajoutera un chemin d'anonymisation, qui conserve la
+        // ligne — la bonne réponse à une demande d'effacement quand l'intégrité du
+        // planning interdit la suppression.
         modelBuilder.Entity<Intervention>()
             .HasOne(e => e.Agent).WithMany(e => e.Interventions)
             .HasForeignKey(e => e.AgentId).OnDelete(DeleteBehavior.Restrict);

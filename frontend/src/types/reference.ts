@@ -152,20 +152,23 @@ export interface DescriptionRessource {
   rolesEcriture: readonly string[]
 
   parent?: ParenteRessource
-
-  /**
-   * Ce que la suppression d'une ligne emporte avec elle, en toutes lettres.
-   *
-   * ⚠️ Mesuré, pas supposé : toute la chaîne du modèle est en
-   * `DeleteBehavior.Cascade` (`Data/KleanDbContext.cs`). Supprimer un client rend
-   * **204** et efface au passage ses sites, leurs contrats, leurs prestations et
-   * toutes les interventions qui en découlent — vérifié contre le serveur : un
-   * client, un site, un contrat, une prestation et une intervention disparus en un
-   * appel.
-   *
-   * Jusqu'à cette étape ce chemin n'existait que dans Swagger. En faire un bouton
-   * de liste sans le dire serait la faute d'interface la plus coûteuse du produit :
-   * l'historique d'exploitation d'un client n'est pas restaurable.
-   */
-  cascade?: string
 }
+
+/*
+ * ⚠️ Il y a eu ici un champ `cascade`, qui décrivait en toutes lettres ce que la
+ * suppression d'une ligne emportait — « ses sites, leurs contrats, leurs
+ * prestations et toutes les interventions qui en découlent ». Il était juste au
+ * moment où il a été écrit : toute la chaîne du modèle était en
+ * `DeleteBehavior.Cascade`, et un `DELETE` rendait 204.
+ *
+ * La migration `SuppressionRestreinteSurLaChaineExploitation` a supprimé le
+ * problème plutôt que l'avertissement : une suppression qui a des enfants est
+ * désormais **refusée** en 409, avec un message du serveur qui nomme ce qui bloque
+ * et par où sortir. Le champ est donc retiré — laisser une confirmation annoncer une
+ * cascade qui n'a plus lieu serait pire que de ne rien annoncer.
+ *
+ * Ne pas le réintroduire pour « prévenir d'un refus possible » : l'écran ne peut pas
+ * savoir si une ligne a des enfants, aucun endpoint de liste n'acceptant de filtre.
+ * Un avertissement affiché sur toutes les lignes est du bruit, et le message du 409
+ * arrive au bon moment avec le bon compte.
+ */

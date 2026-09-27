@@ -676,21 +676,33 @@ ne les renvoie **jamais**. Toute la série échoue alors en 401 sans que rien
 n'indique pourquoi. La fabrique de test doit donner une `BaseAddress` en
 `https` — `TestServer` ignore le transport, le schéma ne coûte rien.
 
-**Toute la chaîne du modèle est en `DeleteBehavior.Cascade`, et un `DELETE` rend
-204.** Mesuré contre le serveur : `DELETE /api/clients/{id}` sur un client qui porte
-un site a effacé le client, le site, son contrat, sa prestation **et** son
-intervention, en un appel, sans erreur ni avertissement. Le seul `Restrict` du
-modèle est sur `Intervention.AgentId` et `Remplacement.AgentRemplacantId` — d'où le
-409 quand on supprime un agent affecté.
+**Une cascade décidée et gardée par un test reste une cascade.** Jusqu'à l'étape
+16 bis, toute la chaîne du modèle était en `DeleteBehavior.Cascade` : mesuré contre
+le serveur, un `DELETE /api/clients/{id}` sur un client portant un site effaçait le
+client, le site, son contrat, sa prestation **et** son intervention, en un appel,
+avec un **204**. Un test nommé
+`Suppression_client_emporte_ses_sites_en_cascade` l'affirmait et passait — ce
+n'était donc pas un oubli, c'était un choix documenté.
 
-Jusqu'à l'étape 16 bis ce chemin n'existait que dans Swagger. Depuis, c'est un
-bouton dans une liste. Deux conséquences à ne pas perdre :
+Ce qui a changé n'est pas la lecture du risque, c'est le **contexte** : l'étape 16 bis
+a fait de ce `DELETE` un bouton dans une liste, là où il n'existait que dans Swagger.
+Corrigé par la migration `SuppressionRestreinteSurLaChaineExploitation`, qui pose
+`Restrict` sur les six clés de la chaîne d'exploitation. Trois choses à en retenir :
 
-- Une confirmation de suppression doit **nommer ce qu'elle emporte**, pas seulement
-  la ligne. C'est le champ `cascade` des descriptions, et une série vérifie qu'une
-  ressource qui a des enfants le déclare.
-- La question de fond — ces clés devraient-elles être en `Restrict` ? — n'est pas
-  tranchée. Elle demande une migration, donc un accord explicite (§14).
+- **La règle du modèle tient en une phrase, et elle se lit dans le `DbContext` :**
+  *aucune suppression n'efface en silence une ligne que l'utilisateur gère sur son
+  propre écran.* Elle donne elle-même ses deux exceptions — le rattachement au
+  tenant, qu'aucun endpoint n'expose depuis le retrait de `DELETE /api/entreprises`,
+  et `Remplacement`, qui est de l'état dérivé qu'aucun écran ne liste.
+- **Un `Restrict` dont le refus ne nomme pas la sortie est un cul-de-sac.** Les six
+  contrôleurs concernés comptent leurs enfants et disent par où passer. La friction
+  n'a de valeur que si elle est franchissable ; un sabotage qui vidait le message de
+  sa marche à suivre est passé inaperçu une première fois, parce que le test ne
+  vérifiait que le compte.
+- **Une parade d'interface devient un mensonge quand le fond est corrigé.** Un champ
+  `cascade` des descriptions annonçait ce que la suppression emportait ; il était
+  juste, puis il a cessé de l'être. Retiré. Vérifier, à chaque correction de fond,
+  ce qu'elle rend faux en amont.
 
 **La validation de modèle d'ASP.NET répond en anglais, et pas seulement sur les
 mots de passe.** Le piège de §6 vaut pour **tous** les DTOs : `[Required]` et

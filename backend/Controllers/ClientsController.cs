@@ -141,7 +141,19 @@ public class ClientsController : ControllerBase
         }
         catch (DbUpdateException)
         {
-            return Conflict("Suppression refusée par la base : des données rattachées l'empêchent.");
+            // Restrict depuis la migration SuppressionRestreinteSurLaChaineExploitation.
+            // Avant elle, cette suppression rendait 204 et emportait en silence les
+            // sites du client, leurs contrats, leurs prestations et toutes les
+            // interventions qui en découlaient. Le message doit nommer ce qui bloque
+            // *et* la sortie : un refus qui ne dit ni l'un ni l'autre est un
+            // cul-de-sac, et la friction n'a de valeur que si elle est franchissable.
+            var sites = await _db.Sites.CountAsync(s => s.ClientId == id);
+
+            return Conflict(
+                $"Ce client porte {sites} site(s) et ne peut pas être supprimé : sa "
+                + "suppression effacerait aussi leurs contrats, leurs prestations et "
+                + "toutes les interventions déjà planifiées. Supprimer d'abord ses "
+                + "sites, ou les rattacher à un autre client.");
         }
 
         return NoContent();

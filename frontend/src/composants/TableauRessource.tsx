@@ -18,16 +18,6 @@ interface Proprietes {
   /** Libellé d'une ligne, pour les intitulés de boutons et la confirmation. */
   etiquette: (ligne: Ressource) => string
 
-  /**
-   * Ce que la suppression emporte en plus de la ligne, en toutes lettres.
-   * Absent : elle n'emporte rien.
-   *
-   * ⚠️ Toute la chaîne du modèle est en `DeleteBehavior.Cascade` : supprimer un
-   * client rend 204 et efface au passage ses sites, leurs contrats, leurs
-   * prestations et leurs interventions — mesuré contre le serveur. Une confirmation
-   * qui ne dirait que le nom de la ligne laisserait croire qu'une seule ligne part.
-   */
-  cascade?: string
 
   /**
    * Libellé de l'action d'ouverture. « Voir » en lecture seule, « Modifier »
@@ -68,7 +58,6 @@ export function TableauRessource({
   choisie,
   rendu,
   etiquette,
-  cascade,
   libelleModifier,
   onModifier,
   onSupprimer,
@@ -152,12 +141,16 @@ export function TableauRessource({
                   <td className="tableau-ressource__cellule tableau-ressource__cellule--actions">
                     {confirme ? (
                       <>
-                        {/* Le nom est répété, et ce qui part avec lui est écrit :
-                            une confirmation qui ne dit pas quoi elle supprime ne
-                            confirme rien. */}
+                        {/* Le nom est répété : une confirmation qui ne dit pas
+                            quoi elle supprime ne confirme rien.
+
+                            Rien n'est annoncé au-delà de la ligne, et c'est exact
+                            depuis la migration SuppressionRestreinteSurLaChaine-
+                            Exploitation : une ligne qui a des enfants n'est pas
+                            supprimée, elle est refusée en 409 avec un message qui
+                            nomme ce qui bloque. */}
                         <span className="tableau-ressource__question">
-                          Supprimer « {etiquette(ligne)} »
-                          {cascade === undefined ? ' ?' : <> et {cascade} ?</>}
+                          Supprimer « {etiquette(ligne)} » ?
                         </span>
                         <button
                           className="tableau-ressource__action tableau-ressource__action--danger"

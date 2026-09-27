@@ -1039,8 +1039,9 @@ route**
 - Clients, Sites, Agents
 
 **Lot A fait.** Trois ressources, un seul motif, et aucun fichier de page écrit par
-ressource. 55 tests frontend de plus — `descriptions.test.ts` 26, `valeurs.test.ts`
-30 × 5 fuseaux, `sections.test.ts` +5 — et 22 sabotages, tous détectés.
+ressource. 203 tests frontend de plus — `descriptions.test.ts` 24, `valeurs.test.ts`
+30 × 5 fuseaux, `sections.test.ts` +5 — 3 tests backend de plus, et 32 sabotages,
+tous détectés après deux corrections de tests.
 
 *Aucun fichier backend touché*, et une chose n'a donc pas pu être faite : la
 **descente de niveau**. Aucun endpoint de liste n'accepte de filtre, seulement la
@@ -1053,14 +1054,32 @@ trois ressources concernées.
 
 **Deux défauts que l'étape a découverts, et qui ne venaient pas d'elle.**
 
-*Toute la chaîne du modèle est en `DeleteBehavior.Cascade`, et le `DELETE` rend 204.*
-Mesuré : supprimer un client a effacé le client, son site, son contrat, sa
-prestation et son intervention, en un appel, sans un mot. Jusqu'ici ce chemin
-n'existait que dans Swagger ; l'étape en fait un bouton de liste. Traité au niveau
-où cette étape peut le traiter : la confirmation **nomme ce qu'elle emporte**, en
-deux temps, et une série vérifie qu'une ressource qui a des enfants le déclare.
-⚠️ La question de fond — passer ces clés en `Restrict` — demande une migration, donc
-un accord explicite, et **reste ouverte**.
+*Toute la chaîne du modèle était en `DeleteBehavior.Cascade`, et le `DELETE` rendait
+204.* Mesuré : supprimer un client a effacé le client, son site, son contrat, sa
+prestation et son intervention, en un appel, sans un mot. Et un test nommé
+`Suppression_client_emporte_ses_sites_en_cascade` l'affirmait — ce n'était pas un
+oubli, c'était une décision. Ce qui a changé, c'est que cette étape en fait un bouton
+de liste là où il n'existait que dans Swagger.
+
+**Tranché et corrigé** par la migration `SuppressionRestreinteSurLaChaineExploitation`,
+douze opérations toutes sur des contraintes, aucune sur des données : `Restrict` sur
+`Sites.ClientId`, `Contrats.SiteId`, `Prestations.ContratId`,
+`Interventions.PrestationId`, `Stocks.ProduitId` et `Absences.AgentId`. La règle du
+modèle tient désormais en une phrase — *aucune suppression n'efface en silence une
+ligne que l'utilisateur gère sur son propre écran* — et elle donne ses deux
+exceptions : le rattachement au tenant, qu'aucun endpoint n'expose, et
+`Remplacement`, état dérivé qu'aucun écran ne liste.
+
+Les six refus **nomment ce qui bloque et par où sortir**, avec le compte exact : un
+`Restrict` dont le message ne dit ni l'un ni l'autre bloque l'utilisateur au lieu de
+protéger les données. Le message d'`Agents` comptait les interventions seules ; un
+agent bloqué par ses seules absences lisait « porte 0 intervention(s) », ce qui
+ressemble à un défaut du logiciel plutôt qu'à une règle.
+
+⚠️ **Et la parade d'interface a été retirée.** Un champ `cascade` des descriptions
+annonçait ce que la suppression emportait — juste quand il a été écrit, faux dès la
+migration appliquée. Une correction de fond rend caduque la parade qui la contournait,
+et laisser les deux coûte plus cher que de n'avoir eu que l'une.
 
 *La validation de modèle d'ASP.NET répond en anglais sur tous les DTOs*, pas
 seulement ceux de mot de passe : « The field Nom must be a string or array type with

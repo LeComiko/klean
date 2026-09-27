@@ -691,7 +691,7 @@ namespace Klean.Api.Migrations
                     b.HasOne("Klean.Api.Models.Agent", "Agent")
                         .WithMany("Absences")
                         .HasForeignKey("AgentId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Agent");
@@ -724,7 +724,7 @@ namespace Klean.Api.Migrations
                     b.HasOne("Klean.Api.Models.Site", "Site")
                         .WithMany("Contrats")
                         .HasForeignKey("SiteId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Site");
@@ -740,7 +740,7 @@ namespace Klean.Api.Migrations
                     b.HasOne("Klean.Api.Models.Prestation", "Prestation")
                         .WithMany("Interventions")
                         .HasForeignKey("PrestationId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Agent");
@@ -764,7 +764,7 @@ namespace Klean.Api.Migrations
                     b.HasOne("Klean.Api.Models.Contrat", "Contrat")
                         .WithMany("Prestations")
                         .HasForeignKey("ContratId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Contrat");
@@ -811,7 +811,7 @@ namespace Klean.Api.Migrations
                     b.HasOne("Klean.Api.Models.Client", "Client")
                         .WithMany("Sites")
                         .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Client");
@@ -822,7 +822,7 @@ namespace Klean.Api.Migrations
                     b.HasOne("Klean.Api.Models.Produit", "Produit")
                         .WithMany("Stocks")
                         .HasForeignKey("ProduitId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Produit");
