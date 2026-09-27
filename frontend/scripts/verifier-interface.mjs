@@ -227,13 +227,16 @@ if (blocSombre === null) {
    *
    * Le vérificateur ne sait pas quel fond se trouve derrière un texte : il ne
    * peut donc pas les détecter dans le CSS. Il les rappelle, pour qu'on ne les
-   * réinvente pas — les deux premières ont déjà été introduites par inadvertance
-   * dans ce projet, et trouvées par cet outil.
+   * réinvente pas — celle qui reste a déjà été introduite deux fois par
+   * inadvertance dans ce projet, et trouvée par cet outil les deux fois.
+   *
+   * `--texte-3` figurait ici. Le jeton a été **retiré de §12** : aucune valeur ne
+   * tenait AA sans se confondre avec `--texte-2`. Sa réapparition ne relève donc
+   * plus du rappel mais du contrôle des jetons plus haut, qui échoue sur tout
+   * `var(--…)` absent de `tokens.css` — un garde-fou plus dur que ce bloc.
    */
   const interdites = [
     ['texte-2 sur brand-tint', '--texte-2', '--brand-tint'],
-    ['texte-3 sur surface', '--texte-3', '--surface'],
-    ['texte-3 sur canvas', '--texte-3', '--canvas'],
   ]
 
   titre('Combinaisons à ne jamais peindre — rappel mesuré, pas un échec')

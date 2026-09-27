@@ -43,7 +43,8 @@
   /* ---- Texte ---- */
   --texte: #1b1a17;
   --texte-2: #6e6b64;
-  --texte-3: #8a867e;
+  /* Pas de troisième niveau : voir §12. Aucune valeur ne tient AA sans se
+     confondre avec --texte-2. Un troisième niveau passe par la graisse. */
 
   /* ---- Motif ----
      Redondance non colorée : un bloc hachuré reste lisible en noir et blanc,
@@ -148,7 +149,6 @@
 
     --texte: #edece7;
     --texte-2: #a3a099;
-    --texte-3: #7c7a73;
 
     /* §12 ne donne pas de hachure sombre : la bordure forte joue ce rôle,
        elle a le même contraste relatif sur fond sombre. */

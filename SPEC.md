@@ -305,6 +305,25 @@ d'exploitation qui ne peut pas créer un site ni un contrat. C'est ce que dit le
 tableau des rôles, mais ça peut ne pas résister à un premier client. C'est une
 ligne de la matrice, donc un attribut à changer.
 
+**Décision : on garde fermé, avec un déclencheur précis.** Créer un contrat est un
+acte **commercial**, pas opérationnel : un contrat porte des dates et une
+fréquence, c'est l'assiette de la facturation. Ouvrir sa création à l'exploitation,
+c'est laisser l'exploitation créer du périmètre facturable — le même raisonnement
+qui a fait retirer `POST /api/entreprises`. Et l'asymétrie commande : ouvrir un
+droit plus tard est indolore, le refermer après six mois d'usage est une régression
+que les utilisateurs combattront.
+
+Mais le vrai risque est l'**inverse** de celui que ce paragraphe anticipait. Dans
+une entreprise de huit personnes, le responsable *est* celui qui fait tout. Une
+matrice trop serrée ne produit pas une demande d'évolution, elle produit **un mot
+de passe administrateur partagé** — et là toute la traçabilité est perdue, pas
+seulement une ligne de matrice.
+
+D'où un déclencheur mesurable plutôt qu'une intuition. Au premier pilote, la
+question à poser n'est pas « veux-tu créer des sites ? » mais **« combien de
+personnes connaissent le mot de passe du compte administrateur ? »**. Si la réponse
+dépasse un, ouvrir `Sites` et `Contrats` au `Responsable` le jour même.
+
 **Périmètre de mise en œuvre**
 - `[Authorize(Roles = ...)]` par endpoint, conformément à la matrice
 - les deux nouveaux axes d'isolation appliqués par **filtres globaux**, comme le
@@ -353,7 +372,25 @@ travail** — régime juridique et obligations employeur différents —, la ré
 est une valeur d'énumération `AccidentTravail`, pas de la prose : structuré,
 minimal, et ça n'invite pas au diagnostic. Les enums étant stockés en `text`
 sans contrainte `CHECK`, ajouter une valeur ne demande aucune migration.
-À trancher si le besoin est confirmé.
+**Décidé : oui, à l'étape 17, et l'interdiction de motif doit suivre.**
+
+Le raisonnement n'est pas juridique, il est mécanique : **l'absence de cette valeur
+pousse activement la donnée de santé vers la prose.** Aujourd'hui un accident du
+travail se saisit soit en `Maladie` — motif interdit, donc l'information est perdue
+— soit en `Autre`, où le motif est non seulement permis mais indispensable.
+Quelqu'un écrira « chute dans l'escalier du hall B », ce que la règle sur `Maladie`
+existe précisément pour empêcher, contourné par le seul chemin resté ouvert.
+
+`AccidentTravail` doit donc **hériter de l'interdiction de motif** : même catégorie
+de l'article 9. Ajouter la valeur sans étendre la règle créerait un nouveau canal
+de texte libre pour de la donnée de santé, donc serait pire que le statu quo.
+
+Pourquoi l'étape 17 et pas maintenant : aucun formulaire d'absence n'existe dans
+l'application, les seuls écrivains sont l'API et le script de démonstration, donc
+personne ne peut rien saisir. L'étape 17 inventorie les données personnelles et
+prépare l'AIPD : la valeur, l'extension de la règle et sa justification écrite
+atterrissent ensemble. Faite aujourd'hui, ce serait une modification de dix
+minutes orpheline de son motif.
 
 **Validation** — par des tests, pas à la main :
 - un `ClientSyndic` du client A n'obtient rien des sites du client B **de la
@@ -618,8 +655,32 @@ jeton copié, et c'est la raison d'être du contrôle par requête.
 Fermer cette fenêtre demanderait de porter l'identifiant de session dans le jeton
 et de la vérifier à chaque requête, soit une **seconde** lecture par requête en
 plus de celle sur `AspNetUsers`. Le gain ne concerne que le cas où un jeton a déjà
-été volé, pendant au plus quinze minutes. À trancher si le besoin apparaît ; en
-attendant, la propriété est documentée plutôt que subie.
+été volé, pendant au plus quinze minutes.
+
+**Décidé : pas de lecture par requête. Une déconnexion globale explicite, à
+l'étape 16.**
+
+Précisons ce que la fermeture achèterait. Un attaquant copie les deux cookies à T,
+l'utilisateur se déconnecte à T+1 : le jeton de rafraîchissement est révoqué, donc
+mort — et son rejeu couperait tout. Reste le jeton d'accès, au plus quatorze
+minutes. L'exposition est donc réelle. Mais pour avoir copié ces cookies il fallait
+du code avec accès au magasin de cookies : `HttpOnly` interdit à une XSS de les
+lire, `SameSite=Strict` et l'en-tête anti-CSRF interdisent l'usage inter-site.
+Donc appareil ou profil compromis — et un adversaire avec un tel accès n'attend
+pas, il recopie les cookies de la session suivante. On paierait une seconde lecture
+en base sur **chaque requête, pour toujours**, pour retirer quatorze minutes à
+quelqu'un qui a un accès persistant.
+
+Or le besoin réellement exprimé — « on a volé le portable de Marie » — est **déjà
+couvert, et immédiatement** : `Actif = false` coupe à la requête suivante. C'est ce
+que ce paragraphe appelle lui-même la raison d'être du contrôle par requête.
+
+La réponse est donc une action **« déconnecter tous mes appareils »** qui régénère
+le `SecurityStamp`. Le chemin existe déjà — la réinitialisation de mot de passe le
+fait. Coût récurrent : **zéro**. Effet : la fenêtre se ferme **entièrement**, et au
+moment précis où l'utilisateur a une raison de le demander. Qu'elle déconnecte tous
+les appareils n'est pas un effet de bord, c'est la sémantique correcte de ce bouton.
+Le `sessionId` par requête achète moins, plus cher.
 
 **Validation du lot A** — 21 tests. Désactiver un compte coupe l'accès à la
 requête suivante · changer le mot de passe invalide les jetons déjà émis · un
@@ -863,6 +924,22 @@ détectés.
   aujourd'hui ; le proxy Vite masque le problème en développement.
 - Limite de taille de corps de requête et délai d'expiration
 - `/api/sante` enrichi d'un état de la base, pour les sondes de disponibilité
+- **Déconnexion de tous les appareils** : régénère le `SecurityStamp`, donc ferme
+  entièrement la fenêtre de quinze minutes du lot A de l'étape 12, sans aucune
+  lecture supplémentaire par requête. Décision consignée à cette étape-là.
+
+**Trois dettes que cette étape ramasse, et qui sont déjà annotées dans le code :**
+
+1. `frontend/vite.config.ts` retire l'attribut `Secure` des `Set-Cookie` au passage
+   du proxy, parce que Safari refuse un cookie `Secure` reçu en clair sur
+   `http://localhost` là où Chrome et Firefox font une exception pour cette origine.
+   Le contournement est confiné au serveur de développement, qui n'existe pas en
+   production — mais il disparaît avec le HTTPS local de cette étape.
+2. La `Content-Security-Policy` doit autoriser `fonts.googleapis.com` en
+   `style-src` et `fonts.gstatic.com` en `font-src`. `frontend/index.html` charge
+   Figtree et IBM Plex Mono de là, et tout le système typographique de §12 en
+   dépend. Sans ces directives les polices sont bloquées en production.
+3. `RequireHttpsMetadata` vaut `false` aujourd'hui.
 
 **Validation** : une origine non déclarée est refusée. Les en-têtes sont
 présents. Une requête HTTP est redirigée hors développement.

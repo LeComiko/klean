@@ -104,7 +104,8 @@
   cursor: progress;
   /* L'état est déjà porté par le libellé (« Connexion… ») : il n'a pas besoin
      de l'être aussi par un contraste dégradé, que §12 interdit sur tout texte.
-     --texte-3 sur --surface ne tenait que 3,63:1. */
+     Le gris que ce bouton utilisait ne tenait que 3,63:1 — il a depuis été
+     retiré du système. */
   background: var(--surface-2);
   color: var(--texte-2);
   border: 1px solid var(--border-fort);

@@ -41,7 +41,8 @@
   height: 40px;
   border-radius: var(--rayon-bloc);
   /* Le texte plein, pas un gris : §12 exige AA jusque sur les éléments de
-     navigation inactifs, et un --texte-3 sur --surface ne le tient pas. */
+     navigation inactifs. Un troisième niveau de gris ne le tenait pas — c'est
+     pour cette raison que §12 n'en a plus. */
   color: var(--texte);
   background: var(--surface-2);
   border: 1px solid var(--border);

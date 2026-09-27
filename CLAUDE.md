@@ -653,7 +653,6 @@ seule couleur saturée du système — la **terre cuite `#9C4221`** — au signa
 | border-fort | `#CFCBC2` | `#454841` |
 | texte | `#1B1A17` | `#EDECE7` |
 | texte-2 | `#6E6B64` | `#A3A099` |
-| texte-3 | `#8A867E` | `#7C7A73` |
 | hachure | `#D8D4CC` | — |
 | sur-brand | `#FFFFFF` | `#FFFFFF` |
 
@@ -661,6 +660,25 @@ seule couleur saturée du système — la **terre cuite `#9C4221`** — au signa
 jouer ce rôle : il vaut `#191A18` en thème sombre, et le libellé d'une pastille
 active tombait alors à 3,32:1, sous le seuil AA. Le blanc tient 9,06:1 au-dessus
 de `#3F4A54` et 5,27:1 au-dessus de `#5E6E7A`.
+
+⚠️ **Il n'y a que deux niveaux de gris de texte, et `texte-3` a été retiré.**
+Sa valeur mesurait `3,63:1` sur `surface` et `3,33:1` sur `canvas` en thème clair,
+`4,07:1` et `4,41:1` en sombre : jamais AA, sur aucun fond du système. Elle
+contredisait donc la règle « contraste AA minimum sur tout texte » quatre lignes
+plus bas.
+
+Le corriger était impossible : **toute** valeur qui tient AA sur `surface` tombe à
+moins d'un demi-point de `texte-2`, et deux gris séparés par si peu ne forment pas
+une hiérarchie. Un troisième niveau de gris lisible n'existe pas dans cette
+palette. Un troisième niveau d'information passe par la **graisse** ou la
+**taille**, comme le fait déjà `BlocVacation` sur `brand-tint`.
+
+Pour les usages non textuels — filet, séparateur, icône éteinte — `border` et
+`border-fort` sont là. Le jeton n'avait plus de rôle, et il en avait l'apparence :
+deux fois pendant les étapes 13 et 15 il a paru le choix naturel pour « encore
+plus secondaire », et deux fois seule une mesure l'a arrêté. Retiré, sa
+réapparition devient une **erreur dure** — `npm run verifier` échoue sur tout
+`var(--…)` absent de `tokens.css`.
 
 **Typographie.** Figtree pour l'interface, IBM Plex Mono pour **tout chiffre
 comparé en colonne** — heures, km, scores, quantités. La chasse fixe aligne
