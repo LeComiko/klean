@@ -263,8 +263,10 @@ async function appeler<T>(methode: string, chemin: string, options: Options = {}
     throw new ErreurApi(reponse.status, await messageDErreur(reponse))
   }
 
-  if (reponse.status === 204) return undefined as unknown as T
-
+  // Un corps vide rend `undefined`, ce qui couvre le 204 d'une suppression ou
+  // d'une déconnexion sans avoir à tester le code séparément. Une branche
+  // `status === 204` explicite a existé ici : le sabotage a montré qu'on pouvait
+  // la retirer sans qu'aucune série ne rougisse, parce qu'elle était redondante.
   const brut = await reponse.text()
 
   return (brut === '' ? undefined : JSON.parse(brut)) as T

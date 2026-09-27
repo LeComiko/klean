@@ -102,15 +102,17 @@ KLEAN/
 │   ├── Middleware/      VerificationCsrf
 │   ├── Migrations/
 │   └── Scripts/         SQL de maintenance, jeu de démonstration
-└── frontend/src/
-    ├── api/             wrappers fetch typés
-    ├── auth/            AuthContext, RouteProtegee
-    ├── composants/      un .tsx + un .css par composant
-    ├── layout/          Navigation, Disposition
-    ├── pages/           un fichier par écran
-    ├── styles/          tokens.css
-    ├── types/           interfaces TypeScript
-    └── utils/           dates.ts
+└── frontend/
+    ├── scripts/         verifier-interface.mjs, tests.mjs
+    └── src/
+        ├── api/         wrappers fetch typés, client.test.ts
+        ├── auth/        AuthContext, RouteProtegee
+        ├── composants/  un .tsx + un .css par composant
+        ├── layout/      Navigation, Disposition
+        ├── pages/       un fichier par écran
+        ├── styles/      tokens.css
+        ├── types/       interfaces TypeScript
+        └── utils/       dates.ts, dates.test.ts
 ```
 
 ---
@@ -675,6 +677,9 @@ cd frontend && npm run dev            # http://localhost:5173
 
 # Vérifications
 cd backend && dotnet build
+cd frontend && npm run lint
+cd frontend && npm run verifier       # système d'interface, §12
+cd frontend && npm test               # dates et session, cinq fuseaux
 cd frontend && npm run build          # tsc -b && vite build
 
 # Migrations
@@ -685,6 +690,13 @@ dotnet ef database update
 
 Le proxy Vite redirige `/api` vers `http://localhost:5137`. Le frontend
 n'appelle donc jamais l'URL absolue du backend.
+
+`npm test` et `npm run verifier` n'ajoutent **aucune dépendance** : Node 22.18
+dépouille les types TypeScript sans drapeau et porte son propre lanceur de tests.
+`npm test` rejoue `src/utils/dates.ts` dans **cinq fuseaux**, ce qui n'est pas du
+zèle — voir le piège des dates en §10, dont aucune des deux moitiés ne se voit
+sous `TZ=UTC`. `npm run verifier` mesure les contrastes de §12 là où l'œil ne
+distingue pas 4,44:1 de 4,52:1.
 
 ---
 

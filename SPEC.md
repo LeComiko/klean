@@ -745,6 +745,54 @@ maladie couvrant le mercredi.
 
 ---
 
+# Étape 14 bis — Filet de sécurité frontend
+
+Deux étapes d'écran sont livrées et l'étape 15 sera la **première à écrire depuis
+le navigateur** — `proposer`, `accepter`, `refuser`. Jusqu'ici le frontend n'a
+fait que des lectures, plus la connexion et la déconnexion : le chemin de
+l'en-tête anti-CSRF sur une écriture métier n'a jamais été exercé. Le moment de
+poser un filet est avant, pas après.
+
+**Périmètre**
+- `frontend/scripts/verifier-interface.mjs` : conformité mécanique à §12
+- `frontend/scripts/tests.mjs` : lanceur, rejoue les dates dans cinq fuseaux
+- `frontend/src/utils/dates.test.ts`, `frontend/src/api/client.test.ts`
+- `frontend/tsconfig.test.json`, plus la référence et l'exclusion
+- `package.json` : `test`, `verifier`, `engines`
+- `.github/workflows/ci.yml` : les deux commandes
+- `README.md`
+
+**Aucune dépendance ajoutée.** Node 22.18 dépouille les types TypeScript sans
+drapeau et porte son propre lanceur de tests : ni `vitest`, ni `jsdom`, ni
+bibliothèque de rendu. `CLAUDE.md` §3 n'autorise que `react-router-dom`, et il n'y
+avait rien à négocier.
+
+**Deux modules, et deux seulement** — ceux où un défaut est cher et invisible.
+`utils/dates.ts` pour les deux pièges de date, `api/client.ts` pour la session.
+Les composants, le rendu et le CSS ne sont pas testés : le rendu se valide au
+navigateur, et pour §12 le vérificateur fait mieux qu'un test de rendu — il mesure
+là où l'œil ne distingue pas 4,44:1 de 4,52:1.
+
+⚠️ **La série des dates doit tourner dans plusieurs fuseaux, et c'est la raison
+d'être du lanceur.** Les deux pièges sont symétriques : `toISOString` casse aux
+décalages **positifs**, `new Date('AAAA-MM-JJ')` aux **négatifs**. Les deux
+sabotages ont été joués, et **aucun des deux ne se voit sous `TZ=UTC`** — le
+fuseau par défaut de l'exécuteur d'intégration continue. Une série qui ne tourne
+qu'en UTC validerait donc un code faux dans les deux sens.
+
+**Validation** — 20 sabotages joués, 20 détectés. Le jeton anti-CSRF mémorisé au
+lieu d'être relu · la garde « un seul vol » retirée · `credentials` omis ·
+l'en-tête envoyé sur les lectures · la connexion soumise au rafraîchissement · la
+purge non signalée · la requête non rejouée · les cinq altérations de `dates.ts` ·
+et sept manquements à §12, de la couleur en dur au contraste dégradé.
+
+Un constat en passant : le sabotage de la branche `status === 204` de `client.ts`
+n'a rien fait rougir, parce qu'elle était **redondante** — un corps vide rendait
+déjà `undefined`. Ligne retirée. Une ligne qu'on ne peut pas casser trompe le
+lecteur sur ce qui compte.
+
+---
+
 # Étape 15 — Panneau de remplacement
 
 Le moteur devient visible et utilisable.

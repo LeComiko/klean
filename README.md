@@ -20,11 +20,16 @@ comme service doit publier ses modifications.
 | Outil | Version | Vérification |
 |---|---|---|
 | .NET SDK | 10.0 | `dotnet --version` |
-| Node.js | 22 ou plus | `node --version` |
+| Node.js | **22.18** ou plus | `node --version` |
 | PostgreSQL | 16 ou plus | `psql --version` |
 | git | — | `git --version` |
 
 Un serveur PostgreSQL doit écouter sur `localhost:5432`.
+
+`22.18` et non `22` tout court : c'est la première version de Node qui dépouille
+les types TypeScript sans drapeau et qui porte son propre lanceur de tests. Les
+séries frontend en dépendent, et n'ajoutent en échange **aucune dépendance** — ni
+`vitest`, ni `jsdom`, ni bibliothèque de rendu.
 
 ## Installation
 
@@ -132,17 +137,47 @@ continuer sinon. Sur un exécuteur d'intégration continue, surcharger
 
 Aucune de ces dépendances de test n'est ajoutée au projet de production.
 
+### Frontend
+
+```bash
+cd frontend
+npm test          # séries de logique, sans navigateur
+npm run verifier  # conformité du système d'interface de CLAUDE.md §12
+```
+
+Aucune base de données, aucun navigateur, aucune dépendance : le lanceur de tests
+de Node suffit. Deux modules sont couverts, et deux seulement — ceux où un défaut
+est cher et invisible :
+
+- **`src/utils/dates.ts`**, rejoué dans **cinq fuseaux horaires**. Ce n'est pas
+  du zèle : les deux pièges de date de `CLAUDE.md` §10 sont symétriques, l'un
+  casse aux décalages positifs et l'autre aux négatifs, et **aucun des deux ne se
+  voit sous `TZ=UTC`** — qui est le fuseau par défaut de l'intégration continue.
+- **`src/api/client.ts`** : la relecture du jeton anti-CSRF après chaque
+  rotation, le rafraîchissement en un seul vol, le rejeu unique sur 401. Un
+  défaut là produit des déconnexions apparemment aléatoires, le symptôme le plus
+  coûteux à diagnostiquer du projet.
+
+Les composants, le rendu et le CSS ne sont **pas** testés. Le rendu se valide au
+navigateur, et pour le système d'interface `npm run verifier` fait mieux qu'un
+test de rendu : il mesure les 32 paires de contraste des deux thèmes — lues dans
+`tokens.css` lui-même, donc la table ne peut pas divarier du CSS —, et refuse une
+couleur en dur, une ombre portée, un focus supprimé, une troncature par ellipse
+ou une opacité partielle sur du texte.
+
 ## Vérifications
 
 ```bash
 dotnet build                     # solution entière, doit être vert
 dotnet test                      # doit être vert
-cd frontend && npm run build     # tsc -b && vite build
 cd frontend && npm run lint
+cd frontend && npm run verifier  # système d'interface, CLAUDE.md §12
+cd frontend && npm test          # dates et session, cinq fuseaux
+cd frontend && npm run build     # tsc -b && vite build
 ```
 
-L'intégration continue de `.github/workflows/ci.yml` exécute ces quatre
-commandes sur chaque poussée.
+L'intégration continue de `.github/workflows/ci.yml` exécute ces six commandes
+sur chaque poussée.
 
 ## Migrations
 

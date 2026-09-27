@@ -54,6 +54,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
+          # 22.18 au minimum : c'est la première version qui dépouille les types
+          # TypeScript sans drapeau, ce dont dépendent les séries frontend. Le
+          # jalon « 22 » résout toujours vers la dernière 22.x, donc au-dessus.
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
@@ -64,6 +67,18 @@ jobs:
 
       - name: Linter
         run: npm run lint
+        working-directory: frontend
+
+      - name: Vérifier le système d'interface
+        run: npm run verifier
+        working-directory: frontend
+
+      # ⚠️ Cet exécuteur tourne en UTC. Les deux pièges de date de CLAUDE.md §10
+      # sont symétriques et AUCUN des deux ne se voit sous TZ=UTC : c'est le
+      # lanceur qui rejoue la série des dates dans cinq fuseaux. Ne pas remplacer
+      # cette commande par un « node --test » direct.
+      - name: Tester
+        run: npm test
         working-directory: frontend
 
       - name: Construire
