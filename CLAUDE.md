@@ -507,6 +507,26 @@ if (string.IsNullOrEmpty(jeton)) { contexte.NoResult(); return Task.CompletedTas
 Trouvé par le test `L_entete_Authorization_n_est_plus_accepte`, après avoir
 affirmé l'inverse.
 
+**Extensions d'import : Vite résout, Node non.** Le code applicatif écrit
+`import … from '../types/auth'` sans extension, ce que Vite résout et ce que
+`node --test` **refuse** — `ERR_MODULE_NOT_FOUND`, sur un fichier qui existe. Tout
+module chargé par une série de tests doit donc porter l'extension `.ts`
+explicitement, **et tous ceux qu'il importe à son tour**. `allowImportingTsExtensions`
+est déjà activé dans les trois projets TypeScript, l'extension explicite ne coûte
+rien côté Vite.
+
+Le cas ne s'était jamais présenté avant l'étape 16 bis parce que les deux modules
+éprouvés — `utils/dates.ts` et `api/client.ts` — n'importaient aucun autre module
+applicatif. Le premier qui l'a fait, `layout/sections.ts`, a échoué immédiatement.
+Le message d'erreur ne dit pas que l'extension manque, il dit que le module est
+introuvable : la fausse piste naturelle est le chemin, pas l'extension.
+
+⚠️ Conséquence à garder en tête avant d'ajouter une série : rendre un module
+testable peut demander d'ajouter l'extension sur toute une chaîne d'imports.
+Convertir l'ensemble du code applicatif aux extensions explicites supprimerait la
+classe entière de surprises « marche sous Vite, échoue sous Node » — ce n'est pas
+fait.
+
 **Dates en JavaScript : deux pièges symétriques, et une intégration continue en
 UTC est aveugle aux deux.** Le serveur envoie les jours à minuit **UTC**
 (`2026-09-07T00:00:00Z`), et l'écran raisonne en heure locale.

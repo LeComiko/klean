@@ -5,7 +5,12 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/contexte'
 import './Connexion.css'
 
-const ApresConnexion = '/tableau-de-bord'
+/**
+ * La racine, pas un écran nommé : c'est `Accueil` dans `App.tsx` qui choisit la
+ * première section ouverte au profil. Viser un écran en dur ici pourrait envoyer
+ * sur une section fermée au rôle qui vient de se connecter.
+ */
+const ApresConnexion = '/'
 
 export function Connexion() {
   const { profil, restauration, connecter } = useAuth()

@@ -40,8 +40,18 @@ const Fuseaux = [
 /** Séries dont le résultat dépend du fuseau : rejouées dans chacun. */
 const SensiblesAuFuseau = ['src/utils/dates.test.ts']
 
-/** Séries indifférentes au fuseau : une seule exécution. */
-const Indifferentes = ['src/api/client.test.ts']
+/**
+ * Séries indifférentes au fuseau : une seule exécution chacune.
+ *
+ * ⚠️ Une exécution **par fichier**, et pas un seul `node --test` pour toute la
+ * liste. Regrouper faisait attribuer l'échec au premier libellé de la liste : une
+ * faute dans sections.test.ts était rapportée sur « client.ts — session et CSRF »,
+ * ce qui envoie chercher au mauvais endroit.
+ */
+const Indifferentes = [
+  { fichier: 'src/api/client.test.ts', libelle: 'client.ts — session et CSRF' },
+  { fichier: 'src/layout/sections.test.ts', libelle: 'sections.ts — navigation et arrivée' },
+]
 
 let echecs = 0
 
@@ -75,7 +85,9 @@ function executer(libelle, fichiers, fuseau) {
 }
 
 console.log('\n\u001b[1mSéries indifférentes au fuseau\u001b[0m')
-executer('client.ts — session et CSRF', Indifferentes, undefined)
+for (const serie of Indifferentes) {
+  executer(serie.libelle, [serie.fichier], undefined)
+}
 
 console.log('\n\u001b[1mSéries sensibles au fuseau\u001b[0m')
 for (const fuseau of Fuseaux) {

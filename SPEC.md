@@ -946,6 +946,78 @@ présents. Une requête HTTP est redirigée hors développement.
 
 ---
 
+# Étape 16 bis — Écrans de données de référence
+
+**Ce qui manque n'est pas du confort, c'est la mise en route.** À la fin de
+l'étape 16, le backend expose 54 endpoints et l'interface n'en sert que le
+planning et le remplacement. Personne ne peut créer un client, un site, un contrat
+ni un agent autrement qu'en tapant dans l'API ou dans Swagger. Pour un produit mis
+à disposition d'entreprises tierces, ce n'est pas une lacune, c'est un empêchement
+de déployer : le script `backend/Scripts/jeu-de-demonstration.py` est aujourd'hui
+le **seul** chemin qui alimente KLEAN.
+
+⚠️ Et une absence ne se saisit pas non plus. Conséquence directe : le panneau de
+remplacement de l'étape 15 ne peut être exercé que sur des données posées par un
+script. La fonction la plus distinctive du produit est inatteignable en usage
+normal.
+
+**Un seul motif, réutilisé** — pas six écrans écrits à la main. Une description
+par ressource dans `src/reference/descriptions.ts`, source unique comme
+`src/layout/sections.ts` l'est pour la navigation : libellé, route, colonnes de
+liste, champs de formulaire, rôles autorisés en lecture et en écriture. Six
+descriptions copiées-collées divergeraient, et la divergence prend une forme
+précise : un bouton d'enregistrement qui répond 403.
+
+**Périmètre, lot A — le motif et les trois ressources qui débloquent la mise en
+route**
+- `src/types/reference.ts` : types de description, `ChampRessource`
+- `src/reference/descriptions.ts` : les descriptions, et leurs tests
+- `src/api/ressources.ts` : CRUD génériques sur l'enveloppe de pagination
+  `{ elements, total, page, taille }` déjà en place depuis l'étape 8
+- `src/composants/TableauRessource.tsx`, `FormulaireRessource.tsx`,
+  `Pagination.tsx`, chacun avec son `.css`
+- `src/pages/Reference.tsx` : la page qui orchestre, pour n'importe quelle
+  ressource
+- Clients, Sites, Agents
+
+**Périmètre, lot B**
+- Contrats, Prestations, Produits
+- **Absences**, et c'est le lot qui rend l'étape 15 utilisable
+
+**Décisions à respecter**
+
+La **matrice des droits de l'étape 8** pilote l'affichage, pas seulement le
+serveur. Un `Responsable` **lit** les données de référence et n'y écrit pas : le
+formulaire doit lui être présenté en lecture seule, sans bouton
+d'enregistrement. Afficher un bouton qui répond 403 est une faute d'interface, pas
+une protection. Même remarque pour le `ClientSyndic`, qui lit ses sites et rien
+d'autre. La garde reste au serveur ; l'écran ne fait que ne pas mentir.
+
+Le **motif d'une absence `Maladie` n'est pas affiché**, promesse faite à l'étape 8
+et sans support jusqu'ici : le champ disparaît quand `Maladie` est sélectionné.
+L'interface empêche, l'API fait barrage. C'est aussi le formulaire qui recevra
+`AccidentTravail` à l'étape 17, avec la même interdiction.
+
+La **navigation suit la chaîne du modèle** plutôt que d'aligner huit pastilles
+dans une barre de 64 px. `SI` porte la chaîne client — Clients → Sites →
+Contrats → Prestations — avec descente de niveau ; `AG` porte Agents → Absences ;
+`ST` garde Produits et Stocks pour son étape. Les libellés des pastilles pourront
+être revus à ce moment-là.
+
+**Hors périmètre**, et volontairement : les **Stocks**. C'est l'une des quatre
+fonctions du cœur de produit, avec ses propres notions — emplacements, seuils,
+mouvements — et ce n'est pas un formulaire de plus. Elle mérite son étape.
+
+**Validation** — le critère est unique et il est dur : **un administrateur crée une
+entreprise de zéro par l'interface seule**, sans script et sans Swagger — un
+client, un site géolocalisé, un contrat, une prestation, deux agents, une absence
+— puis l'écran de planning de l'étape 14 affiche ce qu'il vient de saisir, et le
+panneau de remplacement de l'étape 15 propose des candidats sur l'absence qu'il
+vient de poser. Le jour où c'est vrai, le script de démonstration cesse d'être le
+seul chemin d'entrée dans le produit.
+
+---
+
 # Étape 17 — Données personnelles
 
 Le produit détient, sur des salariés : nom, adresse, **coordonnées GPS du
