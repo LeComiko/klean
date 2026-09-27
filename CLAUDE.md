@@ -392,8 +392,32 @@ Refuse ──proposer──► Propose
   décoratifs : il suffirait de proposer à la main l'agent en arrêt maladie. Le
   score est celui que le moteur calcule à cet instant, jamais celui que le
   client envoie.
+- `OuvrirAsync` / `POST /api/interventions/{id}/remplacement` rend le
+  remplacement actif d'une vacation, ou l'ouvre en `Recherche` s'il n'y en a pas :
+  **200** dans le premier cas, **201** dans le second, même corps. C'est l'entrée
+  de l'écran de planning, qui part d'une vacation et ignore si un remplacement
+  existe — celui d'un agent absent a été posé par `DetecterImpactsAsync`, celui
+  d'une vacation jamais affectée n'existe pas.
+
+  L'unicité repose sur `StatutsActifs`, la même liste que la détection d'impacts :
+  deux règles d'unicité finiraient par diverger. Un remplacement `Refuse` ou
+  `Annule` est de l'historique et n'empêche pas d'en ouvrir un nouveau.
+
+  ⚠️ L'existant est cherché **avant** le contrôle de statut de l'intervention. Un
+  remplacement déjà ouvert doit rester consultable même si la vacation a été
+  annulée entre-temps ; l'ordre inverse cacherait des données au lieu de refuser
+  une création.
 - `AccepterAsync` **revérifie** l'éligibilité avant d'écrire : entre la
   proposition et l'acceptation, une absence a pu être saisie.
+
+  ⚠️ **Son échec laisse un cul-de-sac, et l'appelant doit le défaire.** Le
+  remplacement reste en `Propose`, et `ProposerAsync` n'accepte que `Recherche` ou
+  `Refuse` en entrée : plus aucun agent ne peut être proposé sur cette vacation,
+  définitivement. Tout code qui enchaîne proposer puis accepter doit appeler
+  `refuser` sur l'échec, ce qui ramène en `Recherche`, avant de remonter l'erreur.
+  C'est ce que fait `src/pages/Planning.tsx`, et la seule raison pour laquelle
+  `refuser` figure dans son enveloppe d'API alors que l'écran n'a pas de bouton
+  de refus.
 - Un refus ne réaffecte rien et ne déclenche aucune cascade : chaque
   proposition est une action humaine explicite. Il ramène en `Recherche` et
   efface l'agent — le service ne produit donc jamais le statut `Refuse`, mais

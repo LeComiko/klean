@@ -816,6 +816,40 @@ Chaque candidat : score sur 100 en IBM Plex Mono 26 px, nom, et en dessous
 les candidats classés ; proposer un agent fait disparaître la vacation des
 non pourvues et apparaître dans la ligne de cet agent, compteurs à jour.
 
+⚠️ **Le périmètre a débordé sur le backend, et il le fallait.** La « résolution
+ou création du remplacement » demandée à la page n'était pas réalisable
+proprement côté client : `GET /api/remplacements` n'a **aucun filtre**, plafond
+200 par page, donc retrouver le remplacement d'une vacation demandait de balayer
+les pages — et `POST /api/remplacements` ne garde rien contre le doublon, donc
+deux responsables cliquant la même vacation en créaient deux, dont un restait en
+`Recherche` sans être visible nulle part : les vacations non pourvues viennent du
+planning, pas de cette table.
+
+D'où **`POST /api/interventions/{id}/remplacement`**, idempotent : 200 quand un
+remplacement actif existait, 201 quand il vient d'être créé, même corps dans les
+deux cas. Un seul aller-retour, pas de course. La règle d'unicité est
+`RemplacementService.StatutsActifs`, celle de la détection d'impacts — deux règles
+d'unicité auraient divergé. Le décompte passe à **54 endpoints métier**, plus 3
+d'authentification.
+
+⚠️ **Le cas d'échec d'`accepter` est un cul-de-sac, et l'écran doit le défaire.**
+`AccepterAsync` **revérifie** l'éligibilité : entre la proposition et
+l'acceptation, une absence a pu être saisie. Si elle refuse, le remplacement reste
+en `Propose` — et `ProposerAsync` n'accepte que `Recherche` ou `Refuse` en entrée.
+Aucun autre agent ne pourrait plus être proposé sur cette vacation, définitivement.
+La page appelle donc `refuser` sur l'échec, ce qui la ramène en `Recherche`, avant
+de remonter l'erreur. C'est la seule raison pour laquelle `refuser` figure dans
+`src/api/remplacements.ts` alors que l'écran n'a pas de bouton de refus.
+
+**Vérification de bout en bout** — la séquence de `Planning.tsx` rejouée contre le
+serveur sur le jeu de démonstration : ouverture idempotente sur la vacation du
+mercredi (200, même identifiant au rappel), classement décroissant avec l'agent
+absent écarté, `proposer` puis `accepter`, puis la vacation quitte les non
+pourvues (3 → 2), apparaît sur la ligne du remplaçant (2 → 3 vacations, 6 → 7,5 h),
+les totaux de la semaine ne bougent pas (17 / 34), et plus aucun « Absent » sur la
+ligne de l'agent absent. Plus 10 tests backend sur l'endpoint et 7 sabotages, tous
+détectés.
+
 ---
 
 # Étape 16 — Surface HTTP

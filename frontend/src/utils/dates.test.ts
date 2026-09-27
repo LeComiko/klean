@@ -11,6 +11,7 @@ import {
   formaterPlage,
   formaterPlageDeSemaine,
   jourCourt,
+  jourDeLaSemaine,
   jourIso,
   jourLong,
   lundiDeLaSemaine,
@@ -257,6 +258,13 @@ describe(`dates — TZ=${fuseau}`, () => {
         formaterPlageDeSemaine(new Date(2025, 11, 29), new Date(2026, 0, 4)),
         '29 décembre – 4 janvier 2026',
       )
+    })
+
+    test('jourDeLaSemaine nomme le jour d’une date', () => {
+      assert.equal(jourDeLaSemaine(new Date(2026, 8, 7)), 'lundi')
+      assert.equal(jourDeLaSemaine(new Date(2026, 8, 9)), 'mercredi')
+      // Dimanche vaut 0 pour getDay() : le piège du décalage.
+      assert.equal(jourDeLaSemaine(new Date(2026, 8, 13)), 'dimanche')
     })
 
     test('les noms de jours, lundi en tête', () => {

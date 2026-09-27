@@ -101,17 +101,30 @@ def main():
     profil = session["profil"]
     print(f"  connecté : {profil['email']}  rôles {', '.join(profil['roles'])}")
 
-    # ---- Garde d'idempotence ----
-    # Relancer le script sans garde doublerait tout, et les totaux attendus
-    # (17 / 34 / 3) deviendraient 34 / 68 / 6 sans que rien ne le signale.
-    existants = api.appeler("GET", "/api/sites?taille=200")
-    deja = [s["nom"] for s in existants["elements"] if s["nom"] in NOMS_DE_SITES]
-    if deja:
+    # ---- Garde ----
+    # La bonne condition n'est pas « mes sites existent-ils » mais « la semaine
+    # cible est-elle vide ». Les totaux attendus (17 / 34 / 3) sont ceux du
+    # planning de l'entreprise entière : n'importe quelle vacation préexistante
+    # cette semaine-là les fausse, qu'elle vienne d'un second passage de ce script
+    # ou d'ailleurs.
+    #
+    # Le cas s'est produit : une série de tests avait laissé une intervention dans
+    # klean_test, et le jeu s'est empilé dessus — 18 / 36 / 4. La vérification
+    # finale l'a bien refusé, mais après avoir tout écrit.
+    deja = api.appeler("GET", f"/api/planning?lundi={LUNDI}")
+    if deja["totalVacations"] > 0:
+        existants = api.appeler("GET", "/api/sites?taille=200")
+        miens = [s["nom"] for s in existants["elements"] if s["nom"] in NOMS_DE_SITES]
+
         arreter(
-            "Le jeu de démonstration semble déjà installé : "
-            + ", ".join(deja)
-            + ".\n   Le relancer doublerait les vacations. Supprimer le client "
-            + f"« {CLIENT['nom']} » d'abord — ses sites partent en cascade."
+            f"La semaine du {LUNDI} porte déjà {deja['totalVacations']} vacation(s) "
+            f"et {len(deja['agents'])} agent(s).\n"
+            + ("   Le jeu de démonstration est déjà installé : "
+               + ", ".join(miens) + ".\n" if miens else "")
+            + f"   Supprimer le client « {CLIENT['nom']} » — ses sites, contrats, "
+            + "prestations et interventions partent en cascade — ou vider les tables\n"
+            + "   métier si la base est jetable. Les totaux attendus sont ceux de "
+            + "l'entreprise entière, pas de ce seul jeu."
         )
 
     # ---- Client, sites, contrats, prestations ----

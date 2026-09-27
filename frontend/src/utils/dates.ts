@@ -135,6 +135,11 @@ export function jourLong(index: number): string {
   return JoursLongs[index] ?? ''
 }
 
+/** `mercredi` pour le 9 septembre 2026. */
+export function jourDeLaSemaine(date: Date): string {
+  return jourLong(indexLundiPremier(date))
+}
+
 /** `7 septembre 2026`. */
 export function formaterDateLongue(date: Date): string {
   return `${String(date.getDate())} ${Mois[date.getMonth()] ?? ''} ${String(date.getFullYear())}`

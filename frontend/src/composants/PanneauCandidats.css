@@ -1,0 +1,188 @@
+.panneau-candidats {
+  /* 420 px, imposé par SPEC.md étape 15. Largeur fixe : le classement se lit en
+     colonne, et une largeur élastique ferait danser les scores d'un écran à
+     l'autre. */
+  width: 420px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  padding: var(--espace-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-carte);
+}
+
+.panneau-candidats__entete {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--espace-3);
+  padding-bottom: var(--espace-4);
+  margin-bottom: var(--espace-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.panneau-candidats__etiquette {
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texte-2);
+}
+
+.panneau-candidats__titre {
+  font-size: var(--titre-section-taille);
+  line-height: var(--titre-section-interligne);
+  font-weight: var(--titre-section-graisse);
+  overflow-wrap: anywhere;
+}
+
+.panneau-candidats__quand {
+  margin-top: var(--espace-1);
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  color: var(--texte);
+}
+
+.panneau-candidats__prestation {
+  color: var(--texte-2);
+}
+
+.panneau-candidats__fermer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--ligne-compacte);
+  height: var(--ligne-compacte);
+  background: var(--surface-2);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  color: var(--texte);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.panneau-candidats__fermer:hover {
+  background: var(--brand-tint);
+  border-color: var(--brand);
+}
+
+.panneau-candidats__note,
+.panneau-candidats__aucun {
+  padding: var(--espace-3);
+  margin-bottom: var(--espace-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-bloc);
+  color: var(--texte);
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+}
+
+.panneau-candidats__aucun {
+  border: 1px dashed var(--alerte);
+  color: var(--alerte);
+}
+
+.panneau-candidats__erreur {
+  padding: var(--espace-3);
+  margin-bottom: var(--espace-4);
+  color: var(--alerte);
+  background: var(--surface-2);
+  border: 1px dashed var(--alerte);
+  border-radius: var(--rayon-bloc);
+}
+
+.panneau-candidats__attente {
+  display: block;
+  padding: var(--espace-6) 0;
+  color: var(--texte-2);
+}
+
+.panneau-candidats__liste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+.candidat {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--espace-3);
+  padding: var(--espace-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-bloc);
+}
+
+/* Le score : 26 px en chasse fixe, imposé par SPEC.md étape 15. La chasse fixe
+   aligne les unités d'une ligne à l'autre sans effort — c'est la raison d'être
+   d'IBM Plex Mono dans ce système (CLAUDE.md §12). */
+.candidat__score {
+  font-size: var(--score-taille);
+  line-height: var(--score-interligne);
+  font-weight: var(--score-graisse);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.candidat__identite {
+  min-width: 0;
+}
+
+.candidat__nom {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.candidat__brut {
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  color: var(--texte-2);
+}
+
+.candidat__bouton {
+  height: var(--ligne-compacte);
+  padding: 0 var(--espace-3);
+  background: var(--brand);
+  color: var(--sur-brand);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.candidat__bouton:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+
+.candidat__bouton:disabled {
+  cursor: progress;
+  background: var(--surface);
+  color: var(--texte-2);
+  border: 1px solid var(--border-fort);
+}
+
+@media (max-width: 1100px) {
+  .panneau-candidats {
+    /* En dessous, le panneau passe sous la grille et prend toute la largeur :
+       420 px fixes y produiraient un débordement horizontal. */
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .panneau-candidats__quand,
+  .panneau-candidats__note,
+  .panneau-candidats__aucun,
+  .candidat__brut {
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+
+  .candidat__bouton,
+  .panneau-candidats__fermer {
+    height: var(--cible-tactile);
+  }
+}

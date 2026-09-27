@@ -1,0 +1,151 @@
+.non-pourvues {
+  margin-top: var(--espace-6);
+}
+
+.non-pourvues__titre {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-2);
+  margin-bottom: var(--espace-3);
+  font-size: var(--titre-section-taille);
+  line-height: var(--titre-section-interligne);
+  font-weight: var(--titre-section-graisse);
+}
+
+.non-pourvues__compte {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 var(--espace-2);
+  background: var(--surface);
+  color: var(--alerte);
+  border: 1px solid var(--alerte);
+  border-radius: var(--rayon-pilule);
+  font-size: var(--etiquette-taille);
+  font-weight: 700;
+}
+
+.non-pourvues__vide {
+  padding: var(--espace-6);
+  color: var(--texte-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-carte);
+}
+
+.non-pourvues__liste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+/* Une ligne : quand · où · pourquoi · le bouton. Grille plutôt que flex pour que
+   les quatre colonnes s'alignent d'une ligne à l'autre — c'est une liste qu'on
+   parcourt en colonne, pas quatre blocs indépendants. */
+.non-pourvue {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--espace-4);
+  padding: var(--espace-3) var(--espace-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--alerte);
+  border-radius: var(--rayon-bloc);
+}
+
+.non-pourvue--choisie {
+  border-color: var(--brand);
+  border-left-color: var(--brand);
+  background: var(--brand-tint);
+}
+
+/* Sur --brand-tint, --texte-2 tombe à 4,44:1 en thème clair, sous le seuil AA
+   d'un cheveu. La hiérarchie de la ligne choisie passe donc par la graisse, comme
+   dans BlocVacation — même fond, même remède. Trouvé par npm run verifier après
+   avoir ajouté la paire manquante à sa liste. */
+.non-pourvue--choisie .non-pourvue__heure,
+.non-pourvue--choisie .non-pourvue__prestation {
+  color: var(--texte);
+}
+
+.non-pourvue__jour,
+.non-pourvue__heure,
+.non-pourvue__site,
+.non-pourvue__prestation {
+  display: block;
+}
+
+.non-pourvue__jour {
+  font-weight: 600;
+}
+
+.non-pourvue__heure,
+.non-pourvue__prestation {
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  color: var(--texte-2);
+}
+
+/* Le nom du site n'est jamais tronqué : deux résidences d'un même syndic se
+   distinguent souvent par leur fin. */
+.non-pourvue__site {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.non-pourvue__raison {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-2);
+  color: var(--alerte);
+  font-weight: 600;
+}
+
+.non-pourvue__pastille {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  background: var(--alerte);
+  border-radius: var(--rayon-pilule);
+}
+
+.non-pourvue__bouton {
+  height: var(--ligne-compacte);
+  padding: 0 var(--espace-4);
+  background: var(--brand);
+  color: var(--sur-brand);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.non-pourvue__bouton:hover {
+  background: var(--brand-strong);
+}
+
+.non-pourvue--choisie .non-pourvue__bouton {
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--brand);
+}
+
+@media (max-width: 900px) {
+  .non-pourvue {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--espace-2);
+  }
+
+  .non-pourvue__heure,
+  .non-pourvue__prestation {
+    /* Plancher mobile : jamais 11–13 px. */
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+
+  .non-pourvue__bouton {
+    height: var(--cible-tactile);
+  }
+}

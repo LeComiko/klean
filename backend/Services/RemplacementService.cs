@@ -20,9 +20,11 @@ public enum IssueRemplacement
 /// deviner l'état de la machine.
 /// </summary>
 public readonly record struct ResultatRemplacement(
-    IssueRemplacement Issue, RemplacementDto? Valeur, string? Message)
+    IssueRemplacement Issue, RemplacementDto? Valeur, string? Message, bool Cree = false)
 {
-    public static ResultatRemplacement Ok(RemplacementDto valeur) => new(IssueRemplacement.Ok, valeur, null);
+    public static ResultatRemplacement Ok(RemplacementDto valeur, bool cree = false) =>
+        new(IssueRemplacement.Ok, valeur, null, cree);
+
     public static ResultatRemplacement Introuvable() => new(IssueRemplacement.Introuvable, null, null);
     public static ResultatRemplacement Refusee(string message) => new(IssueRemplacement.Refusee, null, message);
 }
@@ -129,6 +131,76 @@ public class RemplacementService
     }
 
     /// <summary>Candidats pour l'intervention d'un remplacement, classés par score.</summary>
+    /// <summary>
+    /// Rend le remplacement actif d'une vacation, ou l'ouvre en <c>Recherche</c>
+    /// s'il n'y en a pas. <c>Cree</c> dit lequel des deux, pour que le contrôleur
+    /// réponde 201 ou 200.
+    ///
+    /// **Idempotent, et c'est tout l'objet de cette méthode.** L'écran de planning
+    /// arrive avec un identifiant d'intervention et ne sait pas si un remplacement
+    /// existe : celui du mercredi d'un agent absent a été posé par
+    /// <see cref="DetecterImpactsAsync"/>, celui d'une vacation jamais affectée
+    /// n'existe pas. Sans cette opération, l'écran devrait lire puis écrire en deux
+    /// appels — donc balayer une liste sans filtre, et laisser une fenêtre pendant
+    /// laquelle un second poste crée le doublon. Un doublon en <c>Recherche</c> est
+    /// invisible à l'écran, puisque les vacations non pourvues viennent du planning
+    /// et non de cette table : personne ne le verrait.
+    ///
+    /// La règle d'unicité est <see cref="StatutsActifs"/>, la même que la détection
+    /// d'impacts. Un remplacement <c>Refuse</c> ou <c>Annule</c> est de l'historique
+    /// et n'empêche pas d'en ouvrir un nouveau.
+    /// </summary>
+    public async Task<ResultatRemplacement> OuvrirAsync(Guid interventionId)
+    {
+        var intervention = await _db.Interventions
+            .AsNoTracking()
+            .Where(i => i.Id == interventionId)
+            .Select(i => new { i.Id, i.Statut })
+            .FirstOrDefaultAsync();
+
+        if (intervention is null) return ResultatRemplacement.Introuvable();
+
+        // L'existant est cherché **avant** le contrôle de statut : un remplacement
+        // déjà ouvert doit rester consultable même si la vacation a changé d'état
+        // entre-temps. L'inverse cacherait des données au lieu de refuser une
+        // création.
+        var actif = await _db.Remplacements
+            .AsNoTracking()
+            .Where(r => r.InterventionId == interventionId && StatutsActifs.Contains(r.Statut))
+            .OrderBy(r => r.DateCreation)
+            .FirstOrDefaultAsync();
+
+        if (actif is not null) return ResultatRemplacement.Ok(Vers(actif));
+
+        // Même restriction que la détection d'impacts : seule une vacation
+        // Planifiee se remplace. Une vacation terminée, non certifiée ou annulée
+        // appartient au passé, et lui ouvrir un remplacement ne veut rien dire.
+        if (intervention.Statut != StatutIntervention.Planifiee)
+        {
+            return ResultatRemplacement.Refusee(
+                $"Vacation au statut {intervention.Statut} : seule une vacation "
+                + $"{StatutIntervention.Planifiee} peut être remplacée.");
+        }
+
+        var remplacement = new Remplacement
+        {
+            InterventionId = interventionId,
+            // Null volontairement : une ouverture manuelle ne sait pas de quelle
+            // absence elle découle, et la deviner serait une inférence. Seule
+            // DetecterImpactsAsync, qui part de l'absence, peut renseigner ce lien.
+            AbsenceId = null,
+            Statut = StatutRemplacement.Recherche,
+            AgentRemplacantId = null,
+            Score = null,
+            DateCreation = DateTime.UtcNow
+        };
+
+        _db.Remplacements.Add(remplacement);
+        await _db.SaveChangesAsync();
+
+        return ResultatRemplacement.Ok(Vers(remplacement), cree: true);
+    }
+
     public async Task<List<CandidatDto>?> GetCandidatsAsync(Guid remplacementId)
     {
         var interventionId = await _db.Remplacements

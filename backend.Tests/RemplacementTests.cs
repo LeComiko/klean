@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Klean.Api.DTOs;
+using Klean.Api.Models;
 using Klean.Api.Tests.Infrastructure;
 
 namespace Klean.Api.Tests;
@@ -431,6 +432,189 @@ public class RemplacementTests : IAsyncLifetime
             (await anonyme.GetAsync($"/api/remplacements/{remplacement.Id}/candidats")).StatusCode);
     }
 
+    // ---------- Ouverture idempotente : POST /api/interventions/{id}/remplacement
+
+    [Fact]
+    public async Task Ouvrir_cree_un_remplacement_en_recherche()
+    {
+        // Une vacation jamais affectée n'a aucun remplacement : aucune absence ne
+        // l'a déclenchée. C'est le cas que l'écran de planning doit couvrir.
+        var libre = await CreerIntervention(null, Mercredi, new TimeSpan(14, 0, 0), "Planifiee");
+
+        var reponse = await _client.PostAsync($"/api/interventions/{libre.Id}/remplacement", null);
+
+        Assert.Equal(HttpStatusCode.Created, reponse.StatusCode);
+
+        var remplacement = await reponse.Content.ReadFromJsonAsync<RemplacementDto>();
+        Assert.NotNull(remplacement);
+        Assert.Equal(libre.Id, remplacement.InterventionId);
+        Assert.Equal("Recherche", remplacement.Statut);
+        Assert.Null(remplacement.AgentRemplacantId);
+        Assert.Null(remplacement.Score);
+
+        // Null volontairement : une ouverture manuelle ne sait pas de quelle
+        // absence elle découle, et la deviner serait une inférence.
+        Assert.Null(remplacement.AbsenceId);
+    }
+
+    [Fact]
+    public async Task Ouvrir_deux_fois_rend_le_meme_remplacement_sans_doublon()
+    {
+        // LE test de l'endpoint. Sans idempotence, deux responsables qui cliquent
+        // la même vacation créent deux lignes, dont une reste en Recherche et
+        // devient invisible — les vacations non pourvues viennent du planning, pas
+        // de cette table.
+        var libre = await CreerIntervention(null, Mercredi, new TimeSpan(14, 0, 0), "Planifiee");
+
+        var premier = await Ouvrir(libre.Id, HttpStatusCode.Created);
+        var second = await Ouvrir(libre.Id, HttpStatusCode.OK);
+
+        Assert.Equal(premier.Id, second.Id);
+        Assert.Single(await Remplacements(), r => r.InterventionId == libre.Id);
+    }
+
+    [Fact]
+    public async Task Ouvrir_retrouve_celui_pose_par_la_detection_d_impacts()
+    {
+        // L'autre moitié du cas d'écran : le mercredi d'un agent absent porte déjà
+        // un remplacement, créé automatiquement à la saisie de l'absence. L'écran
+        // ne sait pas lequel des deux cas il a sous la souris, et n'a pas à le savoir.
+        var attendu = await RemplacementEnRecherche();
+
+        var obtenu = await Ouvrir(_intervention.Id, HttpStatusCode.OK);
+
+        Assert.Equal(attendu.Id, obtenu.Id);
+        Assert.NotNull(obtenu.AbsenceId);
+        Assert.Single(await Remplacements());
+    }
+
+    [Fact]
+    public async Task Ouvrir_rend_aussi_un_remplacement_deja_accepte()
+    {
+        // Accepte fait partie des statuts actifs : rouvrir ne doit pas créer un
+        // second remplacement sur une vacation déjà pourvue.
+        var remplacement = await RemplacementEnRecherche();
+        await Agir(remplacement.Id, "proposer", new ProposerDto { AgentId = _remplacant.Id });
+        await Agir(remplacement.Id, "accepter");
+
+        var obtenu = await Ouvrir(_intervention.Id, HttpStatusCode.OK);
+
+        Assert.Equal(remplacement.Id, obtenu.Id);
+        Assert.Equal("Accepte", obtenu.Statut);
+        Assert.Single(await Remplacements());
+    }
+
+    [Fact]
+    public async Task Ouvrir_apres_un_remplacement_refuse_en_cree_un_nouveau()
+    {
+        // Refuse et Annule sont de l'historique, pas des statuts actifs : ils
+        // n'empêchent pas d'ouvrir une nouvelle recherche. Même règle que la
+        // détection d'impacts, et c'est volontaire — deux règles d'unicité
+        // divergeraient.
+        var libre = await CreerIntervention(null, Mercredi, new TimeSpan(14, 0, 0), "Planifiee");
+
+        var historique = await Creer<RemplacementDto>("/api/remplacements", new RemplacementCreateDto
+        {
+            InterventionId = libre.Id,
+            Statut = "Refuse"
+        });
+
+        var ouvert = await Ouvrir(libre.Id, HttpStatusCode.Created);
+
+        Assert.NotEqual(historique.Id, ouvert.Id);
+        Assert.Equal("Recherche", ouvert.Statut);
+        Assert.Equal(2, (await Remplacements()).Count(r => r.InterventionId == libre.Id));
+    }
+
+    [Fact]
+    public async Task Ouvrir_sur_une_vacation_annulee_est_refuse()
+    {
+        var annulee = await CreerIntervention(null, Mercredi, new TimeSpan(14, 0, 0), "Annulee");
+
+        var reponse = await _client.PostAsync($"/api/interventions/{annulee.Id}/remplacement", null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, reponse.StatusCode);
+        var message = await reponse.Content.ReadAsStringAsync();
+        Assert.Contains("Annulee", message);
+        Assert.Contains("Planifiee", message);
+        Assert.Empty(await Remplacements());
+    }
+
+    [Fact]
+    public async Task Ouvrir_expose_un_remplacement_existant_meme_sur_une_vacation_annulee()
+    {
+        // L'existant est cherché avant le contrôle de statut : annuler la vacation
+        // ne doit pas faire disparaître le remplacement déjà ouvert de l'écran.
+        var remplacement = await RemplacementEnRecherche();
+
+        var annulation = await _client.PutAsJsonAsync(
+            $"/api/interventions/{_intervention.Id}",
+            new InterventionCreateDto
+            {
+                PrestationId = _prestation.Id,
+                AgentId = null,
+                DatePrevue = Mercredi,
+                HeurePrevue = NeufHeures,
+                Statut = "Annulee"
+            });
+        Assert.Equal(HttpStatusCode.NoContent, annulation.StatusCode);
+
+        var obtenu = await Ouvrir(_intervention.Id, HttpStatusCode.OK);
+
+        Assert.Equal(remplacement.Id, obtenu.Id);
+    }
+
+    [Fact]
+    public async Task Ouvrir_sur_une_intervention_inconnue_renvoie_404()
+    {
+        // La distinction 404 / 400 doit rester nette : ressource absente contre
+        // transition refusée.
+        var reponse = await _client.PostAsync(
+            $"/api/interventions/{Guid.NewGuid()}/remplacement", null);
+
+        Assert.Equal(HttpStatusCode.NotFound, reponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Ouvrir_est_interdit_au_chef_d_equipe()
+    {
+        // L'opération écrit : Exploitation seulement, comme proposer et accepter.
+        var chef = await _fixture.ClientDeRoleAsync(
+            _client, RolesKlean.ChefEquipe, "chef.ouvrir@test.local");
+
+        var reponse = await chef.PostAsync(
+            $"/api/interventions/{_intervention.Id}/remplacement", null);
+
+        Assert.Equal(HttpStatusCode.Forbidden, reponse.StatusCode);
+        Assert.Empty(await Remplacements());
+    }
+
+    [Fact]
+    public async Task Ouvrir_sur_l_intervention_d_une_autre_entreprise_renvoie_404()
+    {
+        // Le filtre multi-tenant rend l'intervention invisible, donc inconnue.
+        // L'endpoint écrit : sans cette garde, Beta ouvrirait un remplacement sur
+        // une vacation d'Alpha.
+        var beta = await _fixture.ClientConnecteAsync(FixtureApi.AdminBeta);
+
+        var reponse = await beta.PostAsync(
+            $"/api/interventions/{_intervention.Id}/remplacement", null);
+
+        Assert.Equal(HttpStatusCode.NotFound, reponse.StatusCode);
+        Assert.Empty(await Remplacements());
+    }
+
+    [Fact]
+    public async Task Ouvrir_sans_jeton_renvoie_401()
+    {
+        var anonyme = _fixture.ClientAnonymeSansRedirection();
+
+        var reponse = await anonyme.PostAsync(
+            $"/api/interventions/{_intervention.Id}/remplacement", null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, reponse.StatusCode);
+    }
+
     // ------------------------------------------------------------- outillage
 
     /// <summary>Absence du titulaire sur la vacation, donc un remplacement à pourvoir.</summary>
@@ -439,6 +623,17 @@ public class RemplacementTests : IAsyncLifetime
         await CreerAbsence(_titulaire.Id, Mercredi, Mercredi);
 
         return Assert.Single(await Remplacements());
+    }
+
+    private async Task<RemplacementDto> Ouvrir(Guid interventionId, HttpStatusCode attendu)
+    {
+        var reponse = await _client.PostAsync(
+            $"/api/interventions/{interventionId}/remplacement", null);
+
+        Assert.Equal(attendu, reponse.StatusCode);
+
+        return await reponse.Content.ReadFromJsonAsync<RemplacementDto>()
+            ?? throw new InvalidOperationException("Réponse d'ouverture illisible.");
     }
 
     private async Task<RemplacementDto> Agir(Guid id, string action, object? corps = null)

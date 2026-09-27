@@ -181,6 +181,7 @@ if (blocSombre === null) {
     ['texte / surface', '--texte', '--surface', SeuilTexte],
     ['texte / surface-2', '--texte', '--surface-2', SeuilTexte],
     ['texte / brand-tint', '--texte', '--brand-tint', SeuilTexte],
+    ['alerte / brand-tint', '--alerte', '--brand-tint', SeuilTexte],
     ['texte / hachure', '--texte', '--hachure', SeuilTexte],
     ['texte-2 / canvas', '--texte-2', '--canvas', SeuilTexte],
     ['texte-2 / surface', '--texte-2', '--surface', SeuilTexte],
@@ -215,6 +216,36 @@ if (blocSombre === null) {
         `${ratio.toFixed(2)}:1 (seuil ${seuil.toFixed(1)})`,
       )
     }
+  }
+
+  /**
+   * Combinaisons **mesurées comme non conformes**, à ne jamais peindre.
+   *
+   * Elles n'ont pas leur place dans la liste ci-dessus : leur ratio ne dépend que
+   * des valeurs de §12, et aucun correctif de feuille de style ne les rendra
+   * conformes. Les inscrire en « doit passer » produirait un échec permanent.
+   *
+   * Le vérificateur ne sait pas quel fond se trouve derrière un texte : il ne
+   * peut donc pas les détecter dans le CSS. Il les rappelle, pour qu'on ne les
+   * réinvente pas — les deux premières ont déjà été introduites par inadvertance
+   * dans ce projet, et trouvées par cet outil.
+   */
+  const interdites = [
+    ['texte-2 sur brand-tint', '--texte-2', '--brand-tint'],
+    ['texte-3 sur surface', '--texte-3', '--surface'],
+    ['texte-3 sur canvas', '--texte-3', '--canvas'],
+  ]
+
+  titre('Combinaisons à ne jamais peindre — rappel mesuré, pas un échec')
+
+  for (const [libelle, avant, arriere] of interdites) {
+    const enClair = contraste(clair[avant], clair[arriere])
+    const enSombre = contraste(sombre[avant], sombre[arriere])
+
+    console.log(
+      `         ${libelle.padEnd(24)} clair ${enClair.toFixed(2)}:1 · `
+        + `sombre ${enSombre.toFixed(2)}:1   (seuil ${SeuilTexte.toFixed(1)})`,
+    )
   }
 }
 

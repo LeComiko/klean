@@ -66,6 +66,14 @@
   --titre-section-interligne: 26px;
   --titre-section-graisse: 600;
 
+  /* Score d'un candidat au remplacement. 26 px n'est pas dans l'échelle de §12 :
+     la taille vient de SPEC.md étape 15, qui la demande explicitement en chasse
+     fixe. Posée en jeton plutôt qu'en dur pour rester au même endroit que le
+     reste. */
+  --score-taille: 26px;
+  --score-interligne: 30px;
+  --score-graisse: 700;
+
   --corps-mobile-taille: 16px;
   --corps-mobile-interligne: 24px;
   --corps-mobile-graisse: 500;

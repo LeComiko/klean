@@ -15,11 +15,14 @@ public class InterventionsController : ControllerBase
 {
     private readonly KleanDbContext _db;
     private readonly AffectationService _affectation;
+    private readonly RemplacementService _remplacements;
 
-    public InterventionsController(KleanDbContext db, AffectationService affectation)
+    public InterventionsController(
+        KleanDbContext db, AffectationService affectation, RemplacementService remplacements)
     {
         _db = db;
         _affectation = affectation;
+        _remplacements = remplacements;
     }
 
     [Authorize(Roles = RolesKlean.InterneEtAgent)]
@@ -89,6 +92,37 @@ public class InterventionsController : ControllerBase
     /// la taille est bornée par le nombre d'agents actifs de l'entreprise, pas
     /// par la requête, et tronquer un classement le rend faux.
     /// </summary>
+    /// <summary>
+    /// Ouvre — ou retrouve — le remplacement de cette vacation.
+    ///
+    /// <b>Idempotent.</b> 200 quand un remplacement actif existait déjà, 201 quand
+    /// il vient d'être créé. Le corps est le même dans les deux cas : l'appelant
+    /// n'a pas à distinguer, c'est le point.
+    ///
+    /// Placé sur l'intervention et non sur <c>/api/remplacements</c> parce que
+    /// l'écran part de la vacation : il connaît l'identifiant de l'intervention et
+    /// justement pas celui du remplacement, qui peut ne pas exister. Un
+    /// <c>GET</c> puis un <c>POST</c> approximeraient cette opération en deux
+    /// appels, avec une fenêtre de course entre les deux — et
+    /// <c>GET /api/remplacements</c> n'a aucun filtre, il faudrait balayer.
+    ///
+    /// Réservé à <c>Exploitation</c> : l'opération écrit.
+    /// </summary>
+    [Authorize(Roles = RolesKlean.Exploitation)]
+    [HttpPost("{id:guid}/remplacement")]
+    public async Task<ActionResult<RemplacementDto>> OuvrirRemplacement(Guid id)
+    {
+        var resultat = await _remplacements.OuvrirAsync(id);
+
+        return resultat.Issue switch
+        {
+            IssueRemplacement.Introuvable => NotFound($"Intervention {id} inconnue."),
+            IssueRemplacement.Refusee => BadRequest(resultat.Message),
+            _ when resultat.Cree => StatusCode(StatusCodes.Status201Created, resultat.Valeur),
+            _ => Ok(resultat.Valeur)
+        };
+    }
+
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet("{id:guid}/candidats")]
     public async Task<ActionResult<IEnumerable<CandidatDto>>> Candidats(Guid id)
