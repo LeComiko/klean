@@ -1,0 +1,58 @@
+.cartes-kpi {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--espace-4);
+  margin-bottom: var(--espace-6);
+}
+
+.carte-kpi {
+  padding: var(--espace-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-carte);
+}
+
+.carte-kpi__etiquette {
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texte-2);
+}
+
+.carte-kpi__valeur {
+  margin: var(--espace-2) 0;
+  font-size: var(--titre-ecran-taille);
+  line-height: var(--titre-ecran-interligne);
+  font-weight: var(--titre-ecran-graisse);
+}
+
+.carte-kpi__detail {
+  color: var(--texte-2);
+}
+
+.carte-kpi--alerte {
+  /* Trait pointillé : la redondance non colorée du signal. */
+  border: 1px dashed var(--alerte);
+}
+
+.carte-kpi--alerte .carte-kpi__valeur,
+.carte-kpi--alerte .carte-kpi__detail {
+  color: var(--alerte);
+}
+
+.carte-kpi--alerte .carte-kpi__detail {
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .cartes-kpi {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .carte-kpi__detail {
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+}

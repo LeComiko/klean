@@ -1,0 +1,115 @@
+/* Le cadre défile horizontalement plutôt que de comprimer les colonnes : une
+   colonne de jour trop étroite couperait le nom du site. */
+.grille-planning__cadre {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-carte);
+}
+
+.grille-planning {
+  width: 100%;
+  min-width: 940px;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.grille-planning__col-agent {
+  width: 160px;
+}
+
+.grille-planning__coin,
+.grille-planning__jour {
+  padding: var(--espace-2) var(--espace-3);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-fort);
+  text-align: left;
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texte-2);
+}
+
+.grille-planning__jour {
+  border-left: 1px solid var(--border);
+}
+
+.grille-planning__jour-nom {
+  color: var(--texte);
+}
+
+.grille-planning__agent {
+  padding: var(--espace-3);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  font-weight: var(--corps-graisse);
+}
+
+.grille-planning__agent-nom,
+.grille-planning__agent-prenom,
+.grille-planning__charge,
+.grille-planning__surcharge {
+  display: block;
+}
+
+.grille-planning__agent-nom {
+  font-weight: 700;
+}
+
+.grille-planning__agent-prenom {
+  color: var(--texte-2);
+}
+
+.grille-planning__charge {
+  margin-top: var(--espace-1);
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  font-weight: var(--ligne-tableau-graisse);
+  color: var(--texte-2);
+}
+
+.grille-planning__charge--retard {
+  color: var(--retard);
+  font-weight: 700;
+}
+
+.grille-planning__surcharge {
+  color: var(--retard);
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.grille-planning__case {
+  padding: var(--espace-2);
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  /* Une case vide garde la hauteur d'une ligne confortable : la grille reste
+     lisible comme un calendrier, pas comme un tableau qui se tasse. */
+  min-height: var(--ligne-confortable);
+}
+
+.grille-planning__ligne-a-pourvoir .grille-planning__agent {
+  border-top: 2px solid var(--border-fort);
+  color: var(--alerte);
+}
+
+.grille-planning__ligne-a-pourvoir .grille-planning__case {
+  border-top: 2px solid var(--border-fort);
+}
+
+.grille-planning__vide {
+  padding: var(--espace-8);
+  color: var(--texte-2);
+  background: var(--surface);
+  border: 1px dashed var(--border-fort);
+  border-radius: var(--rayon-carte);
+  text-align: center;
+}

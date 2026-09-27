@@ -1,0 +1,78 @@
+.selecteur-semaine {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-2);
+}
+
+.selecteur-semaine__fleche {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ligne-compacte);
+  height: var(--ligne-compacte);
+  background: var(--surface);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  color: var(--texte);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.selecteur-semaine__fleche:hover:not(:disabled) {
+  background: var(--brand-tint);
+  border-color: var(--brand);
+}
+
+.selecteur-semaine__fleche:disabled,
+.selecteur-semaine__courante:disabled {
+  cursor: default;
+  color: var(--texte-2);
+}
+
+.selecteur-semaine__libelle {
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  text-align: center;
+}
+
+.selecteur-semaine__numero {
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texte-2);
+}
+
+.selecteur-semaine__plage {
+  font-weight: 600;
+}
+
+.selecteur-semaine__courante {
+  height: var(--ligne-compacte);
+  padding: 0 var(--espace-3);
+  background: var(--surface);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+}
+
+.selecteur-semaine__courante:hover:not(:disabled) {
+  background: var(--brand-tint);
+  border-color: var(--brand);
+}
+
+@media (max-width: 720px) {
+  .selecteur-semaine__fleche,
+  .selecteur-semaine__courante {
+    height: var(--cible-tactile);
+  }
+
+  .selecteur-semaine__fleche {
+    width: var(--cible-tactile);
+  }
+
+  .selecteur-semaine__plage {
+    font-size: var(--corps-mobile-taille);
+  }
+}

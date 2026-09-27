@@ -1,0 +1,99 @@
+.bloc-vacation {
+  padding: var(--espace-2);
+  background: var(--brand-tint);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--brand);
+  border-radius: var(--rayon-bloc);
+  font-size: var(--bloc-planning-taille);
+  line-height: var(--bloc-planning-interligne);
+  font-weight: var(--bloc-planning-graisse);
+  /* Le nom du site passe à la ligne au lieu d'être coupé. */
+  overflow-wrap: anywhere;
+}
+
+.bloc-vacation + .bloc-vacation {
+  margin-top: var(--espace-1);
+}
+
+.bloc-vacation__heure {
+  font-weight: 700;
+}
+
+.bloc-vacation__site {
+  color: var(--texte);
+  font-weight: 600;
+}
+
+/* --texte et non --texte-2 : sur --brand-tint, le gris secondaire tombe à
+   4,44:1, sous le seuil AA d'un cheveu. La hiérarchie avec la ligne du site
+   passe donc par la graisse, qui ne coûte aucun contraste. */
+.bloc-vacation__prestation {
+  color: var(--texte);
+  font-weight: var(--corps-graisse);
+}
+
+.bloc-vacation__pied {
+  display: flex;
+  gap: var(--espace-2);
+  margin-top: var(--espace-1);
+  color: var(--texte-2);
+}
+
+.bloc-vacation__statut {
+  padding: 0 var(--espace-1);
+  background: var(--surface);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-badge);
+}
+
+/* ---- Vacation non pourvue ----
+   Trois redondances, dont deux non colorées : le motif hachuré, le trait
+   pointillé, et le mot écrit. Un daltonien comme une impression en noir et
+   blanc gardent l'information. */
+.bloc-vacation--alerte {
+  border: 1px dashed var(--alerte);
+  border-left: 3px solid var(--alerte);
+  background: repeating-linear-gradient(
+    135deg,
+    var(--surface-2) 0,
+    var(--surface-2) 5px,
+    var(--hachure) 5px,
+    var(--hachure) 7px
+  );
+}
+
+/* Fond plein, et pas la transparence du bloc : posé directement sur les
+   hachures, le mot tombait à 4,42:1 en thème clair et 3,14:1 en sombre. Sur
+   --surface il tient 6,53:1 et 5,89:1. */
+.bloc-vacation__alerte {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espace-1);
+  margin-top: var(--espace-1);
+  padding: 0 var(--espace-1);
+  background: var(--surface);
+  border-radius: var(--rayon-badge);
+  color: var(--alerte);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  letter-spacing: 0.04em;
+}
+
+.bloc-vacation__pastille {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  background: var(--alerte);
+  border-radius: var(--rayon-pilule);
+}
+
+@media (max-width: 720px) {
+  .bloc-vacation {
+    /* Plancher mobile : jamais 11–12 px. */
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+    padding: var(--espace-3);
+  }
+}

@@ -101,7 +101,7 @@ KLEAN/
 │   │                    ServiceCourrielSmtp, DescripteurErreursFrancais
 │   ├── Middleware/      VerificationCsrf
 │   ├── Migrations/
-│   └── Scripts/         SQL de maintenance
+│   └── Scripts/         SQL de maintenance, jeu de démonstration
 └── frontend/src/
     ├── api/             wrappers fetch typés
     ├── auth/            AuthContext, RouteProtegee
@@ -480,6 +480,25 @@ if (string.IsNullOrEmpty(jeton)) { contexte.NoResult(); return Task.CompletedTas
 ```
 Trouvé par le test `L_entete_Authorization_n_est_plus_accepte`, après avoir
 affirmé l'inverse.
+
+**Dates en JavaScript : deux pièges symétriques, et une intégration continue en
+UTC est aveugle aux deux.** Le serveur envoie les jours à minuit **UTC**
+(`2026-09-07T00:00:00Z`), et l'écran raisonne en heure locale.
+
+- `date.toISOString().slice(0, 10)` sur un minuit **local** convertit en UTC
+  d'abord : à Paris en septembre (UTC+2) il rend le **6**. Faux à tout décalage
+  **positif**. `versChaineIso` lit les composantes locales à la main.
+- `new Date('2026-09-07')` — ou `new Date(horodatageDuServeur)` suivi de
+  `getDate()` — est lu comme de l'UTC, donc tombe la veille au soir à tout
+  décalage **négatif** : à Los Angeles, la grille commence le **6**. `jourIso`
+  extrait la sous-chaîne, `depuisChaineIso` construit une date locale.
+
+Les deux sabotages ont été joués. Le premier donne dix assertions rouges à Paris
+et **zéro en UTC comme en Amérique** ; le second décale les cinq colonnes du
+planning en Amérique et **ne montre rien à Paris ni en UTC**. Une série de tests
+qui ne tourne que sous `TZ=UTC` valide donc un code faux dans les deux sens.
+Éprouver `frontend/src/utils/dates.ts` dans plusieurs fuseaux, pas seulement
+celui de la machine.
 
 **Cookies `Secure` et `http://localhost` au navigateur.** Les trois cookies de
 session portent `Secure`. Chrome (depuis la 89) et Firefox traitent `localhost`

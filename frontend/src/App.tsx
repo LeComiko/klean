@@ -8,6 +8,7 @@ import { Sections } from './layout/sections'
 import type { Section } from './layout/sections'
 import { Chantier } from './pages/Chantier'
 import { Connexion } from './pages/Connexion'
+import { Planning } from './pages/Planning'
 
 /**
  * Écrans réels, par chemin. Ce qui n'y figure pas tombe sur `Chantier`.
@@ -15,7 +16,9 @@ import { Connexion } from './pages/Connexion'
  * C'est la couture des étapes suivantes : l'étape 14 ajoute ici
  * `'/planning': <Planning />`, et rien d'autre ne bouge.
  */
-const Ecrans: Record<string, ReactNode> = {}
+const Ecrans: Record<string, ReactNode> = {
+  '/planning': <Planning />,
+}
 
 function ecranDe(section: Section): ReactNode {
   return Ecrans[section.chemin] ?? <Chantier titre={section.libelle} />

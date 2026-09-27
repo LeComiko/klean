@@ -1,0 +1,37 @@
+.planning__attente {
+  display: block;
+  padding: var(--espace-8);
+  color: var(--texte-2);
+}
+
+.planning__erreur {
+  margin-bottom: var(--espace-4);
+  padding: var(--espace-3);
+  color: var(--alerte);
+  background: var(--surface-2);
+  border: 1px dashed var(--alerte);
+  border-radius: var(--rayon-bloc);
+}
+
+.planning__erreur-mot {
+  font-weight: 700;
+}
+
+/* ⚠️ Pas d'opacité pour mettre la grille en retrait pendant un chargement.
+   Mesuré : aucune valeur ne tient le seuil AA. À 0,55 le texte principal tombe
+   à 3,89:1, et même à 0,90 le texte secondaire reste à 4,29:1 — l'opacité
+   s'applique au conteneur, donc elle affaiblit aussi ce qui était déjà juste
+   au-dessus du seuil. La technique n'est pas réglable, elle est inutilisable.
+
+   Le chargement se signale autrement : un mot écrit à pleine lisibilité à côté
+   du sélecteur, aria-busy sur le conteneur, et les flèches désactivées. */
+.planning__attente-semaine {
+  display: block;
+  color: var(--texte-2);
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
