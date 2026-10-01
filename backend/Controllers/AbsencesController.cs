@@ -22,17 +22,35 @@ public class AbsencesController : ControllerBase
         _cycle = cycle;
     }
 
+    /// <summary>
+    /// Liste paginée, filtrable par <c>agentId</c> — la descente de niveau,
+    /// « les absences de cet agent ».
+    ///
+    /// ⚠️ Le filtre entre <b>avant</b> le comptage. Un total calculé sur la table
+    /// entière annoncerait « 40 absences » au-dessus d'une liste qui en montre trois,
+    /// et la pagination proposerait des pages vides.
+    ///
+    /// Un identifiant inconnu — ou appartenant à une autre entreprise, que les
+    /// filtres globaux écartent — rend une page vide, pas un 404 : une liste filtrée
+    /// sur rien reste une liste, et c'est une réponse, pas une erreur.
+    /// </summary>
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
-    public async Task<ActionResult<PageDto<AbsenceDto>>> Lister([FromQuery] PaginationDto pagination)
+    public async Task<ActionResult<PageDto<AbsenceDto>>> Lister(
+        [FromQuery] PaginationDto pagination,
+        [FromQuery] Guid? agentId)
     {
-        var requete = _db.Absences
-            .AsNoTracking()
-            .OrderByDescending(a => a.DateDebut);
+        var requete = _db.Absences.AsNoTracking();
+
+        if (agentId is not null)
+        {
+            requete = requete.Where(a => a.AgentId == agentId);
+        }
 
         var total = await requete.CountAsync();
 
         var absences = await requete
+            .OrderByDescending(a => a.DateDebut)
             .Skip(pagination.ANegliger)
             .Take(pagination.Taille)
             .Select(a => new AbsenceDto

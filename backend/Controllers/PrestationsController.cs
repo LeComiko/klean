@@ -16,17 +16,35 @@ public class PrestationsController : ControllerBase
 
     public PrestationsController(KleanDbContext db) => _db = db;
 
+    /// <summary>
+    /// Liste paginée, filtrable par <c>contratId</c> — la descente de niveau,
+    /// « les prestations de ce contrat ».
+    ///
+    /// ⚠️ Le filtre entre <b>avant</b> le comptage. Un total calculé sur la table
+    /// entière annoncerait « 40 prestations » au-dessus d'une liste qui en montre trois,
+    /// et la pagination proposerait des pages vides.
+    ///
+    /// Un identifiant inconnu — ou appartenant à une autre entreprise, que les
+    /// filtres globaux écartent — rend une page vide, pas un 404 : une liste filtrée
+    /// sur rien reste une liste, et c'est une réponse, pas une erreur.
+    /// </summary>
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
-    public async Task<ActionResult<PageDto<PrestationDto>>> Lister([FromQuery] PaginationDto pagination)
+    public async Task<ActionResult<PageDto<PrestationDto>>> Lister(
+        [FromQuery] PaginationDto pagination,
+        [FromQuery] Guid? contratId)
     {
-        var requete = _db.Prestations
-            .AsNoTracking()
-            .OrderBy(p => p.Libelle);
+        var requete = _db.Prestations.AsNoTracking();
+
+        if (contratId is not null)
+        {
+            requete = requete.Where(p => p.ContratId == contratId);
+        }
 
         var total = await requete.CountAsync();
 
         var prestations = await requete
+            .OrderBy(p => p.Libelle)
             .Skip(pagination.ANegliger)
             .Take(pagination.Taille)
             .Select(p => new PrestationDto

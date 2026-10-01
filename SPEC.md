@@ -1112,6 +1112,59 @@ clic reste à faire.
 - **Les filtres de liste** que la descente de niveau demande, sur les quatre
   endpoints concernés — c'est du backend, et c'est ce qui manque au lot A
 
+**Lot B fait.** Sept ressources en tout, toujours aucun fichier de page écrit par
+ressource. Côté serveur, quatre endpoints acceptent désormais le filtre de parenté —
+`?clientId=` sur les sites, `?siteId=` sur les contrats, `?contratId=` sur les
+prestations, `?agentId=` sur les absences — et le filtre entre **avant le comptage**,
+faute de quoi l'écran annoncerait quarante lignes au-dessus d'une liste qui en montre
+trois. 16 tests backend de plus, 123 frontend de plus, 18 sabotages dont 17 détectés.
+
+La **saisie d'une absence existe**, et c'est ce qui change le produit : le panneau de
+remplacement de l'étape 15 cesse de dépendre du script de démonstration.
+
+**Trois choses que le lot a tranchées, et une qu'il a trouvée.**
+
+*Le motif d'un arrêt maladie disparaît du formulaire.* `masquerSi` dans la
+description, et `corpsDe` envoie `null` — les deux moitiés sont nécessaires. La
+seconde est la moins évidente : sans elle, saisir un motif **puis** basculer le type
+sur « Maladie » enverrait ce texte, le serveur refuserait en parlant de donnée de
+santé, et l'écran n'afficherait plus le champ dont le refus parle. Mesuré contre le
+serveur : le `PUT` portant `motif: null` **efface** un motif déjà enregistré, il ne le
+laisse pas en place. L'étape 17 ajoutera `AccidentTravail` à la même liste.
+
+*L'étiquette d'une ressource ne peut pas être une clé étrangère.* Elle sert deux fois,
+et la seconde contraint : c'est elle qui libelle les options de la liste déroulante
+d'un **enfant**. Sur l'écran des prestations, le choix des contrats n'a pas chargé les
+sites et n'aurait affiché que des identifiants. D'où `frequence` pour un contrat, et
+une invariante qui l'empêche de redevenir une référence. La contrepartie est assumée :
+deux contrats d'un même site peuvent porter la même fréquence, et c'est la descente de
+niveau qui rend ce choix inutile dans le parcours normal — arrivé par le contrat, le
+formulaire part avec lui déjà rempli.
+
+*Les absences ne sont pas des données de référence.* Un responsable les écrit, le
+serveur l'y autorise, et leur appliquer les droits des données de référence lui aurait
+présenté un formulaire en lecture seule sur la seule chose que l'étape 15 lui demande
+de saisir. Le test qui affirmait « le Responsable n’écrit rien » a donc changé — non
+parce que la matrice s'est ouverte, mais parce que la liste des descriptions a dépassé
+les seules données de référence.
+
+⚠️ *Deux fois dans la même séance, un gris de marque a été posé comme couleur de
+texte.* `brand-strong` mesure **12,47:1** sur `surface` en thème clair et **2,29:1**
+en sombre ; sur `brand-tint`, **10,42:1** et **2,03:1**. Le thème clair laisse passer,
+le sombre s'effondre — et l'œil ne le voit pas en relisant du CSS. Les deux liens sont
+repassés en `texte`, distingués par la graisse et le soulignement, ce que §12 prescrit
+justement pour un niveau de plus. Les quatre paires sont désormais mesurées par
+`npm run verifier`, donc inoubliables.
+
+⚠️ **Non vérifié, de nouveau.** Le critère de validation — créer une entreprise de
+zéro par l'interface seule — n'a toujours pas été exercé dans un navigateur. Ce qui
+est prouvé est le contrat, rejoué contre le vrai serveur avec les corps exacts que
+`valeurs.ts` produit : un contrat sans échéance à `dateFin: null`, une durée en nombre
+JSON, un produit sans référence fournisseur, un seuil décimal, les dates relues à
+minuit UTC, le refus du motif de maladie puis son acceptation à `null`, et les deux
+refus de suppression qui comptent leurs enfants et nomment la sortie. Le clic reste à
+faire.
+
 **Décisions à respecter**
 
 La **matrice des droits de l'étape 8** pilote l'affichage, pas seulement le

@@ -112,6 +112,26 @@
   border-color: var(--alerte);
 }
 
+/* Le lien de descente de niveau porte la forme des boutons voisins : c'est une
+   action de la ligne, pas un lien dans une phrase. Un <a> n'est pas un <button> —
+   l'alignement vertical que le second obtient de lui-même doit lui être rendu. */
+.tableau-ressource__action--lien {
+  display: inline-flex;
+  align-items: center;
+  /* ⚠️ Aucune couleur propre, et c'est une correction : `brand-strong` mesure
+     **2,29:1** sur `surface` en thème sombre, le lien y aurait été illisible. Il
+     hérite donc de `texte` comme ses voisins — ce qui est d'ailleurs juste, puisque
+     c'est une action de la ligne et qu'elle doit en avoir la forme. La bordure et le
+     libellé suffisent à l'identifier ; `text-decoration: none` retire le soulignement
+     que le navigateur met sur un <a>, et qui jurerait entre deux boutons. */
+  text-decoration: none;
+}
+
+.tableau-ressource__action--lien:hover {
+  background: var(--brand-tint);
+  border-color: var(--brand);
+}
+
 .tableau-ressource__question {
   font-size: var(--ligne-tableau-taille);
   font-weight: 600;

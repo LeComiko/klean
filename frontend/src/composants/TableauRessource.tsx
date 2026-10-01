@@ -1,6 +1,15 @@
+import { Link } from 'react-router-dom'
+
 import type { ColonneRessource } from '../types/reference'
 import type { Ressource } from '../api/ressources'
 import './TableauRessource.css'
+
+/** Un lien vers la liste des enfants d'une ligne. */
+export interface LienEnfant {
+  cle: string
+  libelle: string
+  vers: string
+}
 
 interface Proprietes {
   colonnes: readonly ColonneRessource[]
@@ -17,6 +26,24 @@ interface Proprietes {
 
   /** Libellé d'une ligne, pour les intitulés de boutons et la confirmation. */
   etiquette: (ligne: Ressource) => string
+
+  /**
+   * Désignation de la ressource avec son article — « le contrat », « l'absence ».
+   *
+   * ⚠️ Elle est indispensable à la confirmation, et pas décorative. Sur l'écran des
+   * contrats, l'étiquette d'une ligne est sa fréquence : « Supprimer « Lundi,
+   * mercredi, vendredi » ? » ne dit pas ce qui disparaît. « Supprimer le contrat
+   * « Lundi, mercredi, vendredi » ? » le dit.
+   */
+  designation: string
+
+  /**
+   * Liens de descente de niveau d'une ligne — « Voir les sites » sur un client.
+   *
+   * Construits par la page, qui connaît les ressources enfants et leurs chemins : le
+   * tableau ne sait rien du domaine, comme pour `rendu`.
+   */
+  liensEnfants?: (ligne: Ressource) => readonly LienEnfant[]
 
 
   /**
@@ -58,6 +85,8 @@ export function TableauRessource({
   choisie,
   rendu,
   etiquette,
+  designation,
+  liensEnfants,
   libelleModifier,
   onModifier,
   onSupprimer,
@@ -66,7 +95,8 @@ export function TableauRessource({
   enCours,
   videMessage,
 }: Proprietes) {
-  const actions = onModifier !== undefined || onSupprimer !== undefined
+  const actions
+    = onModifier !== undefined || onSupprimer !== undefined || liensEnfants !== undefined
 
   if (lignes.length === 0) {
     return <p className="tableau-ressource__vide">{videMessage}</p>
@@ -150,7 +180,7 @@ export function TableauRessource({
                             supprimée, elle est refusée en 409 avec un message qui
                             nomme ce qui bloque. */}
                         <span className="tableau-ressource__question">
-                          Supprimer « {etiquette(ligne)} » ?
+                          Supprimer {designation} « {etiquette(ligne)} » ?
                         </span>
                         <button
                           className="tableau-ressource__action tableau-ressource__action--danger"
@@ -175,6 +205,18 @@ export function TableauRessource({
                       </>
                     ) : (
                       <>
+                        {/* La descente de niveau d'abord : c'est l'action de
+                            parcours, et elle précède celles qui modifient. */}
+                        {(liensEnfants?.(ligne) ?? []).map((lien) => (
+                          <Link
+                            key={lien.cle}
+                            className="tableau-ressource__action tableau-ressource__action--lien"
+                            to={lien.vers}
+                          >
+                            {lien.libelle}
+                            <span className="pour-lecteur-d-ecran"> de {etiquette(ligne)}</span>
+                          </Link>
+                        ))}
                         {onModifier !== undefined && (
                           <button
                             className="tableau-ressource__action"

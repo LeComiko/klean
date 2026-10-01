@@ -1,8 +1,25 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
-import type { ChampRessource, ColonneRessource } from '../types/reference.ts'
-import { corpsDe, departCreation, departOuverture, rendu, texteDe, Vide } from './valeurs.ts'
+import type {
+  ChampRessource,
+  ColonneRessource,
+  DescriptionRessource,
+} from '../types/reference.ts'
+import {
+  accorder,
+  corpsDe,
+  departCreation,
+  departOuverture,
+  designer,
+  filtreDe,
+  majuscule,
+  masque,
+  rendu,
+  texteDe,
+  tousLes,
+  Vide,
+} from './valeurs.ts'
 
 /**
  * Les conversions de `Reference.tsx`, éprouvées à part.
@@ -23,6 +40,23 @@ const Champs: readonly ChampRessource[] = [
   { nom: 'archive', libelle: 'Archivé', type: 'booleen' },
   { nom: 'clientId', libelle: 'Client', type: 'reference', reference: 'clients', requis: true },
   { nom: 'consignes', libelle: 'Consignes', type: 'texteLong' },
+]
+
+/**
+ * Un champ masquable, calqué sur le motif d'une absence : il disparaît quand le type
+ * vaut `Maladie`, parce qu'un motif d'arrêt maladie est une donnée de santé au sens
+ * de l'article 9 du RGPD (SPEC.md étape 16 bis).
+ */
+const ChampsAvecMasque: readonly ChampRessource[] = [
+  { nom: 'agentId', libelle: 'Agent', type: 'reference', reference: 'agents', requis: true },
+  { nom: 'type', libelle: 'Type', type: 'choix', requis: true, choix: ['Maladie', 'Conge'] },
+  {
+    nom: 'motif',
+    libelle: 'Motif',
+    type: 'texteLong',
+    longueurMax: 500,
+    masquerSi: { champ: 'type', vaut: ['Maladie'] },
+  },
 ]
 
 describe('departCreation', () => {
@@ -277,5 +311,189 @@ describe('rendu', () => {
       // conversion fautive.
       assert.equal(cellule({ dateEmbauche: '2026-08-15T00:00:00Z' }, colonne), '15 août 2026')
     })
+  })
+})
+
+describe('departCreation avec des valeurs imposées', () => {
+  test('la valeur imposée l’emporte sur le vide', () => {
+    // La descente de niveau : arrivé sur « les sites de ce client », le formulaire
+    // part avec ce client choisi.
+    const depart = departCreation(Champs, { clientId: 'client-1' })
+
+    assert.equal(depart.clientId, 'client-1')
+  })
+
+  test('la valeur imposée l’emporte sur le défaut déclaré', () => {
+    // Y compris quand elle est « fausse » au sens de JavaScript : un `false` imposé
+    // sur un champ dont le défaut vaut `true` doit rester `false`, sinon l'agent
+    // serait créé actif alors que l'appelant demandait l'inverse.
+    //
+    // ⚠️ Ce test ne distingue **pas** les deux écritures possibles de `departCreation`,
+    // et c'est dit ici pour que personne ne le croie : `??` ne retombe que sur `null`
+    // et `undefined`, qu'une `ValeursFormulaire` ne peut pas porter. Le sabotage qui
+    // remplace le `in` par un `??` reste donc vert. Aucune entrée accessible aux types
+    // du projet ne les sépare.
+    assert.equal(departCreation(Champs, { actif: false }).actif, false)
+    assert.equal(departCreation(Champs, { nom: '' }).nom, '')
+  })
+
+  test('une clé imposée qui ne correspond à aucun champ est ignorée', () => {
+    // Le corps est construit depuis la description : une clé parasite ne doit pas
+    // s'introduire par cette porte non plus.
+    const depart = departCreation(Champs, { entrepriseId: 'autre-entreprise' })
+
+    assert.equal('entrepriseId' in depart, false)
+  })
+
+  test('sans valeurs imposées, le comportement d’avant est inchangé', () => {
+    assert.deepEqual(departCreation(Champs), departCreation(Champs, {}))
+    assert.equal(departCreation(Champs).actif, true)
+  })
+})
+
+describe('masque', () => {
+  const motif = ChampsAvecMasque[2]
+
+  test('un champ sans condition n’est jamais masqué', () => {
+    assert.equal(masque(Champs[0], { nom: 'X' }), false)
+  })
+
+  test('le champ disparaît quand le pivot porte une valeur interdite', () => {
+    assert.equal(masque(motif, { type: 'Maladie' }), true)
+  })
+
+  test('il reste affiché sur les autres valeurs, et sur aucune valeur', () => {
+    assert.equal(masque(motif, { type: 'Conge' }), false)
+    assert.equal(masque(motif, { type: '' }), false)
+    assert.equal(masque(motif, {}), false)
+  })
+
+  test('la comparaison est exacte, pas une inclusion de texte', () => {
+    // « Maladie professionnelle » n'est pas « Maladie » : une comparaison par
+    // `includes` sur la chaîne masquerait des types que l'énumération ne nomme pas.
+    assert.equal(masque(motif, { type: 'MaladieProfessionnelle' }), false)
+  })
+})
+
+describe('corpsDe et les champs masqués', () => {
+  test('un champ masqué part à null, même s’il portait du texte', () => {
+    // ⚠️ LE test du masquage. Le parcours réel : saisir un motif, puis basculer le
+    // type sur « Maladie ». Sans cette règle, le texte part quand même — le serveur
+    // refuse en 400 en parlant de donnée de santé, l'écran n'affiche plus le champ
+    // dont le refus parle, et la donnée a quitté le navigateur pour rien.
+    const corps = corpsDe(ChampsAvecMasque, {
+      agentId: 'agent-1',
+      type: 'Maladie',
+      motif: 'Lombalgie',
+    })
+
+    assert.equal(corps.motif, null)
+    assert.equal(corps.type, 'Maladie')
+    assert.equal(corps.agentId, 'agent-1')
+  })
+
+  test('le même champ part normalement quand il n’est pas masqué', () => {
+    const corps = corpsDe(ChampsAvecMasque, {
+      agentId: 'agent-1',
+      type: 'Conge',
+      motif: 'Congé payé',
+    })
+
+    assert.equal(corps.motif, 'Congé payé')
+  })
+
+  test('la clé du champ masqué reste présente, à null', () => {
+    // Un `PUT` construit depuis ce corps doit **effacer** un motif déjà enregistré,
+    // pas le laisser en place. Omettre la clé laisserait la valeur précédente.
+    const corps = corpsDe(ChampsAvecMasque, { type: 'Maladie', motif: 'à effacer' })
+
+    assert.ok('motif' in corps)
+    assert.equal(corps.motif, null)
+  })
+})
+
+describe('filtreDe', () => {
+  const sites: DescriptionRessource = {
+    cle: 'sites',
+    chemin: '/sites',
+    route: '/api/sites',
+    libelle: 'Sites',
+    singulier: 'site',
+    genre: 'masculin',
+    sousTitre: 'Lieux',
+    etiquette: 'nom',
+    colonnes: [],
+    champs: Champs,
+    rolesLecture: [],
+    rolesEcriture: [],
+    parent: { ressource: 'clients', champ: 'clientId' },
+  }
+
+  const clients: DescriptionRessource = { ...sites, cle: 'clients', parent: undefined }
+
+  function avec(parametres: Record<string, string>) {
+    return (nom: string): string | null => parametres[nom] ?? null
+  }
+
+  test('le paramètre de la parenté devient le filtre', () => {
+    assert.deepEqual(filtreDe(sites, avec({ clientId: 'client-1' })), {
+      champ: 'clientId',
+      valeur: 'client-1',
+    })
+  })
+
+  test('une ressource sans parent n’a jamais de filtre', () => {
+    assert.equal(filtreDe(clients, avec({ clientId: 'client-1' })), undefined)
+  })
+
+  test('un paramètre absent ne filtre rien', () => {
+    assert.equal(filtreDe(sites, avec({})), undefined)
+  })
+
+  test('un paramètre vide ne filtre rien non plus', () => {
+    // ⚠️ Mesuré côté serveur, et c'est la raison d'être de cette assertion : un
+    // `Guid?` recevant `?clientId=` est lié à `null` par ASP.NET, qui rend donc la
+    // liste entière (FiltresListeTests). Si l'écran y voyait un filtre, il afficherait
+    // « Sites de … » au-dessus de tous les sites de l'entreprise.
+    assert.equal(filtreDe(sites, avec({ clientId: '' })), undefined)
+    assert.equal(filtreDe(sites, avec({ clientId: '   ' })), undefined)
+  })
+
+  test('un autre paramètre de la requête est ignoré', () => {
+    // Seul le champ de la parenté compte : un `?siteId=` sur l'écran des sites ne
+    // doit pas filtrer les sites par eux-mêmes.
+    assert.equal(filtreDe(sites, avec({ siteId: 'site-1', page: '3' })), undefined)
+  })
+})
+
+describe('les formules de langue', () => {
+  test('l’article s’accorde, et s’élide devant une voyelle', () => {
+    assert.equal(designer('client', 'masculin'), 'le client')
+    assert.equal(designer('prestation', 'feminin'), 'la prestation')
+    // ⚠️ Le cas qui impose l'élision : « la absence » se lit dans la confirmation de
+    // suppression, et l'écran des absences est celui du lot B.
+    assert.equal(designer('absence', 'feminin'), 'l’absence')
+    assert.equal(designer('agent', 'masculin'), 'l’agent')
+  })
+
+  test('l’apostrophe est typographique, comme partout ailleurs', () => {
+    assert.ok(designer('absence', 'feminin').includes('’'))
+    assert.equal(designer('absence', 'feminin').includes("'"), false)
+  })
+
+  test('le participe passé s’accorde', () => {
+    assert.equal(accorder('masculin'), '')
+    assert.equal(accorder('feminin'), 'e')
+  })
+
+  test('le déterminant pluriel s’accorde, et le pluriel n’est pas fabriqué', () => {
+    assert.equal(tousLes('masculin'), 'tous les')
+    assert.equal(tousLes('feminin'), 'toutes les')
+  })
+
+  test('la majuscule ne touche que la première lettre', () => {
+    assert.equal(majuscule('le contrat'), 'Le contrat')
+    assert.equal(majuscule('l’absence'), 'L’absence')
+    assert.equal(majuscule(''), '')
   })
 })

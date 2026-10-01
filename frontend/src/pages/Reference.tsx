@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import {
   creerRessource,
@@ -17,13 +18,19 @@ import { EnTetePage } from '../composants/EnTetePage'
 import { Pagination } from '../composants/Pagination'
 import { SousNavigation } from '../composants/SousNavigation'
 import { TableauRessource } from '../composants/TableauRessource'
-import { descriptionDe, descriptionsLisibles } from '../reference/descriptions'
+import type { LienEnfant } from '../composants/TableauRessource'
+import { descriptionDe, descriptionsLisibles, enfantsDe } from '../reference/descriptions'
 import {
+  accorder,
   corpsDe,
   departCreation,
   departOuverture,
+  designer,
+  filtreDe,
+  majuscule,
   rendu,
   texteDe,
+  tousLes,
 } from '../reference/valeurs'
 import { aUnRole } from '../types/auth'
 import type { ColonneRessource, DescriptionRessource } from '../types/reference'
@@ -64,17 +71,53 @@ function messageDe(echec: unknown, repli: string): string {
 /**
  * L'écran d'une ressource de référence, **quelle qu'elle soit**.
  *
- * Un seul motif, piloté par `reference/descriptions.ts`. Six écrans écrits à la
- * main auraient six fois l'occasion de diverger, et la divergence prend une forme
+ * Un seul motif, piloté par `reference/descriptions.ts`. Sept écrans écrits à la
+ * main auraient sept fois l'occasion de diverger, et la divergence prend une forme
  * précise : un bouton d'enregistrement qui répond 403.
  *
- * Comme `Planning.tsx`, aucun état `chargement` n'est stocké : chaque résultat
- * porte la clé de la demande à laquelle il répond, et l'on charge tant que ni le
- * résultat ni l'échec ne portent la clé courante. Un booléen posé à la main dans un
- * effet déclenche un rendu de plus et peut se désynchroniser — c'est ce que signale
- * `react(set-state-in-effect)`, qui avait raison à l'étape 14.
+ * Cette enveloppe ne fait qu'une chose : lire le filtre de **descente de niveau**
+ * dans la chaîne de requête, et **remonter l'écran** quand il change.
+ *
+ * ⚠️ La remontée par `key` n'est pas un raffinement. La pagination, le formulaire
+ * ouvert et la confirmation de suppression en cours appartiennent à une liste ; les
+ * traîner d'une liste filtrée à une autre afficherait « page 3 » sur une liste qui
+ * n'en a qu'une, ou une confirmation portant sur une ligne devenue invisible. C'est
+ * la même raison qui fait qu'`App.tsx` remonte déjà cet écran d'une ressource à
+ * l'autre.
  */
 export function Reference({ description, fratrie }: Proprietes) {
+  const [parametres] = useSearchParams()
+  const filtre = filtreDe(description, (nom) => parametres.get(nom))
+
+  return (
+    <EcranReference
+      key={filtre?.valeur ?? 'tout'}
+      description={description}
+      fratrie={fratrie}
+      filtreChamp={filtre?.champ}
+      filtreValeur={filtre?.valeur}
+    />
+  )
+}
+
+interface ProprietesEcran extends Proprietes {
+  /**
+   * Le filtre est passé en **deux primitives**, et non en objet.
+   *
+   * ⚠️ `filtreDe` rend un objet neuf à chaque rendu : placé dans les dépendances de
+   * l'effet de chargement, il le relancerait indéfiniment. Deux chaînes se comparent
+   * par valeur, donc l'effet déclare honnêtement ce dont il dépend.
+   */
+  filtreChamp?: string
+  filtreValeur?: string
+}
+
+function EcranReference({
+  description,
+  fratrie,
+  filtreChamp,
+  filtreValeur,
+}: ProprietesEcran) {
   const { profil } = useAuth()
 
   const [page, setPage] = useState(1)
@@ -94,7 +137,7 @@ export function Reference({ description, fratrie }: Proprietes) {
 
   const [choix, setChoix] = useState<Record<string, Choix>>({})
 
-  const cle = `${description.cle}#${String(page)}#${String(rechargement)}`
+  const cle = `${description.cle}#${filtreValeur ?? ''}#${String(page)}#${String(rechargement)}`
   const enErreur = echouee?.cle === cle
   const chargement = obtenue?.cle !== cle && !enErreur
 
@@ -102,7 +145,17 @@ export function Reference({ description, fratrie }: Proprietes) {
   useEffect(() => {
     const controleur = new AbortController()
 
-    listerRessource<Ressource>(description.route, page, TailleParDefaut, controleur.signal)
+    const filtre = filtreChamp !== undefined && filtreValeur !== undefined
+      ? { champ: filtreChamp, valeur: filtreValeur }
+      : undefined
+
+    listerRessource<Ressource>(
+      description.route,
+      page,
+      TailleParDefaut,
+      controleur.signal,
+      filtre,
+    )
       .then((recue) => {
         setObtenue({ cle, page: recue })
       })
@@ -116,12 +169,13 @@ export function Reference({ description, fratrie }: Proprietes) {
     return () => {
       controleur.abort()
     }
-  }, [cle, description.route, description.libelle, page])
+  }, [cle, description.route, description.libelle, page, filtreChamp, filtreValeur])
 
   // ---- Les listes déroulantes des champs de référence ----
   //
   // Chargées une fois par ressource affichée, et non à l'ouverture du formulaire :
-  // les noms des clients servent aussi à rendre la colonne « Client » du tableau.
+  // les noms des clients servent aussi à rendre la colonne « Client » du tableau, et
+  // à nommer le parent dans le bandeau de descente de niveau.
   useEffect(() => {
     const controleur = new AbortController()
 
@@ -166,6 +220,7 @@ export function Reference({ description, fratrie }: Proprietes) {
 
   const ecriture = profil !== null && aUnRole(profil, description.rolesEcriture)
   const lectureSeule = !ecriture
+  const designation = designer(description.singulier, description.genre)
 
   const fermer = useCallback(() => {
     setEdition(null)
@@ -187,6 +242,27 @@ export function Reference({ description, fratrie }: Proprietes) {
     return texteDe(ligne[description.etiquette]) ?? description.singulier
   }
 
+  /**
+   * Les liens de descente de niveau d'une ligne.
+   *
+   * ⚠️ Filtrés par les rôles de lecture de l'**enfant**, et non par ceux de cet
+   * écran. Un `ClientSyndic` lit les sites d'un client mais pas leurs contrats : lui
+   * proposer « Voir les contrats » depuis la liste des sites serait un lien vers un
+   * 403, c'est-à-dire la faute d'interface que tout ce motif existe pour éviter.
+   */
+  function liensEnfants(ligne: Ressource): readonly LienEnfant[] {
+    if (profil === null) return []
+
+    return enfantsDe(description.cle)
+      .filter((enfant) => aUnRole(profil, enfant.rolesLecture))
+      .map((enfant) => ({
+        cle: enfant.cle,
+        libelle: `Voir les ${enfant.libelle.toLowerCase()}`,
+        // `parent.champ` existe forcément : c'est lui qui a fait trouver cet enfant.
+        vers: `${enfant.chemin}?${enfant.parent?.champ ?? ''}=${encodeURIComponent(ligne.id)}`,
+      }))
+  }
+
   async function enregistrer(valeurs: ValeursFormulaire) {
     if (edition === null) return
 
@@ -198,10 +274,15 @@ export function Reference({ description, fratrie }: Proprietes) {
     try {
       if (edition.mode === 'creation') {
         await creerRessource<Ressource>(description.route, corps)
-        setAnnonce(`${majuscule(description.singulier)} créé${accord(description)}.`)
+        setAnnonce(`${majuscule(description.singulier)} créé${accorder(description.genre)}.`)
       } else {
         await modifierRessource(description.route, edition.ligne.id, corps)
-        setAnnonce(`« ${etiquetteDe(edition.ligne)} » enregistré${accord(description)}.`)
+        // La ressource est nommée, pas seulement la ligne : « Lundi, mercredi,
+        // vendredi enregistré » ne dit pas de quoi il s'agit.
+        setAnnonce(
+          `${majuscule(designation)} « ${etiquetteDe(edition.ligne)} » `
+          + `enregistré${accorder(description.genre)}.`,
+        )
       }
 
       setAlerte(null)
@@ -223,7 +304,7 @@ export function Reference({ description, fratrie }: Proprietes) {
     try {
       await supprimerRessource(description.route, ligne.id)
 
-      setAnnonce(`« ${nom} » supprimé${accord(description)}.`)
+      setAnnonce(`${majuscule(designation)} « ${nom} » supprimé${accorder(description.genre)}.`)
       setAConfirmer(null)
 
       // Le formulaire pouvait montrer la ligne qui vient de disparaître.
@@ -254,6 +335,23 @@ export function Reference({ description, fratrie }: Proprietes) {
     tronqueesParChamp[champ.nom] = choix[champ.reference]?.tronquee === true
   }
 
+  // ---- La descente de niveau ----
+  const parent = description.parent
+  const filtre = filtreChamp !== undefined && filtreValeur !== undefined
+  const descriptionParente = parent === undefined ? undefined : descriptionDe(parent.ressource)
+
+  /**
+   * Le parent déjà choisi dans le formulaire de création.
+   *
+   * ⚠️ Ce n'est pas du confort : sur l'écran des prestations, la liste déroulante des
+   * contrats les désigne par leur fréquence, et deux contrats peuvent la partager.
+   * Venir du contrat lui-même est le seul chemin où ce choix ne se pose pas.
+   */
+  const imposees: ValeursFormulaire
+    = filtreChamp !== undefined && filtreValeur !== undefined
+      ? { [filtreChamp]: filtreValeur }
+      : {}
+
   return (
     <>
       <EnTetePage
@@ -277,6 +375,20 @@ export function Reference({ description, fratrie }: Proprietes) {
       />
 
       <SousNavigation ressources={ressourcesDeLaSection} />
+
+      {filtre && parent !== undefined && (
+        <p className="reference__filtre">
+          <span className="reference__filtre-texte">
+            {description.libelle} de « {libelleParent(parent.ressource, filtreValeur)} »
+          </span>
+          {/* Le retour à la liste complète est indispensable : sans lui, la seule
+              sortie d'une liste filtrée est la sous-navigation, qui ramène sur la
+              même ressource et garde donc la chaîne de requête. */}
+          <Link className="reference__filtre-tout" to={description.chemin}>
+            Voir {tousLes(description.genre)} {description.libelle.toLowerCase()}
+          </Link>
+        </p>
+      )}
 
       {annonce !== null && <output className="reference__annonce">{annonce}</output>}
 
@@ -307,6 +419,8 @@ export function Reference({ description, fratrie }: Proprietes) {
               choisie={edition?.mode === 'ouverture' ? edition.ligne.id : null}
               rendu={celluleDe}
               etiquette={etiquetteDe}
+              designation={designation}
+              liensEnfants={liensEnfants}
               libelleModifier={lectureSeule ? 'Voir' : 'Modifier'}
               onModifier={(ligne) => {
                 setEdition({ mode: 'ouverture', ligne })
@@ -317,11 +431,7 @@ export function Reference({ description, fratrie }: Proprietes) {
               aConfirmer={aConfirmer}
               onDemanderSuppression={ecriture ? setAConfirmer : undefined}
               enCours={suppressionEnCours}
-              videMessage={
-                ecriture
-                  ? `Aucun ${description.singulier} pour l’instant. Le bouton « Nouveau ${description.singulier} » ouvre le formulaire.`
-                  : `Aucun ${description.singulier} à afficher.`
-              }
+              videMessage={messageVide(description, ecriture, filtre, descriptionParente)}
             />
 
             <Pagination
@@ -351,7 +461,7 @@ export function Reference({ description, fratrie }: Proprietes) {
               champs={description.champs}
               depart={
                 edition.mode === 'creation'
-                  ? departCreation(description.champs)
+                  ? departCreation(description.champs, imposees)
                   : departOuverture(description.champs, edition.ligne)
               }
               options={optionsParChamp}
@@ -369,11 +479,30 @@ export function Reference({ description, fratrie }: Proprietes) {
   )
 }
 
-function majuscule(mot: string): string {
-  return mot.charAt(0).toUpperCase() + mot.slice(1)
-}
+/**
+ * Le message d'une liste vide.
+ *
+ * Il change sous filtre, et ce n'est pas cosmétique : « Aucun site pour l'instant »
+ * au-dessus d'un bandeau « Sites de Bellevue » laisse croire que l'entreprise n'a
+ * aucun site, alors qu'elle n'en a aucun **sur ce client**.
+ */
+function messageVide(
+  description: DescriptionRessource,
+  ecriture: boolean,
+  filtre: boolean,
+  parente: DescriptionRessource | undefined,
+): string {
+  const quoi = filtre
+    ? `Aucun${accorder(description.genre)} ${description.singulier} sur ${
+      parente === undefined ? 'ce parent' : designer(parente.singulier, parente.genre)
+    }`
+    : `Aucun${accorder(description.genre)} ${description.singulier} pour l’instant`
 
-/** Accord du participe passé : « créé » ou « créée ». */
-function accord(description: DescriptionRessource): string {
-  return description.genre === 'feminin' ? 'e' : ''
+  if (!ecriture) return `${quoi}.`
+
+  const ouvre = `Le bouton « Nouveau ${description.singulier} » ouvre le formulaire`
+
+  return filtre && parente !== undefined
+    ? `${quoi}. ${ouvre}, avec ${designer(parente.singulier, parente.genre)} déjà choisi.`
+    : `${quoi}. ${ouvre}.`
 }

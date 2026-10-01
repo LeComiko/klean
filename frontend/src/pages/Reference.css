@@ -43,6 +43,46 @@
   color: var(--texte);
 }
 
+/* Le bandeau de descente de niveau. Il porte la marque et non l'alerte : une liste
+   restreinte n'est pas un avertissement, c'est un état de navigation — et la terre
+   cuite est réservée au « non pourvu » et au focus (§12).
+
+   Le mot « de » suffit à le rendre lisible sans couleur : « Sites de « Résidence
+   Bellevue » », puis la sortie. La couleur ne porte jamais seule l'information. */
+.reference__filtre {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espace-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--espace-4);
+  padding: var(--espace-3) var(--espace-4);
+  background: var(--brand-tint);
+  border: 1px solid var(--border-fort);
+  border-left: 3px solid var(--brand);
+  border-radius: var(--rayon-bloc);
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+}
+
+.reference__filtre-texte {
+  font-weight: 600;
+  color: var(--texte);
+}
+
+/* ⚠️ Pas `brand-strong`, qui mesure **2,03:1** sur `brand-tint` en thème sombre —
+   deux gris proches, le lien y serait quasi invisible. Les seules couleurs de texte
+   qui tiennent AA sur ce fond sont `texte` et `alerte`, et `alerte` est réservée au
+   « non pourvu » et au focus (§12). Le lien se distingue donc par la graisse et le
+   soulignement, ce que §12 prescrit justement pour un niveau de plus : la couleur ne
+   porte jamais seule l'information. La paire est désormais mesurée par
+   `npm run verifier`. */
+.reference__filtre-tout {
+  color: var(--texte);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
 .reference__alerte,
 .reference__erreur {
   margin-bottom: var(--espace-4);

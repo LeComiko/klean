@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { masque } from '../reference/valeurs'
 import type { ValeursFormulaire } from '../reference/valeurs'
 import type { ChampRessource } from '../types/reference'
 import './FormulaireRessource.css'
@@ -112,17 +113,25 @@ export function FormulaireRessource({
       )}
 
       <div className="formulaire__champs">
-        {champs.map((champ) => (
-          <Champ
-            key={champ.nom}
-            champ={champ}
-            valeur={valeurs[champ.nom] ?? ''}
-            options={options[champ.nom] ?? []}
-            tronquee={optionsTronquees[champ.nom] === true}
-            lectureSeule={lectureSeule}
-            onChanger={changer}
-          />
-        ))}
+        {/* ⚠️ Un champ masqué n'est pas désactivé, il n'est **pas rendu**. Le motif
+            d'une absence `Maladie` est une donnée de santé (article 9 du RGPD) : un
+            champ grisé mais présent reste lisible, copiable, et conserve ce qui y
+            avait été écrit avant le basculement. `corpsDe` envoie `null` de son côté,
+            donc rien ne part — les deux moitiés sont nécessaires, et seule la seconde
+            est éprouvable. */}
+        {champs
+          .filter((champ) => !masque(champ, valeurs))
+          .map((champ) => (
+            <Champ
+              key={champ.nom}
+              champ={champ}
+              valeur={valeurs[champ.nom] ?? ''}
+              options={options[champ.nom] ?? []}
+              tronquee={optionsTronquees[champ.nom] === true}
+              lectureSeule={lectureSeule}
+              onChanger={changer}
+            />
+          ))}
       </div>
 
       {/* Aucun bouton d'enregistrement en lecture seule : c'est la décision de

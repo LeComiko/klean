@@ -1,4 +1,7 @@
-import { api } from './client'
+// ⚠️ Extension explicite : ce module est chargé par `node --test` via
+// ressources.test.ts, et Node n'applique pas la résolution sans extension de Vite
+// (CLAUDE.md §10).
+import { api } from './client.ts'
 
 /**
  * Enveloppe de pagination des onze listes, en place depuis l'étape 8.
@@ -30,14 +33,31 @@ export const TailleMaximale = 200
 
 export const TailleParDefaut = 25
 
+/**
+ * Une page d'une ressource, éventuellement restreinte à un parent.
+ *
+ * `filtre` est la descente de niveau : `{ champ: 'clientId', valeur: '…' }` devient
+ * `?clientId=…`, le paramètre que les quatre endpoints de la chaîne d'exploitation
+ * acceptent depuis le lot B. Le nom du champ est celui du DTO **et** celui du
+ * paramètre de requête : il n'y en a qu'un, donc ils ne peuvent pas diverger.
+ *
+ * ⚠️ `encodeURIComponent` sur la valeur. Elle vient de la chaîne de requête de
+ * l'écran, donc de l'extérieur : un identifiant forgé contenant un `&` ajouterait
+ * sinon un paramètre à la requête.
+ */
 export function listerRessource<T>(
   route: string,
   page: number,
   taille: number,
   signal?: AbortSignal,
+  filtre?: { champ: string; valeur: string },
 ): Promise<Page<T>> {
+  const restriction = filtre === undefined
+    ? ''
+    : `&${filtre.champ}=${encodeURIComponent(filtre.valeur)}`
+
   return api.get<Page<T>>(
-    `${route}?page=${String(page)}&taille=${String(Math.min(taille, TailleMaximale))}`,
+    `${route}?page=${String(page)}&taille=${String(Math.min(taille, TailleMaximale))}${restriction}`,
     { signal },
   )
 }

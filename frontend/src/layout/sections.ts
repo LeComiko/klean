@@ -50,33 +50,48 @@ export const Sections: readonly Section[] = [
   // `GET /api/planning` est réservé aux trois rôles internes.
   { chemin: '/planning', pastille: 'PL', libelle: 'Planning', roles: RolesInternes },
 
-  // La chaîne client : Clients → Sites, et Contrats → Prestations au lot B. Le
-  // syndic y lit son propre client et ses sites, cadré par le deuxième axe
-  // d'isolation.
+  // La chaîne client, entière : Clients → Sites → Contrats → Prestations. Le syndic
+  // y lit son propre client et ses sites, cadré par le deuxième axe d'isolation —
+  // les contrats et les prestations lui sont fermés, et les rôles de la section
+  // valent l'union des lectures de ses quatre ressources.
   //
   // ⚠️ La pastille reste `SI` alors que la section commence par Clients. Les
-  // libellés de pastilles seront revus à l'étape des Stocks, qui en ajoutera une :
-  // les renommer maintenant, pour les renommer encore dans deux étapes, ferait deux
-  // fois le travail et deux fois la désorientation.
+  // libellés de pastilles seront revus à l'étape des Stocks : les renommer
+  // maintenant, pour les renommer encore à l'étape suivante, ferait deux fois le
+  // travail et deux fois la désorientation.
   {
     chemin: '/clients',
     pastille: 'SI',
     libelle: 'Clients et sites',
     roles: InternesEtClientSyndic,
-    ressources: ['clients', 'sites'],
+    ressources: ['clients', 'sites', 'contrats', 'prestations'],
   },
 
-  // Agents, et Absences au lot B — celle qui rend le panneau de remplacement de
-  // l'étape 15 utilisable sans script.
+  // Agents → Absences. C'est l'ajout qui rend le panneau de remplacement de
+  // l'étape 15 utilisable sans script : jusqu'ici, aucune absence ne pouvait être
+  // saisie par l'interface.
   {
     chemin: '/agents',
     pastille: 'AG',
     libelle: 'Agents',
     roles: RolesInternes,
-    ressources: ['agents'],
+    ressources: ['agents', 'absences'],
   },
 
-  { chemin: '/stocks', pastille: 'ST', libelle: 'Stocks', roles: RolesInternes },
+  // ⚠️ `ST` mène désormais à Produits, et le chemin a donc changé de `/stocks` à
+  // `/produits` : l'invariante veut que le chemin d'une section soit celui de sa
+  // première ressource, faute de quoi la destination d'arrivée pointerait vers une
+  // route qu'`App.tsx` ne monte pas. L'écran « en chantier » des stocks disparaît
+  // avec lui, et c'est préférable à un écran qui ne promet rien : les Stocks sont
+  // une des quatre fonctions du cœur de produit et ont leur propre étape, où ils
+  // rejoindront cette section en deuxième ressource.
+  {
+    chemin: '/produits',
+    pastille: 'ST',
+    libelle: 'Produits et stocks',
+    roles: RolesInternes,
+    ressources: ['produits'],
+  },
 ]
 
 /**

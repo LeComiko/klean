@@ -107,7 +107,7 @@ KLEAN/
     ├── vite.config.ts   serveur https, proxy /api, en-têtes
     ├── scripts/         verifier-interface.mjs, tests.mjs
     └── src/
-        ├── api/         wrappers fetch typés, client.test.ts, ressources.ts
+        ├── api/         wrappers fetch typés, client.ts, ressources.ts, + leurs séries
         ├── auth/        AuthContext, RouteProtegee
         ├── composants/  un .tsx + un .css par composant
         ├── layout/      Navigation, Disposition, sections.ts
@@ -296,6 +296,25 @@ qu'ASP.NET refuse de lui-même.
 à faire fonctionner un frontend hébergé sur un autre domaine enregistrable : le
 navigateur n'enverrait aucun cookie. Le multi-origine n'est viable qu'entre
 sous-domaines d'un même domaine.
+
+**Les quatre filtres de parenté**, ajoutés au lot B de l'étape 16 bis : `?clientId=`
+sur `GET /api/sites`, `?siteId=` sur les contrats, `?contratId=` sur les prestations,
+`?agentId=` sur les absences. Ils portent la descente de niveau des écrans de
+référence — « les sites de ce client ». Trois règles, et chacune ferme un défaut muet :
+
+- **Le filtre entre avant le comptage.** `Total` est le nombre de lignes du filtre, pas
+  de la table : sinon l'écran annonce quarante sites au-dessus d'une liste qui en
+  montre trois, et la pagination propose des pages vides.
+- **Un parent inconnu rend une page vide, pas un 404.** Une liste filtrée sur rien
+  reste une liste. Un 404 obligerait l'écran à distinguer « ce client n'existe pas » de
+  « ce client n'a pas de site », alors que la seconde réponse est la bonne dans les
+  deux cas. Un identifiant appartenant à une autre entreprise tombe dans le même cas,
+  les filtres globaux s'appliquant d'abord.
+- ⚠️ **Un paramètre vide vaut absence de filtre**, et c'est mesuré : `?clientId=` sur un
+  `Guid?` est lié à `null` par ASP.NET, pas refusé. Le serveur rend donc la liste
+  entière. L'écran doit lire ce paramètre de la même façon — `filtreDe` dans
+  `reference/valeurs.ts` — sinon il affiche « Sites de … » au-dessus de tous les sites
+  de l'entreprise. Un identifiant **illisible**, lui, est bien refusé en 400.
 
 **Deux gardes sur la taille du corps, et les deux sont nécessaires.**
 `LimiteCorpsRequete` refuse sur `Content-Length`, avant toute lecture et quel que
@@ -741,6 +760,32 @@ passe, et rien d'autre ne le rattrapera.
   son jeton d'accès est signé et vaut quinze minutes. Le témoin doit porter sur
   `POST /api/auth/rafraichir`.
 
+**Un gris de marque n'est pas une couleur de texte, et le thème clair le cache.**
+`--brand-strong` mesure **12,47:1** sur `--surface` en thème clair — irréprochable — et
+**2,29:1** en thème sombre. Sur `--brand-tint` : **10,42:1** puis **2,03:1**. La cause
+est structurelle : `brand` et `brand-strong` sont des **fonds**, et leurs valeurs
+sombres sont claires tandis que les fonds sombres sont sombres. Tout texte peint avec
+l'un d'eux s'effondre au basculement de thème, et aucune relecture de CSS ne le montre.
+
+Le piège a été posé **deux fois dans la même séance**, au lot B de l'étape 16 bis, sur
+deux liens différents — il paraît chaque fois « le ton un peu plus marqué » que
+demande un lien. Les deux sont repassés en `--texte`, distingués par la graisse et le
+soulignement, ce que §12 prescrit pour un niveau d'information de plus. Les quatre
+paires sont désormais mesurées par `npm run verifier`, dans la liste des combinaisons
+interdites : le rappel est chiffré, pas verbal.
+
+Les seules couleurs de texte qui tiennent AA sur `brand-tint` sont `--texte` et
+`--alerte` — et `--alerte` est réservée au « non pourvu » et au focus.
+
+**Masquer un champ demande deux moitiés, et la seconde est la moins évidente.** Le
+motif d'une absence `Maladie` disparaît du formulaire (`masquerSi` dans la
+description), **et** `corpsDe` l'envoie à `null`. Sans la seconde : saisir un motif
+puis basculer le type sur « Maladie » enverrait ce texte, le serveur refuserait en
+parlant de donnée de santé, et l'écran n'afficherait plus le champ dont le refus parle
+— la donnée ayant de surcroît quitté le navigateur pour rien. Et la clé doit rester
+présente à `null`, pas être omise : un `PUT` qui l'omet laisse en place le motif déjà
+enregistré au lieu de l'effacer. Vérifié contre le serveur.
+
 **`Microsoft.OpenApi` 2.0 a supprimé le namespace `.Models`.**
 `OpenApiSecurityScheme`, `SecuritySchemeType` et `ParameterLocation` sont
 désormais directement dans `Microsoft.OpenApi`. Un `using
@@ -808,6 +853,18 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   répond 403. Une description dans `src/reference/descriptions.ts`, et
   `src/pages/Reference.tsx` la rend. Ajouter une ressource, c'est ajouter une
   description et une clé dans `sections.ts` — jamais un fichier de page.
+- **L'étiquette d'une description n'est jamais une clé étrangère.** Elle sert deux
+  fois : nommer une ligne, et **libeller les options de la liste déroulante d'une
+  ressource enfant**. L'écran d'une prestation charge les contrats, pas les sites : une
+  étiquette `siteId` sur les contrats y afficherait une liste d'identifiants, sans
+  qu'aucune erreur ne soit levée. D'où `frequence` pour un contrat et `type` pour une
+  absence — imparfaits, lisibles, et gardés par une invariante.
+- **Toute donnée décrite n'est pas une donnée de référence.** Les droits d'écriture
+  d'une description recopient ceux du contrôleur, et les absences sont écrites par le
+  `Responsable` parce que `AbsencesController` porte `RolesKlean.Exploitation`. Leur
+  appliquer `EcritureReference` présenterait un formulaire en lecture seule sur la
+  seule chose que l'étape 15 demande de saisir — la faute d'interface symétrique de
+  celle que tout ce motif évite.
 - **La logique de conversion sort du composant.** `src/reference/valeurs.ts` porte
   le passage d'une ligne du serveur au formulaire et au corps JSON, parce que c'est
   la seule partie qui écrit des données fausses au lieu d'afficher quelque chose de

@@ -24,6 +24,18 @@ const InterneEtClientSyndic: readonly string[] = [...RolesInternes, Roles.Client
 /** Seul l'administrateur écrit les données de référence (SPEC.md étape 8). */
 const EcritureReference: readonly string[] = [Roles.Administrateur]
 
+/**
+ * Écriture des données d'**exploitation**, par l'administrateur et le responsable.
+ *
+ * ⚠️ Les absences ne sont pas des données de référence, et c'est pourquoi elles ne
+ * portent pas `EcritureReference` : un responsable saisit l'absence d'un agent, c'est
+ * son travail quotidien, et le serveur l'y autorise — `[Authorize(Roles =
+ * RolesKlean.Exploitation)]` sur `AbsencesController`. Leur donner les droits des
+ * données de référence présenterait à un responsable un formulaire en lecture seule
+ * sur la seule chose que l'étape 15 lui demande de saisir.
+ */
+const EcritureExploitation: readonly string[] = [Roles.Administrateur, Roles.Responsable]
+
 /** `TypeClient`, miroir de `backend/Models/TypeClient.cs`. */
 const TypesDeClient = [
   'EntrepriseCliente',
@@ -32,6 +44,22 @@ const TypesDeClient = [
   'Copropriete',
   'Autre',
 ] as const
+
+/** `TypeAbsence`, miroir de `backend/Models/TypeAbsence.cs`. */
+const TypesDAbsence = ['Maladie', 'Conge', 'Indisponibilite', 'Retard', 'Autre'] as const
+
+/**
+ * Les types d'absence dont le motif ne doit **jamais** être recueilli.
+ *
+ * Un motif d'arrêt maladie en texte libre est une donnée de santé au sens de
+ * l'article 9 du RGPD, et le planning n'en fait rien : il lui suffit de savoir qu'un
+ * agent est absent. `AbsencesController` refuse déjà en 400 ; cette liste fait
+ * disparaître le champ, pour que l'écran n'invite pas à saisir ce que l'API rejette.
+ *
+ * ⚠️ `AccidentTravail` rejoindra cette liste à l'étape 17, en même temps que
+ * l'énumération du serveur. Les deux listes doivent bouger ensemble.
+ */
+const SansMotif = ['Maladie'] as const
 
 const Clients: DescriptionRessource = {
   cle: 'clients',
@@ -185,13 +213,218 @@ const Agents: DescriptionRessource = {
   rolesEcriture: EcritureReference,
 }
 
+const Contrats: DescriptionRessource = {
+  cle: 'contrats',
+  chemin: '/contrats',
+  route: '/api/contrats',
+  libelle: 'Contrats',
+  singulier: 'contrat',
+  genre: 'masculin',
+  sousTitre: 'Engagements de passage sur un site, et leur récurrence',
+  // ⚠️ Pas `siteId` : l'étiquette libelle aussi les options du choix des contrats sur
+  // l'écran des prestations, qui n'a pas chargé les sites et n'y lirait qu'un
+  // identifiant. La fréquence est imparfaite — deux contrats peuvent la partager —
+  // mais elle est lisible, et la descente de niveau évite ce choix dans le parcours
+  // normal.
+  etiquette: 'frequence',
+
+  colonnes: [
+    { nom: 'frequence', libelle: 'Fréquence' },
+    { nom: 'siteId', libelle: 'Site', reference: 'sites' },
+    { nom: 'dateDebut', libelle: 'Début' },
+    { nom: 'dateFin', libelle: 'Fin' },
+    { nom: 'actif', libelle: 'Actif' },
+  ],
+
+  champs: [
+    { nom: 'siteId', libelle: 'Site', type: 'reference', reference: 'sites', requis: true },
+    { nom: 'dateDebut', libelle: 'Date de début', type: 'date', requis: true },
+    {
+      nom: 'dateFin',
+      libelle: 'Date de fin',
+      type: 'date',
+      aide: 'À laisser vide tant que le contrat court sans échéance connue.',
+    },
+    {
+      nom: 'frequence',
+      libelle: 'Fréquence',
+      type: 'texte',
+      requis: true,
+      longueurMax: 100,
+      // Texte libre côté serveur, et c'est assumé en V1 : aucune planification
+      // automatique ne le lit, les interventions sont créées une par une.
+      aide: 'En clair, par exemple « Lundi, mercredi, vendredi ». Elle désigne le contrat dans les listes.',
+    },
+    { nom: 'actif', libelle: 'Actif', type: 'booleen', defaut: true },
+  ],
+
+  rolesLecture: RolesInternes,
+  rolesEcriture: EcritureReference,
+
+  parent: { ressource: 'sites', champ: 'siteId' },
+}
+
+const Prestations: DescriptionRessource = {
+  cle: 'prestations',
+  chemin: '/prestations',
+  route: '/api/prestations',
+  libelle: 'Prestations',
+  singulier: 'prestation',
+  genre: 'feminin',
+  sousTitre: 'Ce qui est fait sur place, et le temps que cela prend',
+  etiquette: 'libelle',
+
+  colonnes: [
+    { nom: 'libelle', libelle: 'Libellé' },
+    { nom: 'contratId', libelle: 'Contrat', reference: 'contrats' },
+    { nom: 'dureeEstimeeMinutes', libelle: 'Durée (min)', chiffres: true },
+  ],
+
+  champs: [
+    {
+      nom: 'contratId',
+      libelle: 'Contrat',
+      type: 'reference',
+      reference: 'contrats',
+      requis: true,
+      aide: 'Les contrats sont désignés par leur fréquence. Partir du contrat lui-même évite ce choix.',
+    },
+    { nom: 'libelle', libelle: 'Libellé', type: 'texte', requis: true, longueurMax: 200 },
+    {
+      nom: 'dureeEstimeeMinutes',
+      libelle: 'Durée estimée (minutes)',
+      type: 'nombre',
+      requis: true,
+      min: 1,
+      max: 1440,
+      // Décrire l'effet : cette durée n'est pas documentaire, elle pèse un tiers du
+      // score de remplacement par la charge hebdomadaire (CLAUDE.md §8).
+      aide: 'Alimente la charge de la semaine, qui compte pour 35 points sur 100 dans le classement des remplaçants.',
+    },
+  ],
+
+  rolesLecture: RolesInternes,
+  rolesEcriture: EcritureReference,
+
+  parent: { ressource: 'contrats', champ: 'contratId' },
+}
+
+const Absences: DescriptionRessource = {
+  cle: 'absences',
+  chemin: '/absences',
+  route: '/api/absences',
+  libelle: 'Absences',
+  singulier: 'absence',
+  genre: 'feminin',
+  sousTitre: 'Ce qui déclenche la recherche d’un remplaçant',
+  etiquette: 'type',
+
+  colonnes: [
+    { nom: 'agentId', libelle: 'Agent', reference: 'agents' },
+    { nom: 'type', libelle: 'Type' },
+    { nom: 'dateDebut', libelle: 'Du' },
+    { nom: 'dateFin', libelle: 'Au' },
+    { nom: 'motif', libelle: 'Motif' },
+  ],
+
+  champs: [
+    { nom: 'agentId', libelle: 'Agent', type: 'reference', reference: 'agents', requis: true },
+    { nom: 'type', libelle: 'Type', type: 'choix', requis: true, choix: TypesDAbsence },
+    {
+      nom: 'dateDebut',
+      libelle: 'Du',
+      type: 'date',
+      requis: true,
+      // L'enregistrement crée les remplacements dans la foulée : le dire évite de
+      // chercher ailleurs ce que l'écran a déjà fait.
+      aide: 'À l’enregistrement, les vacations découvertes sur cette période ouvrent un remplacement.',
+    },
+    { nom: 'dateFin', libelle: 'Au', type: 'date', requis: true },
+    {
+      nom: 'motif',
+      libelle: 'Motif',
+      type: 'texteLong',
+      longueurMax: 500,
+      masquerSi: { champ: 'type', vaut: SansMotif },
+      aide: 'Facultatif. Le champ disparaît sur un arrêt maladie : le planning n’a pas besoin d’une donnée de santé.',
+    },
+  ],
+
+  rolesLecture: RolesInternes,
+  // ⚠️ Donnée d'exploitation, pas de référence : voir EcritureExploitation.
+  rolesEcriture: EcritureExploitation,
+
+  parent: { ressource: 'agents', champ: 'agentId' },
+}
+
+const Produits: DescriptionRessource = {
+  cle: 'produits',
+  chemin: '/produits',
+  route: '/api/produits',
+  libelle: 'Produits',
+  singulier: 'produit',
+  genre: 'masculin',
+  sousTitre: 'Consommables suivis en stock',
+  etiquette: 'nom',
+
+  colonnes: [
+    { nom: 'nom', libelle: 'Nom' },
+    { nom: 'reference', libelle: 'Référence' },
+    { nom: 'unite', libelle: 'Unité' },
+    { nom: 'seuilAlerte', libelle: 'Seuil d’alerte', chiffres: true },
+  ],
+
+  champs: [
+    { nom: 'nom', libelle: 'Nom', type: 'texte', requis: true, longueurMax: 200 },
+    {
+      // ⚠️ `nom: 'reference'` est la **propriété du DTO**, la référence fournisseur du
+      // produit. Aucun rapport avec `type: 'reference'`, qui désigne une clé
+      // étrangère : la collision de vocabulaire est malheureuse, elle n'a pas d'effet.
+      nom: 'reference',
+      libelle: 'Référence',
+      type: 'texte',
+      longueurMax: 50,
+      aide: 'Facultatif. Référence du fournisseur, pour commander sans se tromper d’article.',
+    },
+    {
+      nom: 'unite',
+      libelle: 'Unité',
+      type: 'texte',
+      requis: true,
+      longueurMax: 30,
+      aide: 'Unité de compte : litre, pièce, rouleau…',
+    },
+    {
+      nom: 'seuilAlerte',
+      libelle: 'Seuil d’alerte',
+      type: 'nombre',
+      requis: true,
+      min: 0,
+      max: 999999.99,
+      pas: 0.01,
+      aide: 'Quantité en dessous de laquelle le stock est signalé comme bas.',
+    },
+  ],
+
+  rolesLecture: RolesInternes,
+  rolesEcriture: EcritureReference,
+}
+
 /**
  * ⚠️ L'ordre suit la **chaîne du modèle**, pas l'alphabet : un site appartient à
  * un client, on ne peut donc pas créer le second avant le premier. C'est cet ordre
  * que la sous-navigation affiche, et c'est lui qui rend la mise en route d'une
  * entreprise possible de haut en bas sans revenir en arrière.
  */
-export const Descriptions: readonly DescriptionRessource[] = [Clients, Sites, Agents]
+export const Descriptions: readonly DescriptionRessource[] = [
+  Clients,
+  Sites,
+  Contrats,
+  Prestations,
+  Agents,
+  Absences,
+  Produits,
+]
 
 export function descriptionDe(cle: string): DescriptionRessource | undefined {
   return Descriptions.find((description) => description.cle === cle)
@@ -212,4 +445,16 @@ export function descriptionsLisibles(
     .map((cle) => descriptionDe(cle))
     .filter((description): description is DescriptionRessource => description !== undefined)
     .filter((description) => description.rolesLecture.some((role) => roles.includes(role)))
+}
+
+/**
+ * Les ressources dont cette ressource est le parent — **dérivé**, jamais déclaré.
+ *
+ * C'est ce qui porte la descente de niveau : la liste des clients offre « Voir les
+ * sites » parce que `Sites` déclare `parent: { ressource: 'clients' }`. Déclarer les
+ * enfants en plus des parents donnerait deux listes à tenir d'accord, et la
+ * divergence prendrait la forme d'un lien vers un écran qui n'affiche rien.
+ */
+export function enfantsDe(cle: string): readonly DescriptionRessource[] {
+  return Descriptions.filter((description) => description.parent?.ressource === cle)
 }

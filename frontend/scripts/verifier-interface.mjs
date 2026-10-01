@@ -182,6 +182,9 @@ if (blocSombre === null) {
     ['texte / surface-2', '--texte', '--surface-2', SeuilTexte],
     ['texte / brand-tint', '--texte', '--brand-tint', SeuilTexte],
     ['alerte / brand-tint', '--alerte', '--brand-tint', SeuilTexte],
+    // Le lien de retour du bandeau de descente de niveau. Il est en `texte` et non
+    // en `brand-strong` : voir la combinaison interdite plus bas, mesurée.
+    ['texte souligné / brand-tint', '--texte', '--brand-tint', SeuilTexte],
     ['texte / hachure', '--texte', '--hachure', SeuilTexte],
     ['texte-2 / canvas', '--texte-2', '--canvas', SeuilTexte],
     ['texte-2 / surface', '--texte-2', '--surface', SeuilTexte],
@@ -237,6 +240,17 @@ if (blocSombre === null) {
    */
   const interdites = [
     ['texte-2 sur brand-tint', '--texte-2', '--brand-tint'],
+    // Introduite au lot B de l'étape 16 bis, sur le lien de retour du bandeau de
+    // descente de niveau, et trouvée par une mesure faite à la main avant d'être
+    // ajoutée ici. Deux gris de marque superposés : le clair trompe, le sombre
+    // s'effondre. Le lien est passé en `texte` souligné.
+    ['brand-strong sur brand-tint', '--brand-strong', '--brand-tint'],
+    ['brand sur brand-tint', '--brand', '--brand-tint'],
+    // Posée au même endroit et au même moment, sur le lien de descente de niveau du
+    // tableau. Même cause : un gris de marque lu comme « un ton plus marqué » alors
+    // qu'il s'agit d'un **fond**. Le thème clair le laisse passer à 12,47:1, le
+    // sombre tombe à 2,29:1.
+    ['brand-strong sur surface', '--brand-strong', '--surface'],
   ]
 
   titre('Combinaisons à ne jamais peindre — rappel mesuré, pas un échec')
@@ -246,7 +260,7 @@ if (blocSombre === null) {
     const enSombre = contraste(sombre[avant], sombre[arriere])
 
     console.log(
-      `         ${libelle.padEnd(24)} clair ${enClair.toFixed(2)}:1 · `
+      `         ${libelle.padEnd(28)} clair ${enClair.toFixed(2)}:1 · `
         + `sombre ${enSombre.toFixed(2)}:1   (seuil ${SeuilTexte.toFixed(1)})`,
     )
   }

@@ -1,6 +1,11 @@
 // ⚠️ Extensions explicites : ce module est chargé par `node --test`, qui
 // n'applique pas la résolution sans extension de Vite (CLAUDE.md §10).
-import type { ChampRessource, ColonneRessource } from '../types/reference.ts'
+import type {
+  ChampRessource,
+  ColonneRessource,
+  DescriptionRessource,
+  Genre,
+} from '../types/reference.ts'
 import { depuisChaineIso, formaterDateLongue, jourIso } from '../utils/dates.ts'
 
 /**
@@ -31,14 +36,54 @@ export function texteDe(valeur: unknown): string | undefined {
   return undefined
 }
 
-export function departCreation(champs: readonly ChampRessource[]): ValeursFormulaire {
+/**
+ * Valeurs d'ouverture d'une création.
+ *
+ * `imposees` sert la descente de niveau : arrivé sur « les sites de ce client », le
+ * formulaire part avec ce client déjà choisi. Ce n'est pas du confort — c'est le seul
+ * chemin qui évite la liste déroulante des contrats, dont les options sont libellées
+ * par une fréquence et peuvent donc se ressembler.
+ *
+ * `imposees` l'emporte sur `defaut`. Le test porte sur la **présence de la clé** et
+ * non sur la vérité de sa valeur, parce que c'est ce qu'on veut dire — mais il faut
+ * être exact : `??` donnerait aujourd'hui le même résultat, puisqu'il ne retombe que
+ * sur `null` et `undefined`, qu'une `ValeursFormulaire` ne peut pas porter. Un
+ * sabotage remplaçant `in` par `??` est resté vert, et c'est normal. La forme retenue
+ * ne corrige donc rien : elle dit l'intention, et resterait juste si le type venait à
+ * admettre `undefined`.
+ */
+export function departCreation(
+  champs: readonly ChampRessource[],
+  imposees: ValeursFormulaire = {},
+): ValeursFormulaire {
   const valeurs: ValeursFormulaire = {}
 
   for (const champ of champs) {
-    valeurs[champ.nom] = champ.defaut ?? (champ.type === 'booleen' ? false : '')
+    valeurs[champ.nom] = champ.nom in imposees
+      ? imposees[champ.nom]
+      : champ.defaut ?? (champ.type === 'booleen' ? false : '')
   }
 
   return valeurs
+}
+
+/**
+ * Vrai si ce champ doit **disparaître**, compte tenu de ce qui est saisi.
+ *
+ * ⚠️ Le cas qui l'a fait naître : le motif d'une absence `Maladie`, donnée de santé
+ * au sens de l'article 9 du RGPD. Le serveur refuse déjà ce motif en 400 ; sans cette
+ * fonction, le formulaire invite à l'écrire puis le fait refuser, ce qui est la pire
+ * des deux situations — la donnée a été saisie, et le champ fautif n'est plus visible
+ * quand le refus s'affiche.
+ */
+export function masque(champ: ChampRessource, valeurs: ValeursFormulaire): boolean {
+  const condition = champ.masquerSi
+
+  if (condition === undefined) return false
+
+  const pivot = valeurs[condition.champ]
+
+  return typeof pivot === 'string' && condition.vaut.includes(pivot)
 }
 
 export function departOuverture(
@@ -92,6 +137,16 @@ export function corpsDe(
   const corps: Record<string, unknown> = {}
 
   for (const champ of champs) {
+    // ⚠️ Un champ masqué part à `null`, quelle que soit la valeur qu'il portait avant
+    // que la condition ne devienne vraie. Sans cette ligne, saisir un motif puis
+    // basculer le type sur « Maladie » enverrait ce texte : le serveur refuserait en
+    // 400 en parlant de donnée de santé, et l'écran n'afficherait plus le champ dont
+    // il parle. La donnée aurait de surcroît quitté le navigateur.
+    if (masque(champ, valeurs)) {
+      corps[champ.nom] = null
+      continue
+    }
+
     const brut = valeurs[champ.nom]
 
     if (champ.type === 'booleen') {
@@ -148,4 +203,77 @@ export function rendu(
   }
 
   return String(valeur)
+}
+
+/** Filtre de descente de niveau, lu dans la chaîne de requête de l'écran. */
+export interface FiltreParent {
+  /** Nom du champ porteur de la clé étrangère, et du paramètre de requête. */
+  champ: string
+  valeur: string
+}
+
+/**
+ * Le filtre de parenté actif, s'il y en a un.
+ *
+ * `lire` est passé plutôt qu'une `URLSearchParams` pour que cette fonction reste
+ * éprouvable sans environnement de navigateur — c'est la même raison que `resoudre`
+ * dans `rendu`.
+ *
+ * ⚠️ Une valeur **vide** vaut absence de filtre, et c'est mesuré côté serveur : un
+ * `Guid?` recevant `?clientId=` est lié à `null` par ASP.NET, qui rend donc la liste
+ * entière. Si l'écran y voyait un filtre, il afficherait « Sites de … » au-dessus de
+ * tous les sites de l'entreprise. Les deux lectures doivent coïncider, et la série
+ * `FiltresListeTests` garde celle du serveur.
+ */
+export function filtreDe(
+  description: DescriptionRessource,
+  lire: (nom: string) => string | null,
+): FiltreParent | undefined {
+  const parent = description.parent
+
+  if (parent === undefined) return undefined
+
+  const valeur = lire(parent.champ)
+
+  if (valeur === null || valeur.trim() === '') return undefined
+
+  return { champ: parent.champ, valeur }
+}
+
+/**
+ * Formules de langue des écrans de référence.
+ *
+ * Sorties du composant pour la même raison que les conversions : « Supprimer
+ * « Lundi, mercredi, vendredi » ? » ne dit pas ce qui est supprimé, et sur l'écran
+ * des contrats c'est le genre de défaut qu'on ne voit qu'en le lisant à voix haute.
+ */
+
+const Voyelles = /^[aeiouyâàäéèêëîïôöùûü]/i
+
+/** « le client », « la prestation », « l’absence ». */
+export function designer(singulier: string, genre: Genre): string {
+  // L'apostrophe typographique, comme partout ailleurs dans l'interface.
+  if (Voyelles.test(singulier)) return `l’${singulier}`
+
+  return genre === 'feminin' ? `la ${singulier}` : `le ${singulier}`
+}
+
+/** Accord du participe passé : « créé » ou « créée ». */
+export function accorder(genre: Genre): string {
+  return genre === 'feminin' ? 'e' : ''
+}
+
+/**
+ * « tous les » ou « toutes les ».
+ *
+ * ⚠️ Le pluriel du libellé n'est **pas** fabriqué en accolant un `s` au singulier :
+ * `libelle` le porte déjà, écrit à la main pour cette raison. Seul le déterminant
+ * s'accorde.
+ */
+export function tousLes(genre: Genre): string {
+  return genre === 'feminin' ? 'toutes les' : 'tous les'
+}
+
+export function majuscule(mot: string): string {
+  return mot.charAt(0).toUpperCase() + mot.slice(1)
 }

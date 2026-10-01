@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
 import { Roles } from '../types/auth.ts'
-import { Descriptions, descriptionDe, descriptionsLisibles } from './descriptions.ts'
+import { Descriptions, descriptionDe, descriptionsLisibles, enfantsDe } from './descriptions.ts'
 
 /**
  * `descriptions.ts` est la source unique des écrans de référence : un seul motif
@@ -213,6 +213,76 @@ describe('descriptions — structure', () => {
     }
   })
 
+  test('l’étiquette n’est pas un champ de référence', () => {
+    // ⚠️ L'invariante la moins évidente du fichier, et elle a une conséquence
+    // visible. L'étiquette sert deux fois : nommer une ligne, et **libeller les
+    // options de la liste déroulante d'une ressource enfant**. Sur l'écran des
+    // prestations, le choix des contrats est alimenté par `/api/contrats` seul — les
+    // sites ne sont pas chargés, et rien ne peut résoudre un `siteId` en nom. Une
+    // étiquette de référence afficherait donc une liste d'identifiants, qu'aucune
+    // erreur ne signalerait.
+    for (const description of Descriptions) {
+      const champ = description.champs.find((candidat) => candidat.nom === description.etiquette)
+
+      assert.notEqual(champ?.type, 'reference', `${description.cle} → ${description.etiquette}`)
+      assert.notEqual(champ?.type, 'booleen', `${description.cle} → ${description.etiquette}`)
+    }
+  })
+
+  test('un champ masqué n’est jamais obligatoire', () => {
+    // Les deux ensemble sont contradictoires : `corpsDe` envoie `null` sur un champ
+    // masqué, et le serveur refuserait un obligatoire nul. L'écran n'afficherait même
+    // pas le champ dont le refus parle.
+    for (const description of Descriptions) {
+      for (const champ of description.champs) {
+        if (champ.masquerSi === undefined) continue
+
+        assert.notEqual(champ.requis, true, `${description.cle} → ${champ.nom}`)
+      }
+    }
+  })
+
+  test('une condition de masquage désigne un choix de la même description', () => {
+    // Une faute de frappe sur le champ pivot, ou sur une valeur de l'énumération,
+    // rendrait la condition éternellement fausse : le champ resterait affiché, et
+    // c'est précisément ce que le masquage existe pour empêcher.
+    for (const description of Descriptions) {
+      for (const champ of description.champs) {
+        const condition = champ.masquerSi
+
+        if (condition === undefined) continue
+
+        const pivot = description.champs.find((candidat) => candidat.nom === condition.champ)
+
+        assert.notEqual(pivot, undefined, `${description.cle} → ${condition.champ}`)
+        assert.equal(pivot?.type, 'choix', `${description.cle} → ${condition.champ}`)
+        assert.ok(condition.vaut.length > 0, `${description.cle} → ${champ.nom}`)
+
+        for (const valeur of condition.vaut) {
+          assert.ok(
+            (pivot?.choix ?? []).includes(valeur),
+            `${description.cle} → ${champ.nom} masqué sur « ${valeur} », absent du choix`,
+          )
+        }
+      }
+    }
+  })
+
+  test('le motif d’une absence disparaît sur un arrêt maladie', () => {
+    // ⚠️ Nommément, et pas seulement par l'invariante générale ci-dessus : c'est une
+    // décision de conformité, pas un détail d'interface. Un motif d'arrêt maladie en
+    // texte libre est une donnée de santé au sens de l'article 9 du RGPD, le planning
+    // n'en fait rien, et `AbsencesController` le refuse déjà en 400. Ce test garde la
+    // moitié « l'interface empêche » de la promesse faite à l'étape 8.
+    //
+    // L'étape 17 ajoutera `AccidentTravail` ici, en même temps que dans le serveur.
+    const absences = descriptionDe('absences')
+    const motif = absences?.champs.find((champ) => champ.nom === 'motif')
+
+    assert.notEqual(motif, undefined)
+    assert.deepEqual(motif?.masquerSi, { champ: 'type', vaut: ['Maladie'] })
+  })
+
   test('seul un booléen porte un défaut booléen', () => {
     // Un `defaut: true` sur un champ texte partirait en `true` dans le corps JSON
     // et se ferait refuser par la liaison de modèle.
@@ -269,15 +339,38 @@ describe('descriptions — droits', () => {
     }
   })
 
-  test('le Responsable lit les données de référence sans y écrire', () => {
-    // C'est la décision de l'étape : son formulaire est présenté en lecture seule,
-    // sans bouton d'enregistrement. Le jour où la matrice s'ouvre — déclencheur
-    // écrit à l'étape 8, « combien de personnes connaissent le mot de passe
-    // administrateur ? » — ce test devra changer, et c'est ce qu'on veut qu'il
-    // signale.
+  test('le Responsable lit tout, et n’écrit que les données d’exploitation', () => {
+    // ⚠️ Ce test a changé au lot B, et la raison compte : la matrice des droits ne
+    // s'est pas ouverte, c'est la liste des descriptions qui a dépassé les seules
+    // données de **référence**. Une absence est une donnée d'exploitation — un
+    // responsable la saisit, c'est son travail quotidien, et
+    // `[Authorize(Roles = RolesKlean.Exploitation)]` sur `AbsencesController` l'y
+    // autorise. Lui présenter un formulaire en lecture seule sur la seule chose que
+    // l'étape 15 lui demande de saisir aurait été une faute d'interface exactement
+    // symétrique de celle que tout ce motif évite.
+    //
+    // La liste est écrite ici parce qu'elle doit être **courte et délibérée** : y
+    // ajouter une clé est une décision, pas un ajustement. L'autorité reste le
+    // serveur, qui répond 403.
+    const ecritesParLeResponsable = ['absences']
+
     for (const description of Descriptions) {
       assert.ok(description.rolesLecture.includes(Roles.Responsable), description.cle)
-      assert.equal(description.rolesEcriture.includes(Roles.Responsable), false, description.cle)
+
+      assert.equal(
+        description.rolesEcriture.includes(Roles.Responsable),
+        ecritesParLeResponsable.includes(description.cle),
+        description.cle,
+      )
+    }
+  })
+
+  test('le ChefEquipe lit sans écrire, sur toutes les ressources', () => {
+    // Il reste le rôle de lecture pure de la matrice : aucun écran de cette étape ne
+    // lui ouvre d'écriture, pas même sur les absences.
+    for (const description of Descriptions) {
+      assert.ok(description.rolesLecture.includes(Roles.ChefEquipe), description.cle)
+      assert.equal(description.rolesEcriture.includes(Roles.ChefEquipe), false, description.cle)
     }
   })
 })
@@ -308,5 +401,38 @@ describe('descriptionsLisibles', () => {
   test('un rôle sans droit ne lit rien', () => {
     assert.deepEqual(descriptionsLisibles(['clients', 'sites', 'agents'], [Roles.Agent]), [])
     assert.deepEqual(descriptionsLisibles(['clients'], []), [])
+  })
+})
+
+describe('enfantsDe', () => {
+  test('la chaîne du modèle se parcourt de haut en bas', () => {
+    // La descente de niveau tout entière, dérivée des seules parentés déclarées.
+    assert.deepEqual(enfantsDe('clients').map((d) => d.cle), ['sites'])
+    assert.deepEqual(enfantsDe('sites').map((d) => d.cle), ['contrats'])
+    assert.deepEqual(enfantsDe('contrats').map((d) => d.cle), ['prestations'])
+    assert.deepEqual(enfantsDe('agents').map((d) => d.cle), ['absences'])
+  })
+
+  test('une feuille de la chaîne n’a pas d’enfant', () => {
+    assert.deepEqual(enfantsDe('prestations'), [])
+    assert.deepEqual(enfantsDe('absences'), [])
+    // Les stocks auront leur étape : le jour où leur description existe, ce test
+    // changera, et c'est ce qu'on veut qu'il signale.
+    assert.deepEqual(enfantsDe('produits'), [])
+  })
+
+  test('une clé inconnue rend une liste vide plutôt que d’échouer', () => {
+    assert.deepEqual(enfantsDe('inexistante'), [])
+  })
+
+  test('chaque enfant déclare le champ qui construit le lien', () => {
+    // Le lien de descente vaut `${chemin}?${parent.champ}=${id}`. Un `parent.champ`
+    // absent donnerait `?=…`, donc une liste non filtrée sous un bandeau qui annonce
+    // un filtre — exactement ce que la série FiltresListeTests garde côté serveur.
+    for (const description of Descriptions) {
+      for (const enfant of enfantsDe(description.cle)) {
+        assert.ok((enfant.parent?.champ ?? '') !== '', `${description.cle} → ${enfant.cle}`)
+      }
+    }
   })
 })

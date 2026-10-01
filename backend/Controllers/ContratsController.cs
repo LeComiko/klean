@@ -16,17 +16,35 @@ public class ContratsController : ControllerBase
 
     public ContratsController(KleanDbContext db) => _db = db;
 
+    /// <summary>
+    /// Liste paginée, filtrable par <c>siteId</c> — la descente de niveau,
+    /// « les contrats de ce site ».
+    ///
+    /// ⚠️ Le filtre entre <b>avant</b> le comptage. Un total calculé sur la table
+    /// entière annoncerait « 40 contrats » au-dessus d'une liste qui en montre trois,
+    /// et la pagination proposerait des pages vides.
+    ///
+    /// Un identifiant inconnu — ou appartenant à une autre entreprise, que les
+    /// filtres globaux écartent — rend une page vide, pas un 404 : une liste filtrée
+    /// sur rien reste une liste, et c'est une réponse, pas une erreur.
+    /// </summary>
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
-    public async Task<ActionResult<PageDto<ContratDto>>> Lister([FromQuery] PaginationDto pagination)
+    public async Task<ActionResult<PageDto<ContratDto>>> Lister(
+        [FromQuery] PaginationDto pagination,
+        [FromQuery] Guid? siteId)
     {
-        var requete = _db.Contrats
-            .AsNoTracking()
-            .OrderByDescending(c => c.DateDebut);
+        var requete = _db.Contrats.AsNoTracking();
+
+        if (siteId is not null)
+        {
+            requete = requete.Where(c => c.SiteId == siteId);
+        }
 
         var total = await requete.CountAsync();
 
         var contrats = await requete
+            .OrderByDescending(c => c.DateDebut)
             .Skip(pagination.ANegliger)
             .Take(pagination.Taille)
             .Select(c => new ContratDto

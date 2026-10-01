@@ -61,6 +61,7 @@ const SensiblesAuFuseau = [
  */
 const Indifferentes = [
   { fichier: 'src/api/client.test.ts', libelle: 'client.ts — session et CSRF' },
+  { fichier: 'src/api/ressources.test.ts', libelle: 'ressources.ts — URL de liste' },
   { fichier: 'src/layout/sections.test.ts', libelle: 'sections.ts — navigation et arrivée' },
   { fichier: 'src/reference/descriptions.test.ts', libelle: 'descriptions.ts — écrans de référence' },
 ]

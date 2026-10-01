@@ -16,17 +16,35 @@ public class SitesController : ControllerBase
 
     public SitesController(KleanDbContext db) => _db = db;
 
+    /// <summary>
+    /// Liste paginée, filtrable par <c>clientId</c> — la descente de niveau,
+    /// « les sites de ce client ».
+    ///
+    /// ⚠️ Le filtre entre <b>avant</b> le comptage. Un total calculé sur la table
+    /// entière annoncerait « 40 sites » au-dessus d'une liste qui en montre trois,
+    /// et la pagination proposerait des pages vides.
+    ///
+    /// Un identifiant inconnu — ou appartenant à une autre entreprise, que les
+    /// filtres globaux écartent — rend une page vide, pas un 404 : une liste filtrée
+    /// sur rien reste une liste, et c'est une réponse, pas une erreur.
+    /// </summary>
     [Authorize(Roles = RolesKlean.InterneEtClientSyndic)]
     [HttpGet]
-    public async Task<ActionResult<PageDto<SiteDto>>> Lister([FromQuery] PaginationDto pagination)
+    public async Task<ActionResult<PageDto<SiteDto>>> Lister(
+        [FromQuery] PaginationDto pagination,
+        [FromQuery] Guid? clientId)
     {
-        var requete = _db.Sites
-            .AsNoTracking()
-            .OrderBy(s => s.Nom);
+        var requete = _db.Sites.AsNoTracking();
+
+        if (clientId is not null)
+        {
+            requete = requete.Where(s => s.ClientId == clientId);
+        }
 
         var total = await requete.CountAsync();
 
         var sites = await requete
+            .OrderBy(s => s.Nom)
             .Skip(pagination.ANegliger)
             .Take(pagination.Taille)
             .Select(s => new SiteDto

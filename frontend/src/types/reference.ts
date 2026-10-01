@@ -28,6 +28,9 @@ export type TypeChamp =
   /** Clé étrangère : rendue par une liste déroulante alimentée par l'API. */
   | 'reference'
 
+/** Genre grammatical, pour accorder « créé/créée » et « le/la ». */
+export type Genre = 'masculin' | 'feminin'
+
 export interface ChampRessource {
   /** Nom de la propriété dans le DTO, en camelCase comme le JSON du serveur. */
   nom: string
@@ -76,6 +79,29 @@ export interface ChampRessource {
    * refuse dans la langue du navigateur.
    */
   longueurMax?: number
+
+  /**
+   * Condition de **disparition** du champ : il n'est ni affiché ni envoyé quand le
+   * champ désigné porte l'une de ces valeurs.
+   *
+   * ⚠️ Une seule raison d'exister aujourd'hui, et elle n'est pas cosmétique : le
+   * motif d'une absence `Maladie` est une donnée de santé au sens de l'article 9 du
+   * RGPD. Le serveur refuse déjà en 400 — « un arrêt maladie ne peut pas porter de
+   * motif » — mais un formulaire qui laisse saisir ce que l'API rejette invite à
+   * écrire un diagnostic, et le recueille dans le navigateur avant de le refuser.
+   * L'interface empêche, l'API fait barrage. L'étape 17 ajoutera
+   * `AccidentTravail` à la même liste.
+   *
+   * ⚠️ Masquer n'est pas cacher la valeur : `corpsDe` envoie `null` sur un champ
+   * masqué, sinon un motif saisi *avant* de choisir « Maladie » partirait quand
+   * même — et le refus du serveur nommerait un champ que l'écran n'affiche plus.
+   */
+  masquerSi?: {
+    /** Champ de la même description dont la valeur décide. */
+    champ: string
+    /** Valeurs qui font disparaître ce champ. */
+    vaut: readonly string[]
+  }
 }
 
 export interface ColonneRessource {
@@ -96,10 +122,11 @@ export interface ColonneRessource {
 /**
  * Lien de parenté dans la chaîne du modèle.
  *
- * Sert deux choses, dont une seule est en place : il alimente la liste déroulante
- * du champ de référence, et il portera la descente de niveau — « les sites de ce
- * client » — le jour où `GET /api/sites` acceptera un `?clientId=`. Aucun endpoint
- * de liste n'accepte de filtre aujourd'hui.
+ * Sert deux choses, et les deux sont en place depuis le lot B : il alimente la liste
+ * déroulante du champ de référence, et il porte la **descente de niveau** — « les
+ * sites de ce client ». Le nom du champ est celui du paramètre de requête que le
+ * serveur accepte : `/sites?clientId=…` côté écran, `?clientId=` côté API. Les deux
+ * ne peuvent pas diverger parce qu'il n'y en a qu'un.
  */
 export interface ParenteRessource {
   /** Clé de la description parente. */
@@ -128,11 +155,21 @@ export interface DescriptionRessource {
   singulier: string
 
   /** Genre grammatical, pour accorder ces mêmes phrases. */
-  genre: 'masculin' | 'feminin'
+  genre: Genre
 
   sousTitre: string
 
-  /** Colonne portant le libellé d'une ligne dans un message ou une confirmation. */
+  /**
+   * Champ portant le libellé d'une ligne dans un message ou une confirmation.
+   *
+   * ⚠️ Il sert **deux fois**, et la seconde contraint le choix : c'est aussi lui
+   * qui libelle les options de la liste déroulante d'une ressource **enfant**. Une
+   * étiquette de type `reference` afficherait donc des identifiants dans ce choix —
+   * sur l'écran des prestations, la liste des contrats n'a pas chargé les sites, et
+   * n'a aucun moyen de résoudre un `siteId` en nom. D'où `frequence` pour un contrat
+   * et `type` pour une absence, qui sont imparfaits mais lisibles. Une invariante de
+   * `descriptions.test.ts` l'empêche de redevenir une référence.
+   */
   etiquette: string
 
   colonnes: readonly ColonneRessource[]
