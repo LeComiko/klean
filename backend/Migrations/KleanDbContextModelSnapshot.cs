@@ -104,6 +104,9 @@ namespace Klean.Api.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<DateTime?>("DateAnonymisation")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("DateEmbauche")
                         .HasColumnType("timestamp with time zone");
 

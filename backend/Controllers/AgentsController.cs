@@ -2,6 +2,7 @@ using Klean.Api.DTOs;
 using Klean.Api.Filtres;
 using Klean.Api.Data;
 using Klean.Api.Models;
+using Klean.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,7 +16,13 @@ public class AgentsController : ControllerBase
 {
     private readonly KleanDbContext _db;
 
-    public AgentsController(KleanDbContext db) => _db = db;
+    private readonly ServiceAnonymisation _anonymisation;
+
+    public AgentsController(KleanDbContext db, ServiceAnonymisation anonymisation)
+    {
+        _db = db;
+        _anonymisation = anonymisation;
+    }
 
     [JournaliserAcces(RessourceAccedee.Agent, NatureAcces.Liste)]
     [Authorize(Roles = RolesKlean.Interne)]
@@ -43,7 +50,8 @@ public class AgentsController : ControllerBase
                 Latitude = a.Latitude,
                 Longitude = a.Longitude,
                 DateEmbauche = a.DateEmbauche,
-                Actif = a.Actif
+                Actif = a.Actif,
+                DateAnonymisation = a.DateAnonymisation
             })
             .ToListAsync();
 
@@ -76,7 +84,8 @@ public class AgentsController : ControllerBase
                 Latitude = a.Latitude,
                 Longitude = a.Longitude,
                 DateEmbauche = a.DateEmbauche,
-                Actif = a.Actif
+                Actif = a.Actif,
+                DateAnonymisation = a.DateAnonymisation
             })
             .FirstOrDefaultAsync();
 
@@ -166,6 +175,37 @@ public class AgentsController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Pseudonymise un agent : remplace ses données identifiantes, celles de son compte
+    /// de connexion s'il en a un, et les motifs en texte libre de ses absences. La ligne
+    /// et son historique sont conservés.
+    ///
+    /// C'est la réponse au conflit de l'étape 17 : <c>Restrict</c> sur
+    /// <c>Intervention.AgentId</c> rend un agent insupprimable dès qu'il a travaillé —
+    /// le bon choix pour l'intégrité du planning, incompatible avec une demande
+    /// d'effacement.
+    ///
+    /// ⚠️ <b>Irréversible, et administrateur seul.</b> Pas de <c>Responsable</c> : ce
+    /// n'est pas un geste d'exploitation, c'est une réponse à l'exercice d'un droit, et
+    /// rien ne la défait.
+    ///
+    /// ⚠️ Le compte rendu énumère <b>ce qui subsiste</b>. Un retour qui n'annoncerait que
+    /// des succès laisserait promettre un effacement total à qui le demande.
+    /// </summary>
+    [Authorize(Roles = RolesKlean.Administrateur)]
+    [JournaliserAcces(RessourceAccedee.Agent, NatureAcces.Anonymisation)]
+    [HttpPost("{id:guid}/anonymiser")]
+    public async Task<ActionResult<AnonymisationDto>> Anonymiser(Guid id)
+    {
+        var resultat = await _anonymisation.ExecuterAsync(id);
+
+        if (resultat is null) return NotFound();
+
+        return resultat.Value.Conflit is { } conflit
+            ? Conflict(conflit)
+            : Ok(resultat.Value.Valeur);
+    }
+
     private static AgentDto Vers(Agent a) => new()
     {
         Id = a.Id,
@@ -178,6 +218,7 @@ public class AgentsController : ControllerBase
         Latitude = a.Latitude,
         Longitude = a.Longitude,
         DateEmbauche = a.DateEmbauche,
-        Actif = a.Actif
+        Actif = a.Actif,
+        DateAnonymisation = a.DateAnonymisation
     };
 }

@@ -45,6 +45,24 @@ public class Agent
     /// <summary>Filtre dur du moteur d'affectation : un agent inactif n'est jamais candidat.</summary>
     public bool Actif { get; set; } = true;
 
+    /// <summary>
+    /// Date de la pseudonymisation, nulle tant qu'elle n'a pas eu lieu (étape 17).
+    ///
+    /// ⚠️ Une <b>date</b> et non un drapeau, pour deux raisons. Elle répond à la
+    /// question du registre des traitements — « quand cet effacement a-t-il été
+    /// exécuté » — qu'un booléen laisse sans réponse. Et elle rend l'opération
+    /// refusable en 409 sur un agent déjà traité : sur un geste irréversible, une
+    /// réussite silencieuse masquerait une erreur d'identifiant.
+    ///
+    /// ⚠️ <b>Pseudonymisation</b>, et le mot est choisi. Cet <c>Id</c> survit, parce que
+    /// toutes les interventions passées en dépendent : la ligne reste donc rattachable à
+    /// une personne par quiconque détiendrait une correspondance externe. C'est
+    /// l'article 4(5) du RGPD, pas l'article 4(1). La route s'appelle
+    /// <c>/anonymiser</c> parce que c'est l'intention de l'exploitant ; le registre des
+    /// traitements devra, lui, être exact.
+    /// </summary>
+    public DateTime? DateAnonymisation { get; set; }
+
     public ICollection<Absence> Absences { get; set; } = new List<Absence>();
     public ICollection<Intervention> Interventions { get; set; } = new List<Intervention>();
 }

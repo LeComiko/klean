@@ -402,7 +402,7 @@ vue planning. La cohérence est garantie applicativement, sans clé étrangère.
 
 ---
 
-## 7 bis. Journal d'accès aux données personnelles
+## 7 bis. Données personnelles : journal d'accès et pseudonymisation
 
 Numérotée « bis » pour la même raison que §6 bis : ne pas décaler des sections
 référencées depuis des dizaines de commentaires du code.
@@ -502,6 +502,76 @@ qu'aucune action ne produit aujourd'hui — notamment qu'une `string`, étant un
 sont restés verts avant que ces tests existent.
 
 **Coût assumé** : une insertion synchrone par lecture sur ces huit endpoints.
+
+### Pseudonymisation d'un agent
+
+`POST /api/agents/{id}/anonymiser`, administrateur seul, irréversible, journalisée en
+`NatureAcces.Anonymisation`.
+
+**Le conflit qu'elle résout.** `Restrict` sur `Intervention.AgentId` rend un agent
+impossible à supprimer dès qu'il a travaillé. C'est le bon choix pour l'intégrité du
+planning — une suppression emporterait des vacations réalisées, donc la preuve de
+passages facturés — et c'est incompatible avec une demande d'effacement. Remplacer les
+données identifiantes en conservant la ligne satisfait les deux.
+
+⚠️ **C'est une pseudonymisation, article 4(5), et non une anonymisation, article 4(1).**
+L'`Id` survit puisque les interventions en dépendent : la ligne reste rattachable à une
+personne par quiconque détiendrait une correspondance externe. La route s'appelle
+`/anonymiser` parce que c'est l'intention de l'exploitant ; le registre des traitements
+devra être exact. Ne pas confondre les deux dans la documentation juridique.
+
+**La personne est nommée en trois endroits, et n'en traiter qu'un donne un effacement
+qui n'efface pas :**
+
+| Où | Ce qui est fait |
+|---|---|
+| `Agents` | nom et prénom remplacés, courriel, téléphone, adresse et coordonnées à `null`, `Actif = false`, `DateAnonymisation` posée |
+| `AspNetUsers`, si un compte est rattaché | identité remplacée, adresse substituée sur un domaine non routable, `Actif = false`, `SecurityStamp` régénéré, sessions révoquées |
+| `Absences` | le `Motif` en texte libre effacé — la seule donnée non structurée du modèle |
+
+⚠️ **Les coordonnées passent à `null`, jamais à `0`.** Un zéro passe le
+`[Range(-90, 90)]`, ne lève rien, place l'agent dans le golfe de Guinée et fausse
+silencieusement toutes les notes de distance ; `null` donne la note neutre de 50, qui est
+la réponse honnête à « on ne sait plus où il habite » (§8).
+
+⚠️ **Le `SecurityStamp` est ce qui périme le jeton d'accès**, pas `Actif = false` seul —
+celui-ci laisserait quinze minutes. Et révoquer le jeton de rafraîchissement ne suffit
+pas non plus : les deux gestes sont nécessaires, pour la raison exposée en §10.
+
+⚠️ **`AspNetUsers` n'étant pas filtrée par le multi-tenant (§7), le filtre sur
+`EntrepriseId` est écrit à la main dans le service, et il est obligatoire.** Il est
+aujourd'hui une défense en profondeur : `POST /api/auth/comptes` vérifie déjà que
+l'`AgentId` appartient à l'entreprise de l'appelant, donc un compte portant l'`AgentId`
+d'un autre tenant n'est pas créable par l'API. Le retrait de cette vérification rendrait
+le filtre indispensable — et le test qui l'éprouve construit donc le compte intrus
+**directement en base**, sous les validations : une défense en profondeur qu'aucun test
+n'exerce est une ligne qu'on peut retirer sans rien casser, ce qu'un sabotage a montré.
+
+⚠️ **Les trois gardes du compte se couvrent l'une l'autre, et un test par l'API ne les
+distingue pas.** `OnTokenValidated` refuse une requête dont le compte est inactif **ou**
+dont l'empreinte a changé ; et la connexion échoue par la seule substitution de
+l'adresse. Retirer `Actif = false`, ou le `SecurityStamp`, ou le remplacement du nom,
+laissait donc la série verte — trois sabotages passés inaperçus. Ce qui les attrape est
+une relecture **en base** du compte après l'opération, champ par champ. Même leçon
+qu'au §10 sur le témoin de déconnexion totale : quand deux gardes couvrent le même cas,
+aucune n'est éprouvée tant qu'on ne les sépare pas.
+
+⚠️ Et une assertion sur un champ **déjà vide** ne vérifie rien : `Assert.Null(PhoneNumber)`
+passait quoi qu'il arrive, le compte de test étant créé sans téléphone. Il faut poser la
+valeur avant de vérifier qu'elle disparaît.
+
+**Le compte rendu énumère ce qui subsiste**, et c'est sa moitié la plus utile : qui
+répond à une demande d'effacement doit savoir ce qu'il peut promettre. Y figurent
+l'identifiant technique, les interventions passées, et — dit en toutes lettres — que les
+absences de type `Maladie` conservent leur type et leurs dates même après effacement du
+motif, ce qui **reste une donnée de santé**. La supprimer demanderait d'effacer
+l'absence, ce qui casserait l'historique des remplacements qui en découlent : c'est une
+question de durée de conservation, pas de pseudonymisation.
+
+**Une seconde tentative est refusée en 409 en disant la date.** Sur un geste
+irréversible, une réussite silencieuse masquerait une erreur d'identifiant. C'est aussi
+pourquoi `DateAnonymisation` est une date et non un drapeau : elle répond à la question
+du registre — quand cet effacement a-t-il été exécuté.
 
 ---
 

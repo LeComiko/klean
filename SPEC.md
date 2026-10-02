@@ -1267,6 +1267,36 @@ décision produit.
   demande d'effacement. Concevoir un chemin d'anonymisation — nom, adresse et
   coordonnées remplacés par des valeurs neutres, ligne conservée — plutôt qu'une
   suppression.
+
+  **Lot B fait.** `POST /api/agents/{id}/anonymiser`, administrateur seul,
+  irréversible, journalisée — `NatureAcces.Anonymisation` existait depuis le lot A et
+  n'était écrite par personne.
+
+  ⚠️ **Correction de vocabulaire, et elle compte pour le registre des traitements :
+  c'est une pseudonymisation au sens de l'article 4(5), pas une anonymisation au sens de
+  l'article 4(1).** L'identifiant de l'agent survit — toutes les interventions passées en
+  dépendent — donc la ligne reste rattachable à une personne par quiconque détiendrait
+  une correspondance externe. La route garde le mot « anonymiser » parce que c'est
+  l'intention de l'exploitant ; la documentation juridique devra être exacte. Le compte
+  rendu de l'opération le dit lui-même, article cité.
+
+  ⚠️ **La personne est nommée en trois endroits, pas un.** `Agents`, `AspNetUsers` si un
+  compte lui est rattaché — qui porte nom, prénom, courriel et téléphone — et le `Motif`
+  en texte libre de ses absences. N'en traiter qu'un donne un effacement qui n'efface
+  pas, et laisse en plus à la personne son accès au produit.
+
+  **Le compte rendu énumère ce qui subsiste**, et c'est sa moitié la plus utile : qui
+  répond à une demande d'effacement doit savoir ce qu'il peut promettre. Il nomme
+  l'identifiant technique, les interventions conservées, et le résidu le plus gênant —
+  une absence de type `Maladie` garde son type et ses dates après effacement du motif,
+  ce qui **reste une donnée de santé**. L'effacer demanderait de supprimer l'absence et
+  casserait l'historique des remplacements : c'est une question de durée de conservation,
+  renvoyée au lot de documentation plutôt que tranchée en silence.
+
+  Détail des six décisions en `CLAUDE.md` §7 bis. Celle qui aurait pu passer inaperçue :
+  les coordonnées du domicile passent à `null` et **jamais à zéro** — un zéro passe le
+  `[Range(-90, 90)]`, place l'agent dans le golfe de Guinée et fausse toutes les notes de
+  distance sans rien signaler.
 - Durées de conservation, par nature de donnée
 - Registre des traitements et cartographie des données
 - **Écran de compte**, qui est le premier de KLEAN à en avoir besoin : c'est là

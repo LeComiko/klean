@@ -15,6 +15,15 @@ public class AgentDto
     public double? Longitude { get; set; }
     public DateTime DateEmbauche { get; set; }
     public bool Actif { get; set; }
+
+    /// <summary>
+    /// Renseignée quand l'agent a été pseudonymisé (étape 17), nulle sinon.
+    ///
+    /// ⚠️ Exposée exprès : sans elle, l'écran afficherait « Agent anonymisé 3f2a1b0c »
+    /// comme un agent ordinaire dont quelqu'un aurait mal saisi le nom. Elle ne révèle
+    /// rien — elle dit qu'il n'y a plus rien à révéler.
+    /// </summary>
+    public DateTime? DateAnonymisation { get; set; }
 }
 
 public class AgentCreateDto
