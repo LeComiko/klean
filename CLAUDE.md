@@ -111,10 +111,10 @@ KLEAN/
     ├── scripts/         verifier-interface.mjs, tests.mjs
     └── src/
         ├── api/         wrappers fetch typés, client.ts, ressources.ts, + leurs séries
-        ├── auth/        AuthContext, RouteProtegee
+        ├── auth/        AuthContext, RouteProtegee, motDePasse.ts
         ├── composants/  un .tsx + un .css par composant
         ├── layout/      Navigation, Disposition, sections.ts
-        ├── pages/       un fichier par écran, plus Reference.tsx
+        ├── pages/       un fichier par écran, plus Reference.tsx et Compte.tsx
         ├── reference/   descriptions.ts, valeurs.ts — le motif liste-et-formulaire
         ├── styles/      tokens.css
         ├── types/       interfaces TypeScript
@@ -226,6 +226,33 @@ Les DTOs les exposent en `string` et utilisent `Enum.TryParse` avec un
   valide — sinon l'endpoint devient un vérificateur d'adresses ouvert à tous. La
   réussite régénère le `SecurityStamp` (donc tue les jetons d'accès) **et**
   révoque toutes les sessions de rafraîchissement.
+- **Changement de mot de passe par son propriétaire** :
+  `POST /api/auth/changer-mot-de-passe`, ouvert à tout compte connecté. Le mot de
+  passe **actuel** est la preuve d'identité, donc aucun courriel n'est requis : c'est
+  le seul parcours de mot de passe qui fonctionne sur une instance sans SMTP, et il
+  évite qu'un administrateur pose lui-même celui d'un collègue — il le connaîtrait.
+
+  **L'appareil qui change le mot de passe reste connecté, tous les autres tombent.**
+  Identity régénère le `SecurityStamp`, ce qui périme instantanément les jetons
+  d'accès du compte ; les sessions de rafraîchissement sont révoquées en plus ; puis
+  une session neuve est ouverte pour l'appelant. C'est une ré-authentification, pas
+  une prolongation silencieuse — et renvoyer l'utilisateur à l'écran de connexion
+  pour retaper le mot de passe qu'il vient de choisir n'apporterait rien, qui tient
+  cette session la tenant déjà.
+
+  ⚠️ **L'ordre des deux gestes est impératif : révoquer, puis rouvrir.** Dans l'autre
+  sens, le jeton de rafraîchissement tout juste émis est révoqué par le geste suivant,
+  et l'utilisateur tombe au premier renouvellement — quinze minutes plus tard, donc
+  très loin de sa cause. Éprouvé par un sabotage.
+
+  ⚠️ **Un mot de passe actuel faux rend 400, jamais 401**, et ce n'est pas une
+  préférence de style : voir le piège correspondant en §10.
+
+  ⚠️ **Le plafond de débit y est nécessaire malgré l'authentification.** L'endpoint
+  vérifie le mot de passe actuel, donc c'est un oracle, et le verrouillage d'Identity
+  ne s'y applique pas — `ChangePasswordAsync` ne compte aucun échec. Sans plafond, qui
+  tient une session volée y éprouve des mots de passe sans limite ; non pas pour
+  entrer, il est déjà entré, mais pour en apprendre un sans doute réemployé ailleurs.
 - **Déconnexion de tous les appareils** : `POST /api/auth/deconnexion-totale`,
   qui exige un jeton d'accès valide — contrairement à `deconnexion`, tolérante par
   nécessité. Elle régénère le `SecurityStamp` **et** révoque toutes les sessions de
@@ -993,6 +1020,29 @@ parallèles visant la même base produiraient exactement ce symptôme. Pour s'en
 vider `klean_test` entièrement, `AspNetUsers` et `Entreprises` comprises, et laisser la
 fixture ré-amorcer.
 
+**Sur un parcours authentifié, un 401 n'est pas un refus : c'est une déconnexion.**
+`api/client.ts` traite tout 401 comme une session morte — il rafraîchit, rejoue, puis
+purge la session et prévient ses abonnés. Un endpoint authentifié qui répond 401 pour
+dire « ta saisie est fausse » déconnecte donc l'utilisateur au lieu de le corriger.
+
+Le cas concret : `POST /api/auth/changer-mot-de-passe` sur un mot de passe actuel
+faux. Un 401 y aurait été le choix naturel — c'est bien un échec d'authentification —
+et il renvoyait l'utilisateur à l'écran de connexion sur une faute de frappe. Il rend
+400, et un test le nomme pour que personne ne le « corrige ».
+
+La règle générale, à appliquer à tout endpoint futur : **401 est réservé à l'état de
+la session, 400 à celui du corps de la requête.** Trois endpoints dérogent
+délibérément et sont inscrits dans `SansRafraichissement` côté client — `connexion`,
+`rafraichir`, `deconnexion` — parce que leur 401 porte justement sur la session.
+
+**Un bouton destructeur dont l'effet inclut l'appelant demande un `finally` inversé.**
+`deconnecter` purge la session locale même si l'appel échoue : rien n'est pire qu'un
+bouton « Déconnexion » qui laisse l'écran connecté. `deconnecterPartout` fait
+l'inverse et ne purge qu'au succès — afficher « déconnecté partout » alors que les
+autres appareils sont restés ouverts est un mensonge sur un geste de sécurité, et
+l'utilisateur n'a alors aucune raison de réessayer. Le même geste, deux raisonnements
+opposés : ne pas recopier l'un sur l'autre.
+
 **`Microsoft.OpenApi` 2.0 a supprimé le namespace `.Models`.**
 `OpenApiSecurityScheme`, `SecuritySchemeType` et `ParameterLocation` sont
 désormais directement dans `Microsoft.OpenApi`. Un `using
@@ -1077,6 +1127,22 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   la seule partie qui écrit des données fausses au lieu d'afficher quelque chose de
   faux : une chaîne vide au lieu d'un `null`, un nombre en chaîne, un jour décalé de
   vingt-quatre heures. Enfermée dans un `.tsx`, elle n'est pas éprouvable.
+
+  Même raison pour `src/auth/motDePasse.ts`, qui porte les deux refus que l'écran de
+  compte prononce avant d'appeler : ce sont les seuls cas du parcours où le serveur
+  répondrait **en anglais**, la validation de modèle d'ASP.NET s'exécutant avant
+  Identity. Les retirer ne casse rien de visible — l'appel partirait, le serveur
+  refuserait — et un francophone lirait « The MotDePasseActuel field is required. »
+  sous un formulaire entièrement en français. Un écran qui refuse n'est éprouvable
+  qu'extrait ; un écran qui affiche se relit.
+- **Un écran de compte n'est pas une section.** `layout/sections.ts` déclare
+  `CheminCompte` sans le mettre dans `Sections`, et `sections.test.ts` garde
+  l'absence. Une section est une fonction du produit, ouverte par rôle, et
+  `premiereSectionOuverte` en fait une **destination d'arrivée** : le compte, ouvert à
+  tout rôle, deviendrait l'arrivée de tous. Il vit au pied de la barre latérale,
+  auprès de la déconnexion. Conséquence heureuse : il est atteignable pour le rôle
+  `Agent`, qui n'a aucune section et tombe sur un refus en arrivant — la barre étant
+  rendue, son mot de passe lui reste accessible.
 
 ---
 

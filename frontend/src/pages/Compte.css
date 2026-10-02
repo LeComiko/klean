@@ -1,0 +1,301 @@
+/* Une colonne de cartes, bornée à une largeur de lecture : un écran de réglages
+   n'a aucune colonne à comparer, et étirer un formulaire de mot de passe sur
+   1600 px éloigne l'étiquette de sa saisie. */
+.compte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-6);
+  max-width: 640px;
+}
+
+.compte__carte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+  padding: var(--espace-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-carte);
+}
+
+.compte__titre {
+  font-size: var(--titre-section-taille);
+  line-height: var(--titre-section-interligne);
+  font-weight: var(--titre-section-graisse);
+  color: var(--texte);
+}
+
+/* ---------------------------------------------------------------- identité */
+
+.compte__definitions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+}
+
+/* Étiquette à gauche, valeur à droite, alignées sur une colonne fixe : les quatre
+   valeurs se lisent alors en descendant, sans que l'œil cherche où chacune
+   commence. */
+.compte__ligne {
+  display: flex;
+  align-items: baseline;
+  gap: var(--espace-4);
+}
+
+.compte__cle {
+  flex: 0 0 180px;
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texte-2);
+}
+
+.compte__valeur {
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  color: var(--texte);
+  overflow-wrap: anywhere;
+}
+
+/* Corps desktop et non l'échelle des étiquettes : c'est du texte à lire, pas un
+   intitulé à repérer. À 11 px sur trois lignes il serait sauté, ce qui revient à
+   ne pas l'écrire. */
+.compte__note {
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  color: var(--texte-2);
+}
+
+/* ------------------------------------------------------------- mot de passe */
+
+.compte__formulaire {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+}
+
+.compte__champ {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-1);
+}
+
+.compte__etiquette {
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texte-2);
+}
+
+.compte__saisie {
+  width: 100%;
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-3);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-family: var(--police);
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+}
+
+.compte__saisie:focus {
+  border-color: var(--brand);
+}
+
+.compte__aide {
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  color: var(--texte-2);
+}
+
+/* L'effet du geste, encadré et non glissé en petit : il est le seul élément de cet
+   écran qui change l'état d'autres appareils. Le liséré de marque et non d'alerte —
+   ce n'est pas un avertissement, c'est la description de ce qui va se passer, et la
+   terre cuite est réservée au « non pourvu » et au focus (§12). */
+.compte__consequence {
+  padding: var(--espace-3) var(--espace-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border-fort);
+  border-left: 3px solid var(--brand);
+  border-radius: var(--rayon-bloc);
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  color: var(--texte);
+}
+
+.compte__erreur {
+  padding: var(--espace-3) var(--espace-4);
+  background: var(--surface-2);
+  border: 1px solid var(--alerte);
+  border-left: 3px solid var(--alerte);
+  border-radius: var(--rayon-bloc);
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  color: var(--texte);
+}
+
+.compte__erreur-mot {
+  color: var(--alerte);
+}
+
+.compte__annonce {
+  display: block;
+  padding: var(--espace-3) var(--espace-4);
+  background: var(--surface-2);
+  border: 1px solid var(--realise);
+  border-left: 3px solid var(--realise);
+  border-radius: var(--rayon-bloc);
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  font-weight: 600;
+  color: var(--texte);
+}
+
+.compte__valider {
+  align-self: flex-start;
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-4);
+  background: var(--brand);
+  color: var(--sur-brand);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+}
+
+.compte__valider:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+
+.compte__valider:disabled {
+  background: var(--brand-strong);
+  cursor: progress;
+}
+
+/* ----------------------------------------------------------------- appareils */
+
+/* Au repos, le bouton destructeur est neutre. La terre cuite n'apparaît qu'après
+   la demande de confirmation, comme pour les suppressions des écrans de référence :
+   un bouton rouge en permanence banalise le geste, et celui-ci déconnecte
+   l'utilisateur lui-même. */
+.compte__declencheur {
+  align-self: flex-start;
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-4);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+}
+
+.compte__declencheur:hover {
+  background: var(--brand-tint);
+  border-color: var(--brand);
+}
+
+.compte__confirmation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  padding: var(--espace-4);
+  background: var(--surface-2);
+  border: 1px solid var(--alerte);
+  border-left: 3px solid var(--alerte);
+  border-radius: var(--rayon-bloc);
+}
+
+.compte__confirmation-texte {
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  color: var(--texte);
+}
+
+.compte__actions {
+  display: flex;
+  gap: var(--espace-3);
+  flex-wrap: wrap;
+}
+
+.compte__danger {
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-4);
+  background: var(--surface);
+  color: var(--alerte);
+  border: 1px solid var(--alerte);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+}
+
+.compte__danger:hover:not(:disabled) {
+  background: var(--brand-tint);
+}
+
+.compte__danger:disabled {
+  color: var(--texte-2);
+  border-color: var(--border);
+  cursor: progress;
+}
+
+.compte__annuler {
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-4);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+}
+
+.compte__annuler:hover:not(:disabled) {
+  background: var(--brand-tint);
+  border-color: var(--brand);
+}
+
+.compte__annuler:disabled {
+  color: var(--texte-2);
+  border-color: var(--border);
+  cursor: not-allowed;
+}
+
+/* Densité mobile : plancher de 16 px pour le corps, cibles de 56 px. Un écran de
+   compte est consulté depuis un téléphone au moins autant que depuis un poste. */
+@media (max-width: 900px) {
+  .compte__ligne {
+    flex-direction: column;
+    gap: var(--espace-1);
+  }
+
+  .compte__cle {
+    flex: none;
+  }
+
+  .compte__valeur,
+  .compte__note,
+  .compte__aide,
+  .compte__consequence,
+  .compte__erreur,
+  .compte__annonce,
+  .compte__confirmation-texte {
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+
+  .compte__saisie,
+  .compte__valider,
+  .compte__declencheur,
+  .compte__danger,
+  .compte__annuler {
+    height: var(--cible-tactile);
+    font-size: var(--corps-mobile-taille);
+  }
+
+  .compte__valider,
+  .compte__declencheur {
+    align-self: stretch;
+  }
+}

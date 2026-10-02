@@ -107,3 +107,28 @@ public class CompteCreateDto
     /// <summary>Obligatoire pour un compte de rôle ClientSyndic.</summary>
     public Guid? ClientId { get; set; }
 }
+
+/// <summary>
+/// Changement de mot de passe par son propriétaire, depuis l'écran de compte.
+///
+/// Distinct de <see cref="ReinitialiserDto"/> : celui-ci ne demande aucun jeton
+/// reçu par courriel, parce que la preuve d'identité est le mot de passe actuel —
+/// donc aucun serveur SMTP n'est requis, et c'est le seul parcours de mot de passe
+/// qui fonctionne sur une instance sans courriel (CLAUDE.md §2).
+/// </summary>
+public class ChangementMotDePasseDto
+{
+    /// <summary>
+    /// La preuve d'identité. Sans elle, un jeton de session volé suffirait à
+    /// verrouiller le compte de son propriétaire.
+    /// </summary>
+    [Required]
+    public string MotDePasseActuel { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 10 caractères minimum, une majuscule, une minuscule, un chiffre. Pas de
+    /// <c>[MinLength]</c> : voir <see cref="CompteCreateDto.MotDePasse"/>.
+    /// </summary>
+    [Required]
+    public string NouveauMotDePasse { get; set; } = string.Empty;
+}

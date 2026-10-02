@@ -92,3 +92,10 @@
   cursor: progress;
   color: var(--texte-2);
 }
+
+/* Le compte ferme la barre avec la déconnexion : deux gestes qui portent sur la
+   session, séparés de la liste des sections par la poussée de `flex: 1`. Il garde
+   la forme et l'état actif d'une pastille — c'est bien une route. */
+.navigation__compte {
+  margin-top: var(--espace-4);
+}

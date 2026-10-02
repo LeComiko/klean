@@ -21,6 +21,29 @@ export interface ValeurAuth {
 
   connecter: (email: string, motDePasse: string) => Promise<void>
   deconnecter: () => Promise<void>
+
+  /**
+   * Changement de mot de passe par son propriétaire.
+   *
+   * ⚠️ Ne déconnecte **pas** cet appareil, et déconnecte tous les autres. Le
+   * serveur rouvre une session dans la même réponse ; cette fonction en recueille
+   * le profil et la nouvelle expiration, sans quoi le minuteur de rafraîchissement
+   * anticipé viserait l'ancienne.
+   *
+   * L'erreur remonte : c'est l'écran de compte qui porte les trois états.
+   */
+  changerMotDePasse: (motDePasseActuel: string, nouveauMotDePasse: string) => Promise<void>
+
+  /**
+   * Déconnexion de tous les appareils, celui-ci compris.
+   *
+   * ⚠️ Contrairement à `deconnecter`, elle ne purge **pas** la session locale si
+   * l'appel échoue. Le raisonnement s'inverse : laisser l'écran connecté après une
+   * déconnexion ratée est le pire défaut, mais afficher « déconnecté partout »
+   * alors que les autres appareils sont restés ouverts est un mensonge sur un
+   * geste de sécurité.
+   */
+  deconnecterPartout: () => Promise<void>
 }
 
 export const ContexteAuth = createContext<ValeurAuth | null>(null)

@@ -36,6 +36,23 @@ export interface Section {
   ressources?: readonly string[]
 }
 
+/**
+ * Le seul écran qui n'est **pas** une section, et le seul chemin monté par
+ * `App.tsx` que `Sections` ne produit pas.
+ *
+ * Il est déclaré ici quand même, pour que ce fichier reste la source unique des
+ * chemins : deux listes finiraient par se recouvrir, et une section qui
+ * revendiquerait `/compte` donnerait deux `<Route>` sur le même chemin — la
+ * seconde inatteignable, sans aucune erreur. `sections.test.ts` garde l'absence.
+ *
+ * Pourquoi dehors : une section est une **fonction du produit**, ouverte par rôle,
+ * et `premiereSectionOuverte` en fait une destination d'arrivée. Le compte n'est ni
+ * l'un ni l'autre — il est ouvert à tout compte connecté, et personne ne doit
+ * atterrir dessus en se connectant. Sa place dans la navigation est le pied de la
+ * barre, auprès de la déconnexion, et non la liste des pastilles.
+ */
+export const CheminCompte = '/compte'
+
 const InternesEtClientSyndic: readonly string[] = [...RolesInternes, Roles.ClientSyndic]
 
 /**

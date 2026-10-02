@@ -108,4 +108,21 @@ public static class PlafondsDebit
     /// </summary>
     public const int ReinitialisationsParAdresse = 10;
     public static TimeSpan FenetreReinitialisations => TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Changement de mot de passe par son propriétaire.
+    ///
+    /// ⚠️ L'endpoint est authentifié, et il a pourtant besoin d'être borné : il
+    /// vérifie le mot de passe <b>actuel</b>, donc c'est un oracle. Le verrouillage
+    /// d'Identity ne s'y applique pas — <c>ChangePasswordAsync</c> ne compte pas
+    /// d'échec — et sans plafond, qui tient une session volée peut y éprouver des
+    /// mots de passe sans limite. Non pas pour entrer, il est déjà entré, mais pour
+    /// apprendre un mot de passe sans doute réemployé ailleurs.
+    ///
+    /// Par compte et non par adresse : l'attaquant est à l'intérieur d'une session,
+    /// pas en train d'en essayer cent.
+    /// </summary>
+    public const int ChangementsParAdresse = 20;
+    public const int ChangementsParCompte = 10;
+    public static TimeSpan FenetreChangements => TimeSpan.FromMinutes(15);
 }

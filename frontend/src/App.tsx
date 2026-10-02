@@ -5,9 +5,10 @@ import { FournisseurAuth } from './auth/AuthContext'
 import { useAuth } from './auth/contexte'
 import { RouteProtegee } from './auth/RouteProtegee'
 import { Disposition } from './layout/Disposition'
-import { Sections, premiereSectionOuverte } from './layout/sections'
+import { CheminCompte, Sections, premiereSectionOuverte } from './layout/sections'
 import type { Section } from './layout/sections'
 import { Chantier } from './pages/Chantier'
+import { Compte } from './pages/Compte'
 import { Connexion } from './pages/Connexion'
 import { Planning } from './pages/Planning'
 import { Reference } from './pages/Reference'
@@ -129,6 +130,18 @@ export default function App() {
                 element={<RouteProtegee roles={route.roles}>{route.element}</RouteProtegee>}
               />
             ))}
+
+            {/* Le seul écran qui ne vient pas de `Sections`, et le seul monté sans
+                `RouteProtegee` propre : il est ouvert à tout compte connecté, donc la
+                garde de la route de disposition suffit — en ajouter une seconde sans
+                rôles ne fermerait rien de plus.
+
+                Il reste atteignable pour un rôle `Agent`, qui n'a aucune section et
+                tombe sur un refus en arrivant : la barre latérale est rendue, donc son
+                mot de passe lui est accessible. C'est le seul écran de KLEAN qui le
+                serve aujourd'hui, et ce n'est pas un hasard — c'est le compte, pas une
+                fonction du produit. */}
+            <Route path={CheminCompte} element={<Compte />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

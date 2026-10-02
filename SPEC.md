@@ -1304,6 +1304,35 @@ décision produit.
   appareils*. L'endpoint existe depuis l'étape 16 et n'a aucun bouton ; il n'avait
   pas de place avant cet écran.
 
+  **Lot C fait.** `POST /api/auth/changer-mot-de-passe` et `frontend/src/pages/Compte.tsx`.
+
+  Le changement de mot de passe **n'existait pas** : `AuthController` ne portait que la
+  réinitialisation par courriel, qui exige un SMTP — optionnel sur une instance KLEAN
+  — et un administrateur qui le pose à la main connaît alors le mot de passe d'un
+  collègue. Un responsable connecté n'avait donc aucun chemin. Ici la preuve d'identité
+  est le mot de passe actuel, et rien d'autre n'est requis.
+
+  ⚠️ **La décision qui devait être prise avant d'écrire la ligne** : changer son mot de
+  passe doit-il déconnecter l'appareil depuis lequel on le change ? Par défaut **oui**
+  — Identity régénère le `SecurityStamp` et `OnTokenValidated` le vérifie à chaque
+  requête, donc l'utilisateur serait éjecté à la seconde où il réussit. Tranché dans
+  l'autre sens : une session neuve est rouverte dans la même réponse, parce qu'il vient
+  de prouver son mot de passe actuel. Les **autres** appareils tombent, tous. Détail des
+  trois pièges — l'ordre révoquer-puis-rouvrir, le 400 au lieu du 401, le plafond de
+  débit sur un endpoint pourtant authentifié — en `CLAUDE.md` §6 et §10.
+
+  ⚠️ **Le 400 n'est pas un détail de style.** `api/client.ts` traite tout 401 comme une
+  session morte : il rafraîchit, rejoue, puis purge. Un 401 sur un mot de passe actuel
+  faux — le code pourtant le plus naturel — aurait déconnecté l'utilisateur sur une
+  faute de frappe. La règle générale est désormais écrite : 401 pour l'état de la
+  session, 400 pour celui du corps.
+
+  L'écran accueille enfin le bouton *Déconnexion de tous les appareils*, qui attendait
+  depuis l'étape 16 sans qu'aucune interface ne l'appelle. Il n'est **pas** une section
+  de `layout/sections.ts` : une section est une fonction du produit, ouverte par rôle,
+  et `premiereSectionOuverte` en fait une destination d'arrivée — le compte, ouvert à
+  tous, deviendrait l'arrivée de tous. Deux invariantes gardent la séparation.
+
 ⚠️ Stocker les coordonnées du domicile d'un salarié pour le calcul de distance
 relève de la doctrine CNIL sur la géolocalisation des employés : c'est
 défendable — ça sert l'affectation, pas la surveillance — mais ça demande de la

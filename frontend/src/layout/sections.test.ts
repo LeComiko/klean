@@ -3,7 +3,7 @@ import { describe, test } from 'node:test'
 
 import { descriptionDe } from '../reference/descriptions.ts'
 import { Roles } from '../types/auth.ts'
-import { Sections, premiereSectionOuverte } from './sections.ts'
+import { CheminCompte, Sections, premiereSectionOuverte } from './sections.ts'
 
 /**
  * `Sections` est la source unique de la navigation, des routes et de la
@@ -132,6 +132,33 @@ describe('sections — navigation et destination d’arrivée', () => {
         premiereSectionOuverte([Roles.ClientSyndic, Roles.ChefEquipe])?.chemin,
         '/planning',
       )
+    })
+  })
+
+  describe('l’écran de compte, seul chemin qui n’est pas une section', () => {
+    test('aucune section ne revendique le chemin du compte', () => {
+      // Deux `<Route>` sur le même chemin laisseraient la seconde inatteignable,
+      // sans erreur ni avertissement. `App.tsx` monte `/compte` à part parce qu'il
+      // n'est ouvert par aucun rôle et ne doit jamais devenir une destination
+      // d'arrivée ; ce test garde la séparation.
+      assert.equal(Sections.some((section) => section.chemin === CheminCompte), false)
+    })
+
+    test('aucune ressource de référence ne revendique le chemin du compte', () => {
+      for (const section of Sections) {
+        for (const cle of section.ressources ?? []) {
+          assert.notEqual(descriptionDe(cle)?.chemin, CheminCompte, cle)
+        }
+      }
+    })
+
+    test('le compte n’est la destination d’arrivée d’aucun rôle', () => {
+      // Il est ouvert à tout compte connecté : s'il devenait une section, il
+      // deviendrait l'arrivée de tous — y compris des rôles internes, à la place du
+      // planning.
+      for (const role of Object.values(Roles)) {
+        assert.notEqual(premiereSectionOuverte([role])?.chemin, CheminCompte, role)
+      }
     })
   })
 })

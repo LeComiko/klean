@@ -109,9 +109,45 @@ export function FournisseurAuth({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const changerMotDePasse = useCallback(
+    async (motDePasseActuel: string, nouveauMotDePasse: string) => {
+      // Le serveur révoque les sessions du compte puis rouvre celle-ci : la réponse
+      // porte donc une session neuve, exactement comme une connexion. Ne pas la
+      // recueillir laisserait le minuteur de rafraîchissement sur l'ancienne
+      // expiration — sans rien casser, les cookies étant à jour, mais en
+      // rafraîchissant au mauvais moment.
+      const session = await api.post<Session>('/api/auth/changer-mot-de-passe', {
+        motDePasseActuel,
+        nouveauMotDePasse,
+      })
+
+      setProfil(session.profil)
+      setExpiration(session.expiration)
+    },
+    [],
+  )
+
+  const deconnecterPartout = useCallback(async () => {
+    // Pas de `finally` ici, et c'est le contraire de `deconnecter` : si l'appel
+    // échoue, les autres appareils sont restés ouverts et il ne faut pas le taire.
+    // L'écran affiche l'erreur. Un vrai 401 est de toute façon purgé par le client,
+    // qui prévient tous les abonnés.
+    await api.post<void>('/api/auth/deconnexion-totale')
+
+    setProfil(null)
+    setExpiration(null)
+  }, [])
+
   const valeur = useMemo<ValeurAuth>(
-    () => ({ profil, restauration, connecter, deconnecter }),
-    [profil, restauration, connecter, deconnecter],
+    () => ({
+      profil,
+      restauration,
+      connecter,
+      deconnecter,
+      changerMotDePasse,
+      deconnecterPartout,
+    }),
+    [profil, restauration, connecter, deconnecter, changerMotDePasse, deconnecterPartout],
   )
 
   return <ContexteAuth.Provider value={valeur}>{children}</ContexteAuth.Provider>

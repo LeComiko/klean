@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 
 import { useAuth } from '../auth/contexte'
 import { aUnRole } from '../types/auth'
-import { Sections } from './sections'
+import { CheminCompte, Sections } from './sections'
 import './Navigation.css'
 
 export function Navigation() {
@@ -51,6 +51,37 @@ export function Navigation() {
           </li>
         ))}
       </ul>
+
+      {/* Le compte, au pied de la barre et non dans la liste des pastilles : ce
+          n'est pas une fonction du produit mais le compte de celui qui l'utilise,
+          il est ouvert à tout rôle, et il ne doit jamais devenir la destination
+          d'arrivée d'une connexion. Voir `CheminCompte` dans sections.ts.
+
+          Une icône et non deux initiales : le prénom est facultatif à la création
+          d'un compte, et « A. » pour tout un service de nettoyage ne distingue
+          rien. */}
+      <NavLink
+        to={CheminCompte}
+        className={({ isActive }) =>
+          isActive
+            ? 'navigation__pastille navigation__compte navigation__pastille--active'
+            : 'navigation__pastille navigation__compte'
+        }
+        title="Mon compte"
+      >
+        {/* SVG écrit à la main : aucune bibliothèque d'icônes n'est autorisée. */}
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="8" r="3.5" fill="none" stroke="currentColor" strokeWidth="2" />
+          <path
+            d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        </svg>
+        <span className="pour-lecteur-d-ecran">Mon compte</span>
+      </NavLink>
 
       <button
         className="navigation__pastille navigation__sortie"

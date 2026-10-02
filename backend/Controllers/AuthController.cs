@@ -248,6 +248,82 @@ public class AuthController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Changement de mot de passe par son propriétaire, depuis l'écran de compte.
+    ///
+    /// C'est le seul parcours de mot de passe qui ne dépend d'aucun serveur SMTP :
+    /// la preuve d'identité est le mot de passe actuel, pas un lien reçu par
+    /// courriel. Sur une instance sans courriel configuré — cas prévu par
+    /// <c>CLAUDE.md</c> §2 — c'était jusqu'ici un geste impossible.
+    ///
+    /// <para>
+    /// <b>L'appareil qui change le mot de passe reste connecté, les autres non.</b>
+    /// Identity régénère le <c>SecurityStamp</c>, ce qui périme immédiatement tous
+    /// les jetons d'accès du compte ; les sessions de rafraîchissement sont révoquées
+    /// en plus. Puis une session neuve est ouverte pour l'appelant, parce qu'il vient
+    /// de prouver son mot de passe actuel : c'est une ré-authentification, pas une
+    /// prolongation silencieuse. Le renvoyer à l'écran de connexion pour retaper le
+    /// mot de passe qu'il vient de choisir n'apporterait rien — qui tient cette
+    /// session la tient déjà.
+    /// </para>
+    ///
+    /// ⚠️ <b>L'ordre des deux gestes est impératif.</b> Révoquer puis rouvrir. Dans
+    /// l'autre sens, le jeton de rafraîchissement tout juste émis est révoqué par le
+    /// geste suivant, et l'utilisateur se retrouve déconnecté au premier
+    /// renouvellement — quinze minutes plus tard, donc très loin de sa cause.
+    ///
+    /// ⚠️ <b>Un mot de passe actuel faux rend 400, jamais 401</b>, et ce n'est pas
+    /// une préférence. Le client du frontend traite tout 401 comme une session morte :
+    /// il tente un rafraîchissement, rejoue, puis purge la session. Répondre 401 sur
+    /// une faute de frappe déconnecterait donc l'utilisateur au lieu de lui dire que
+    /// son mot de passe est faux. Identity classe le cas en
+    /// <c>PasswordMismatch</c>, qui passe par le chemin du 400 ci-dessous.
+    /// </summary>
+    [Authorize]
+    [HttpPost("changer-mot-de-passe")]
+    public async Task<ActionResult<SessionDto>> ChangerMotDePasse(ChangementMotDePasseDto dto)
+    {
+        var id = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(id, out var utilisateurId))
+        {
+            return Unauthorized("Jeton sans identifiant exploitable.");
+        }
+
+        // Clé de limitation prise sur le jeton, donc avant toute lecture en base :
+        // une tentative refusée ne doit rien coûter.
+        var limite = LimiteAtteinte("changement", utilisateurId.ToString(),
+            PlafondsDebit.ChangementsParAdresse, PlafondsDebit.FenetreChangements,
+            PlafondsDebit.ChangementsParCompte, PlafondsDebit.FenetreChangements);
+
+        if (limite is not null) return limite;
+
+        var utilisateur = await _utilisateurs.FindByIdAsync(utilisateurId.ToString());
+        if (utilisateur is null)
+        {
+            return NotFound();
+        }
+
+        var resultat = await _utilisateurs.ChangePasswordAsync(
+            utilisateur, dto.MotDePasseActuel, dto.NouveauMotDePasse);
+
+        if (!resultat.Succeeded)
+        {
+            // Les descriptions d'Identity sont en français depuis l'étape 12 et
+            // traversent l'API telles quelles : rien à traduire ici, et rien à
+            // reformuler — l'écran n'a aucun moyen de retraduire un texte libre.
+            return BadRequest(string.Join(" ; ", resultat.Errors.Select(e => e.Description)));
+        }
+
+        await _session.RevoquerToutAsync(utilisateur.Id, "Changement de mot de passe");
+
+        // ⚠️ `utilisateur` est l'instance que ChangePasswordAsync vient de muter :
+        // c'est d'elle que le nouveau jeton tire le SecurityStamp. Relire le compte
+        // avant le changement, ou passer une copie plus ancienne, produirait un
+        // cookie porteur de l'empreinte périmée — donc refusé par OnTokenValidated
+        // à la requête suivante.
+        return Ok(await _session.OuvrirAsync(HttpContext, utilisateur));
+    }
+
     [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpPost("comptes")]
     public async Task<ActionResult<ProfilDto>> CreerCompte(CompteCreateDto dto)
