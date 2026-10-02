@@ -230,29 +230,40 @@ est la dernière : une durée sans mécanisme est une promesse que personne ne t
 
 | Nature de la donnée | Durée proposée | Raison | Mécanisme |
 |---|---|---|---|
-| Fiche agent (`Agents`) | 5 ans après la fin du contrat de travail | aligné sur la conservation des pièces du registre du personnel | **aucun** — la pseudonymisation est un geste manuel |
-| Coordonnées GPS du domicile | tant que le contrat de travail court, puis effacement immédiat | elles ne servent qu'à l'affectation : un agent parti n'est plus candidat | **aucun** — mais `/anonymiser` les met à `null` |
-| Absences, hors `Maladie` | 5 ans, avec la fiche agent | pièce justificative d'une indisponibilité | **aucun** |
-| Absences de type `Maladie` | **3 mois après la date de fin** | voir §8.2 : KLEAN n'est pas un outil de paie, il n'a aucune raison de garder une donnée de santé au-delà du remplacement | **aucun** — mécanisme proposé au §8.2 |
-| Interventions et leur statut | 5 ans | preuve des passages facturés, prescription de l'action contractuelle | **aucun** |
-| Remplacements et scores | 1 an | état dérivé, sans valeur probante au-delà de l'exercice | **aucun** |
-| Clients et sites | durée du contrat, puis 5 ans | relation commerciale | **aucun** |
-| Comptes (`AspNetUsers`) | désactivation à la sortie, effacement à 5 ans | un compte désactivé reste nécessaire pour attribuer les lignes du journal | **aucun** |
-| Jetons de rafraîchissement | **30 jours après révocation ou expiration** | la fenêtre de diagnostic d'un rejeu ; au-delà, seule l'adresse IP survit, sans usage | **aucun** — voir §9.2 |
+| Fiche agent (`Agents`) | 5 ans après la fin du contrat de travail | aligné sur la conservation des pièces du registre du personnel | 📋 `conservation-donnees-metier.sql` §6 — **rapport seulement**, voir ci-dessous |
+| Coordonnées GPS du domicile | tant que le contrat de travail court, puis effacement immédiat | elles ne servent qu'à l'affectation : un agent parti n'est plus candidat | 📋 rapport ; l'effacement passe par `/anonymiser`, qui les met à `null` |
+| Absences, hors `Maladie` | 5 ans, avec la fiche agent | pièce justificative d'une indisponibilité | 📋 `conservation-donnees-metier.sql` §2 |
+| Absences de type `Maladie` | **3 mois après la date de fin** | voir §8.2 : KLEAN n'est pas un outil de paie, il n'a aucune raison de garder une donnée de santé au-delà du remplacement | 📋 `degradation-absences-maladie.sql` |
+| Interventions et leur statut | 5 ans | preuve des passages facturés, prescription de l'action contractuelle | 📋 `conservation-donnees-metier.sql` §1 |
+| Remplacements et scores | 1 an | état dérivé, sans valeur probante au-delà de l'exercice | 📋 `conservation-donnees-metier.sql` §3 |
+| Clients et sites | durée du contrat, puis 5 ans | relation commerciale | 📋 `conservation-donnees-metier.sql` §4 — partiel, voir §9.7 |
+| Comptes (`AspNetUsers`) | désactivation à la sortie, effacement à 5 ans | un compte désactivé reste nécessaire pour attribuer les lignes du journal | **aucun** — voir §9.3 |
+| Jetons de rafraîchissement | **30 jours après révocation ou expiration** | la fenêtre de diagnostic d'un rejeu ; au-delà, seule l'adresse IP survit, sans usage | ✅ `purge-jetons-rafraichissement.sql` |
 | Journal d'accès | **12 mois** | un journal RGPD est lui-même une donnée personnelle | ✅ `purge-journal-acces.sql` |
 
-**Un seul mécanisme sur dix lignes.** C'est l'état réel, et c'est le principal chantier
-que ce lot ouvre pour l'étape 18 : les durées ci-dessus demandent un script de purge
-construit comme celui du journal — lecture d'abord, suppression commentée, exécuté par
-l'exploitation et non par l'application. La raison de ne pas le faire dans le serveur
-est la même que pour le journal : une tâche planifiée embarquée existerait en un
-exemplaire logique alors que le produit peut tourner en plusieurs instances.
+**Lire la dernière colonne avec attention : 📋 n'est pas ✅.** Un script marqué 📋
+**rapporte** ce qui est hors délai et porte son `DELETE` **en commentaire**. Il ne
+supprime rien tant qu'un humain ne décommente pas, et c'est délibéré pour deux raisons :
+les durées de ce tableau sont des propositions non validées juridiquement, et une purge
+de données métier n'est pas réversible. Deux scripts seulement sont ✅ — ceux dont la
+durée est tranchée et dont les lignes n'ont aucune valeur probante.
 
-⚠️ **Une purge de données métier n'est pas une purge de journal.** La chaîne
-d'exploitation est en `Restrict` depuis l'étape 16 bis : supprimer un contrat dont les
-interventions existent échoue. Un script de conservation doit donc remonter la chaîne
-dans le bon ordre, et ce n'est pas un détail d'écriture — c'est la différence entre un
-script qui purge et un script qui échoue à mi-parcours.
+⚠️ **Une purge de données métier n'est pas une purge de journal, et l'ordre est la
+moitié du travail.** La chaîne d'exploitation est en `Restrict` depuis l'étape 16 bis,
+et deux clés de plus le sont sur l'agent — `Intervention.AgentId` et
+`Remplacement.AgentRemplacantId`. Un `DELETE` dans le mauvais ordre échoue sur une
+violation de clé **à mi-parcours**, après avoir déjà supprimé ce qui précédait.
+`conservation-donnees-metier.sql` porte donc l'ordre en commentaire, et une colonne
+`supprimable_maintenant` qui distingue une ligne hors délai d'une ligne hors délai
+**mais bloquée par un enfant encore dans le sien**. Les lignes bloquées le restent
+jusqu'à ce que leurs enfants tombent : le script est à **rejouer**, pas à forcer.
+
+⚠️ **Aucun `DELETE` sur `Agents`, à aucun moment.** C'est le compromis de l'étape 17 :
+`Restrict` sur `Intervention.AgentId` rend un agent insupprimable dès qu'il a travaillé,
+et la réponse à une demande d'effacement est `POST /api/agents/{id}/anonymiser`, qui
+conserve la ligne. Le script ne fait que lister les agents inactifs non pseudonymisés —
+une liste à examiner, pas une échéance, le modèle ne portant pas de date de fin de
+contrat de travail.
 
 ---
 
@@ -261,17 +272,45 @@ script qui purge et un script qui échoue à mi-parcours.
 | Droit | Servi aujourd'hui par | État |
 |---|---|---|
 | Information (art. 13) | rien dans le produit | **manquant** — modèle de note au §7 |
-| Accès (art. 15) | `GET /api/agents/{id}` et `GET /api/absences`, par un administrateur | partiel : réponse manuelle, aucun dossier consolidé |
+| Accès (art. 15) | **`GET /api/agents/{id}/dossier`**, administrateur seul | ✅ dossier consolidé en une réponse |
 | Rectification (art. 16) | `PUT /api/agents/{id}` | ✅ |
 | Effacement (art. 17) | `POST /api/agents/{id}/anonymiser` | partiel — voir §8.1 et §9.3 |
 | Limitation (art. 18) | `Actif = false` sur l'agent et sur le compte | approximatif : c'est une désactivation, pas un gel |
-| Portabilité (art. 20) | rien | **manquant** — voir §9.4 |
+| Portabilité (art. 20) | **`GET /api/agents/{id}/dossier`** | ✅ JSON structuré et lisible par machine |
 | Opposition (art. 21) | sans objet sur T1, T3, T4 (exécution du contrat) ; recevable sur T2 | à traiter au cas par cas, hors code |
 
-⚠️ **Le délai d'un mois de l'article 12 court même quand l'outil n'aide pas.** Les
-deux manques ci-dessus — pas de dossier consolidé, pas d'export — ne sont pas des
-manquements en soi : un administrateur peut composer la réponse à la main. Ils
-deviennent un manquement le jour où le volume fait dépasser le délai.
+⚠️ **Le délai d'un mois de l'article 12 court même quand l'outil n'aide pas.** C'est ce
+qui rendait les deux manques précédents — pas de dossier consolidé, pas d'export —
+dangereux plutôt que seulement incommodes : un administrateur pouvait composer la
+réponse à partir de cinq appels, et rien ne garantissait qu'il n'en oubliait pas un.
+
+**Le dossier répond aux deux, et il est borné autant que complet.** Trois choses n'y
+figurent pas, et les trois sont des choix, inscrits dans la réponse elle-même sous
+`nonInclus` :
+
+- **L'empreinte du mot de passe.** Elle n'est pas communicable au titre de l'article
+  15 : elle n'apporte rien à la personne et sa divulgation affaiblirait le secret
+  qu'elle protège. Un test l'éprouve sur le **corps brut** de la réponse, et non sur le
+  DTO — une propriété ajoutée demain n'apparaîtrait dans aucune assertion typée.
+- **L'identité de ceux qui ont consulté la fiche.** Le dossier donne leur **nombre** et
+  la nature de leurs accès, jamais leurs noms : les lignes du journal nomment des
+  **collègues**, et l'article 15(4) écarte l'atteinte aux droits d'autrui. Le nombre dit
+  que la traçabilité existe ; les identités appartiennent à la direction, par
+  `GET /api/journal-acces`.
+- **L'historique des connexions et les adresses IP.** Leur finalité est la sécurité des
+  sessions, pas la description de la personne, et leur conservation est de trente jours.
+
+⚠️ Et deux choses y figurent **exprès**, parce que les retenir serait le vrai
+manquement : le **motif** d'une absence quand il existe, et le **score** attribué à
+l'agent comme candidat au remplacement. Ce score est une évaluation de la personne — un
+des trois critères qui rendent l'AIPD probable — et la lui cacher dans sa propre réponse
+d'accès serait précisément ce que l'article 15 interdit.
+
+⚠️ **Le dossier est réservé à l'administrateur, pas ouvert aux rôles internes.** Un
+responsable lit la fiche d'un agent, c'est son métier ; sortir le dossier complet d'un
+salarié est une réponse à une demande légale, et c'est un autre geste. Il est journalisé
+en nature **`Export`**, distincte de `Lecture` pour la même raison : les confondre
+ferait disparaître l'export dans le bruit des consultations.
 
 ---
 
@@ -410,7 +449,7 @@ déclarer en `@font-face`, et refermer `style-src` et `font-src` sur `'self'` da
 politiques. Aucun compromis d'interface : §12 impose ces deux familles, pas leur
 provenance.
 
-### 9.2 — L'adresse IP des sessions n'est jamais purgée
+### 9.2 — ✅ CORRIGÉ — l'adresse IP des sessions n'était jamais purgée
 
 `JetonsRafraichissement.AdresseIp` est renseignée à chaque ouverture de session et à
 chaque rotation — donc plusieurs fois par jour et par utilisateur. **Rien ne supprime
@@ -422,8 +461,17 @@ adresse IP (« une donnée personnelle de plus, dont la conservation demanderait
 justification »), et la table de sessions en garde l'historique complet. La colonne a
 son usage — diagnostiquer un rejeu — mais cet usage dure des jours, pas des années.
 
-**Correction proposée** : un script de purge des jetons révoqués ou expirés depuis plus
-de trente jours, sur le modèle de `purge-journal-acces.sql`.
+**Corrigé** par `backend/Scripts/purge-jetons-rafraichissement.sql`, sur le modèle de
+celui du journal : rapport par état, `DELETE` décommentable.
+
+⚠️ **La condition protège les sessions vivantes, et elle ne doit pas être « simplifiée ».**
+Un jeton vivant se reconnaît à `DateRevocation IS NULL ET DateExpiration dans le futur`,
+et la première clause du `WHERE` est là pour l'exclure. La retirer « parce que la seconde
+suffit » détruirait les sessions en cours : un jeton vivant dont l'expiration est
+lointaine passe la seconde condition dès que `DateRevocation` est nulle. Le prédicat a
+été éprouvé sur sept cas limites — vivant, révoqué d'hier, révoqué à 29 et 31 jours,
+expiré sans révocation à 10 et 40 jours — et la classification du rapport s'accorde
+exactement avec ce que le `DELETE` emporterait.
 
 ### 9.3 — Aucun chemin d'effacement pour un compte sans fiche agent
 
@@ -438,23 +486,41 @@ Ce n'est pas un oubli du lot B, qui traitait la demande d'effacement d'un **agen
 c'est un trou du modèle de droits, et il concerne les personnes les mieux placées pour
 s'en apercevoir.
 
-### 9.4 — Aucun export, donc aucune portabilité
+### 9.4 — ✅ CORRIGÉ — il n'existait aucun export, donc aucune portabilité
 
-Rien ne compose un dossier consolidé pour une personne. Un administrateur peut
-reconstituer la réponse à une demande d'accès à partir de quatre ou cinq appels ; il n'y
-a pas d'export au sens de l'article 20. Acceptable à l'échelle visée — 5 à 150 agents —
-tant que le volume de demandes reste faible.
+Rien ne composait un dossier consolidé. Un administrateur devait reconstituer la réponse
+à une demande d'accès à partir de cinq appels, sans garantie de n'en oublier aucun.
 
-### 9.5 — `Sites.Consignes` peut nommer une personne, et rien ne le décourage
+**Corrigé** par `GET /api/agents/{id}/dossier` — voir §6 pour ce qu'il contient, ce
+qu'il exclut, et pourquoi. Deux remarques de conception qui n'appartiennent pas au
+tableau des droits :
 
-Le champ est aujourd'hui décrit par « Accès, codes, matériel sur place. Lues par
-l'agent avant son passage. » Rien n'y dissuade d'écrire le nom d'un gardien ou d'un
-occupant.
+- **L'invariante par réflexion a imposé la journalisation avant que j'y pense.**
+  `DossierAgentDto` porte `Nom`, `Prenom`, `Adresse`, `Latitude` : `JournalAccesTests` a
+  rendu l'action rouge à la seconde où elle a existé, d'abord par le test d'excès — « les
+  actions journalisées sont exactement celles attendues » — puis par celui d'omission dès
+  que j'ai retiré l'attribut pour vérifier qu'il mordait. C'est le filet de §7 bis de
+  `CLAUDE.md` faisant exactement ce pour quoi il a été écrit : un DTO créé plus tard y
+  tombe sans que personne y pense.
+- **Le cadrage du compte lié est écrit à la main, et c'est obligatoire.**
+  `AspNetUsers` n'est pas couverte par les filtres globaux, donc le `EntrepriseId` figure
+  explicitement dans la recherche du compte. Le test qui l'éprouve construit le compte
+  intrus **directement en base**, sous les validations de `POST /api/auth/comptes` qui le
+  rendraient incréable par l'API — une défense en profondeur qu'aucun test n'exerce est
+  une ligne qu'on peut retirer sans rien casser.
 
-**Correction proposée**, d'une ligne : ajouter à l'aide du champ, dans
-`frontend/src/reference/descriptions.ts`, qu'il ne doit pas nommer de personne. C'est
-une mesure de minimisation à la source, infiniment moins coûteuse que de journaliser
-toutes les lectures de sites — et la seule qui agisse sur la cause.
+### 9.5 — ✅ CORRIGÉ — `Sites.Consignes` ne dissuadait pas de nommer une personne
+
+Le champ n'était décrit que par « Accès, codes, matériel sur place. Lues par l'agent
+avant son passage. » Rien n'y dissuadait d'écrire le nom d'un gardien ou d'un occupant.
+
+**Corrigé** dans `frontend/src/reference/descriptions.ts` : l'aide du champ demande
+désormais de préférer une fonction — « le gardien », « l'accueil ». C'est une mesure de
+minimisation **à la source**, infiniment moins coûteuse que de journaliser toutes les
+lectures de sites, et la seule qui agisse sur la cause plutôt que sur la trace.
+
+⚠️ Gardée par un test nommé, à côté de celui du motif d'arrêt maladie. Une phrase d'aide
+supprimée ne casse rien de visible : c'est précisément pour cela qu'elle en a besoin.
 
 ### 9.6 — Une AIPD est probablement requise
 
@@ -470,6 +536,27 @@ réunis :
 Deux critères suffisent à la présomption. L'AIPD est un document de l'exploitant, pas
 du logiciel ; ce fichier lui fournit la matière des sections « description du
 traitement », « nécessité et proportionnalité » et « mesures de sécurité ».
+
+### 9.7 — Un site ou un client sans contrat n'a aucune date dont partir
+
+Découvert en écrivant `conservation-donnees-metier.sql`, et c'est le genre de trou qu'on
+ne voit qu'en essayant d'appliquer une politique de conservation.
+
+`Sites` et `Clients` ne portent **aucune date** : ni création, ni fin. Leur échéance se
+déduit de celle de leurs contrats — un site est hors délai quand tous ses contrats le
+sont. Ce raisonnement ne fonctionne pas pour une ligne qui n'a **aucun** contrat : la
+requête ne peut pas distinguer un site dont les contrats ont expiré puis été purgés d'un
+site saisi hier et pas encore sous contrat. Les deux se présentent identiquement.
+
+Le script les compte donc à part, dans une section intitulée « à traiter à la main », et
+leur `DELETE` porte un garde-fou volontairement toujours faux plutôt qu'une condition
+approximative. Un garde-fou explicite qui ne supprime rien vaut mieux qu'une condition
+qui supprime parfois la mauvaise ligne.
+
+**Deux issues, et c'est une décision de modèle, pas de script** : ajouter une
+`DateCreation` à `Sites` et `Clients` — une migration additive, qui rendrait la règle
+calculable — ou assumer que ces lignes relèvent d'un examen manuel. La seconde est
+tenable à l'échelle visée ; la première est la seule qui tienne si le volume grandit.
 
 ---
 
@@ -492,7 +579,7 @@ Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail es
 - **Transport et navigateur** : HTTPS, HSTS hors développement, protection CSRF par
   double soumission, politique de sécurité du contenu en `default-src 'none'` sur
   l'API, limite de taille de corps appliquée avant toute lecture.
-- **Journalisation des accès** : neuf actions, dont les trois que personne n'aurait
+- **Journalisation des accès** : dix actions, dont les trois que personne n'aurait
   cherchées — les deux routes de candidats et le planning.
 - **Traçabilité du code** : 329 tests côté serveur, 499 côté interface, et la
   discipline de validation par sabotage décrite dans `CLAUDE.md`.
@@ -509,9 +596,34 @@ Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail es
 fichier, remettre la note du §7, conclure les contrats de l'article 28 avec l'hébergeur
 et le fournisseur SMTP, tenir l'AIPD du §9.6, désigner un point de contact.
 
-**Par le logiciel**, dans l'ordre de gravité : §9.1 les polices, §9.2 la purge des
-jetons, le script de conservation du §5, §8.2 le basculement des absences `Maladie`,
-§9.5 l'aide du champ consignes, §9.3 l'effacement d'un compte sans fiche agent, et
-§9.4 l'export.
+**Par le logiciel** — état au 3 octobre 2026, dans l'ordre de gravité où les écarts ont
+été relevés :
 
-Aucun de ces points n'est engagé par ce lot.
+| Écart | État |
+|---|---|
+| §9.1 — les polices chargées chez Google | ⬜ **à faire, et c'est le plus urgent** |
+| §9.2 — l'adresse IP des sessions jamais purgée | ✅ `purge-jetons-rafraichissement.sql` |
+| §5 — aucun mécanisme de conservation métier | 📋 `conservation-donnees-metier.sql`, rapport avec `DELETE` commenté |
+| §8.2 — le résidu de santé des absences `Maladie` | 📋 `degradation-absences-maladie.sql`, rapport avec `UPDATE` commenté |
+| §9.5 — `Sites.Consignes` nommant une personne | ✅ aide du champ, gardée par un test |
+| §9.3 — aucun effacement pour un compte sans fiche agent | ⬜ à faire |
+| §9.4 — aucun export ni portabilité | ✅ `GET /api/agents/{id}/dossier` |
+| §9.7 — sites et clients sans contrat ni date | ⬜ décision de modèle, voir §9.7 |
+
+**Les deux restants ne sont pas restés par oubli.**
+
+- **§9.1, les polices.** La correction demande de récupérer les fichiers `.woff2` de
+  Figtree et d'IBM Plex Mono pour les verser au dépôt. Télécharger des fichiers depuis
+  une source externe demande un accord explicite, et il n'a pas été donné. Tout le reste
+  de la correction est connu : `@font-face` dans `tokens.css`, fichiers dans
+  `frontend/public/`, et `style-src` et `font-src` refermés sur `'self'` dans
+  `frontend/csp.ts` — ce qui supprime les deux seules origines externes des deux
+  politiques. Les deux familles sont sous licence OFL, donc redistribuables avec le
+  dépôt sous AGPL, à condition d'y joindre leur licence.
+- **§9.3, l'effacement d'un compte sans fiche agent.** Le registre a besoin de savoir
+  **quand** un effacement a été exécuté — c'est la raison pour laquelle `Agent` porte une
+  `DateAnonymisation` plutôt qu'un drapeau. La même colonne sur `AspNetUsers` demande
+  `dotnet ef migrations add`, que `CLAUDE.md` §14 interdit de lancer sans validation
+  explicite. Un contournement existe — reconnaître un compte effacé à son adresse
+  substituée sur `anonymise.invalid` — mais c'est renifler une chaîne là où une date
+  répondrait, et le registre y perdrait la réponse à sa propre question.

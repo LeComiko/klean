@@ -103,8 +103,10 @@ KLEAN/
 │   ├── Middleware/      VerificationCsrf, EnTetesSecurite, LimiteCorpsRequete
 │   ├── Filtres/         JournaliserAcces — filtre d'action MVC, pas un middleware
 │   ├── Migrations/
-│   └── Scripts/         SQL de maintenance, jeu de démonstration,
-│                        contrat-ecrans-reference.py, purge-journal-acces.sql
+│   └── Scripts/         jeu de démonstration, contrat-ecrans-reference.py,
+│                        et les quatre SQL de conservation — purge-journal-acces,
+│                        purge-jetons-rafraichissement, conservation-donnees-metier,
+│                        degradation-absences-maladie (RGPD.md §5)
 └── frontend/
     ├── csp.ts           les deux politiques de sécurité du contenu
     ├── vite.config.ts   serveur https, proxy /api, en-têtes
@@ -451,7 +453,7 @@ d'écrire du code ici :
 - **Un seul mécanisme de conservation existe** — la purge du journal. Les neuf autres
   durées sont déclaratives, et c'est inscrit noir sur blanc plutôt que supposé.
 
-**Huit actions sont journalisées, et deux ne s'en doutaient pas.** C'est le fait
+**Neuf lectures sont journalisées, et deux ne s'en doutaient pas.** C'est le fait
 central de ce mécanisme : chercher « les routes `/api/agents` et `/api/absences` »
 donne un journal qui a l'air complet et qui a deux trous.
 
@@ -463,6 +465,7 @@ donne un journal qui a l'air complet et qui a deux trous.
 | `GET /api/remplacements/{id}/candidats` | `Candidats` | la même chose, par une seconde route |
 | `GET /api/planning` | `Planning` | nom de **tous** les agents, et la cause « Agent absent » |
 | `GET /api/journal-acces` | `JournalAcces` | le journal lui-même |
+| `GET /api/agents/{id}/dossier` | `Agent` | **tout**, en une réponse — nature `Export` |
 
 `CandidatDto` expose `DistanceKm`, dérivée des coordonnées du domicile — exactement
 la donnée que `SPEC.md` signale comme relevant de la doctrine CNIL. Et
@@ -531,7 +534,7 @@ est consignée dans le test, pas tranchée. Et `ProduitDto` montre le prix de la
 `ClientDto`. Une règle grossière dont chaque exception est écrite vaut mieux qu'une
 règle fine qui laisse passer en silence.
 
-Un second test garde l'excès symétrique — les huit actions journalisées sont
+Un second test garde l'excès symétrique — les dix actions journalisées sont
 exactement celles attendues, parce qu'un journal bruyant ne se lit plus.
 
 **`Divulgation` et `Compter` sont `public`, pour être éprouvées directement.** Même
@@ -542,7 +545,72 @@ qu'aucune action ne produit aujourd'hui — notamment qu'une `string`, étant un
 `IEnumerable<char>`, vaut **une** ligne et non cent trente-quatre. Trois sabotages y
 sont restés verts avant que ces tests existent.
 
-**Coût assumé** : une insertion synchrone par lecture sur ces huit endpoints.
+**Coût assumé** : une insertion synchrone par lecture sur ces neuf endpoints.
+
+⚠️ **Dix attributs pour neuf lectures** : la dixième action est `Anonymiser`, qui n'est
+pas une lecture mais une **écriture irréversible** — nature `Anonymisation`. Et
+`Dossier` porte la nature `Export` plutôt que `Lecture`, parce que sortir le dossier
+complet d'un salarié n'est pas le même geste que consulter sa fiche : les confondre
+ferait disparaître l'export dans le bruit des consultations.
+
+### Le dossier d'un agent
+
+`GET /api/agents/{id}/dossier`, administrateur seul, journalisé en `NatureAcces.Export`.
+Il sert l'accès de l'article 15 et la portabilité de l'article 20 ; le détail de son
+contenu et de ses exclusions est en `RGPD.md` §6. Trois choses à savoir avant d'y
+toucher :
+
+- ⚠️ **Il est borné autant que complet, et les bornes sont testées sur le corps brut.**
+  Ni empreinte de mot de passe, ni `SecurityStamp`, ni identité des personnes ayant
+  consulté la fiche — seulement leur nombre par nature d'accès, parce que les lignes du
+  journal nomment des **collègues** et que l'article 15(4) écarte l'atteinte aux droits
+  d'autrui. L'assertion porte sur la réponse sérialisée et non sur le DTO : une propriété
+  ajoutée demain n'apparaîtrait dans aucune assertion typée, et partirait pourtant.
+- ⚠️ **Les interventions y portent le nom du site et sa ville, pas des identifiants.**
+  L'article 15 exige une forme intelligible, et une liste de `PrestationId` en UUID ne
+  dit rien à un salarié qui demande où il a travaillé. C'est la seule raison pour
+  laquelle `InterventionDuDossierDto` existe à côté d'`InterventionDto`.
+- ⚠️ **Le compte lié est cadré à la main sur `EntrepriseId`**, `AspNetUsers` n'étant pas
+  filtrée (§7). Le test construit le compte intrus **directement en base**, sous les
+  validations qui le rendraient incréable par l'API — même raison qu'au lot B de
+  l'étape 17.
+
+### Les quatre scripts de conservation
+
+`RGPD.md` §5 porte les durées ; `backend/Scripts/` porte les gestes. **Deux seulement
+suppriment**, et la distinction est dans le script lui-même :
+
+| Script | Durée | Opération |
+|---|---|---|
+| `purge-journal-acces.sql` | 12 mois | `DELETE` décommentable |
+| `purge-jetons-rafraichissement.sql` | 30 jours après mort du jeton | `DELETE` décommentable |
+| `conservation-donnees-metier.sql` | 1 à 5 ans selon la table | **rapport seul**, `DELETE` commenté |
+| `degradation-absences-maladie.sql` | 3 mois | **rapport seul**, `UPDATE` commenté |
+
+⚠️ Les deux derniers ne suppriment rien tant qu'un humain ne décommente pas, et ce n'est
+pas de la timidité : les durées de `RGPD.md` §5 sont des propositions non validées
+juridiquement, et une purge de données métier est irréversible.
+
+⚠️ **L'ordre des `DELETE` est une contrainte, pas une préférence de présentation.** Six
+clés de la chaîne d'exploitation sont en `Restrict`, et deux de plus sur l'agent —
+`Intervention.AgentId` et `Remplacement.AgentRemplacantId`. Un `DELETE` dans le mauvais
+ordre échoue **à mi-parcours**, après avoir supprimé ce qui précédait. D'où la colonne
+`supprimable_maintenant` du rapport, qui distingue une ligne hors délai d'une ligne hors
+délai mais bloquée par un enfant encore dans le sien : le script est à **rejouer**, pas
+à forcer.
+
+⚠️ **La dégradation des arrêts maladie n'est pas une suppression, et c'est le point.**
+`Remplacement.AbsenceId` est en `Cascade` : supprimer l'absence emporterait les
+remplacements qu'elle a déclenchés. L'`UPDATE` vers `Indisponibilite` conserve l'agent,
+les dates et toute la chaîne — ce dont l'historique a besoin est **qu'il y avait un
+trou**, pas pourquoi. Vérifié en base, dans une transaction annulée : l'`UPDATE`
+préserve le remplacement que le `DELETE` équivalent détruit.
+
+⚠️ **Dix attributs pour neuf lectures** : la dixième action est `Anonymiser`, qui n'est
+pas une lecture mais une **écriture irréversible** — nature `Anonymisation`. Et
+`Dossier` porte la nature `Export` plutôt que `Lecture`, parce que sortir le dossier
+complet d'un salarié n'est pas le même geste que consulter sa fiche : les confondre
+ferait disparaître l'export dans le bruit des consultations.
 
 ### Pseudonymisation d'un agent
 

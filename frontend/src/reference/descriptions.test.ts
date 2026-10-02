@@ -283,6 +283,21 @@ describe('descriptions — structure', () => {
     assert.deepEqual(motif?.masquerSi, { champ: 'type', vaut: ['Maladie'] })
   })
 
+  test('les consignes d’un site dissuadent de nommer une personne', () => {
+    // ⚠️ Nommément, pour la même raison que le motif d'arrêt maladie ci-dessus : c'est
+    // une mesure de conformité, pas du conseil rédactionnel. `Sites.Consignes` est le
+    // seul texte libre de la chaîne client, et `RGPD.md` §8.3 exempte `SiteDto` de
+    // journalisation parce qu'un site est un lieu — exemption que ce champ peut faire
+    // mentir à lui seul.
+    //
+    // Une phrase d'aide supprimée ne casse rien de visible. C'est précisément pour cela
+    // qu'elle a besoin d'un test.
+    const consignes = descriptionDe('sites')?.champs.find((champ) => champ.nom === 'consignes')
+
+    assert.notEqual(consignes, undefined)
+    assert.match(consignes?.aide ?? '', /ne pas y nommer de personne/i)
+  })
+
   test('seul un booléen porte un défaut booléen', () => {
     // Un `defaut: true` sur un champ texte partirait en `true` dans le corps JSON
     // et se ferait refuser par la liaison de modèle.

@@ -46,7 +46,18 @@ public enum NatureAcces
     Lecture,
 
     /// <summary>Remplacement des données identifiantes par des valeurs neutres (étape 17, lot B).</summary>
-    Anonymisation
+    Anonymisation,
+
+    /// <summary>
+    /// Sortie du dossier complet d'une personne, pour répondre à une demande d'accès
+    /// ou de portabilité (RGPD.md §9.4).
+    ///
+    /// ⚠️ Nature distincte de <see cref="Lecture"/>, et la distinction a un sens pour
+    /// qui relit le journal : consulter une fiche est un geste d'exploitation ordinaire,
+    /// sortir le dossier entier d'un salarié n'en est pas un. Les confondre ferait
+    /// disparaître l'export dans le bruit des consultations.
+    /// </summary>
+    Export
 }
 
 /// <summary>

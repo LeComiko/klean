@@ -150,7 +150,19 @@ const Sites: DescriptionRessource = {
       nom: 'consignes',
       libelle: 'Consignes',
       type: 'texteLong',
-      aide: 'Accès, codes, matériel sur place. Lues par l’agent avant son passage.',
+      // ⚠️ La seconde phrase est une mesure de minimisation, pas du conseil
+      // rédactionnel. Ce champ est le seul texte libre de la chaîne client, et rien
+      // n'empêche d'y écrire « sonner chez Mme Durand, deuxième étage » — ce qui
+      // ferait entrer une donnée personnelle dans une table que `RGPD.md` §8.3
+      // exempte de journalisation parce qu'un site est un lieu.
+      //
+      // La parade proportionnée est d'empêcher la donnée d'entrer, pas de journaliser
+      // toutes les lectures de sites : elle agit sur la cause, et elle coûte une
+      // phrase. Voir `RGPD.md` §9.5.
+      aide:
+        'Accès, codes, matériel sur place. Lues par l’agent avant son passage. '
+        + 'Ne pas y nommer de personne : préférer une fonction — « le gardien », '
+        + '« l’accueil ».',
     },
   ],
 

@@ -1330,6 +1330,33 @@ décision produit.
   portabilité, `Sites.Consignes` peut nommer une personne sans que rien ne l'en dissuade,
   et neuf durées sur dix n'ont aucun mécanisme.
 
+  **Cinq des sept écarts sont désormais corrigés**, après le lot D et sur demande
+  explicite. Deux ont un mécanisme complet — la purge des jetons de rafraîchissement, qui
+  ferme la seule adresse IP conservée sans limite, et l'aide du champ consignes, qui agit
+  sur la cause plutôt que sur la trace. Un troisième comble un droit entier :
+  `GET /api/agents/{id}/dossier` sert l'accès de l'article 15 et la portabilité de
+  l'article 20, et c'est **l'invariante par réflexion de `JournalAccesTests` qui a exigé
+  sa journalisation** avant que la question se pose — le filet de l'étape 17 lot A faisant
+  exactement ce pour quoi il avait été écrit.
+
+  Les deux scripts de conservation métier — `conservation-donnees-metier.sql` et
+  `degradation-absences-maladie.sql` — **rapportent sans supprimer** : leurs `DELETE` et
+  `UPDATE` sont commentés, parce que les durées sont des propositions non validées
+  juridiquement et qu'une purge de données métier est irréversible.
+
+  ⚠️ **Un huitième écart est apparu en écrivant ces scripts**, et c'est le genre de trou
+  qu'on ne voit qu'en essayant d'appliquer une politique de conservation : `Sites` et
+  `Clients` ne portent **aucune date**. Leur échéance se déduit de celle de leurs
+  contrats, ce qui ne fonctionne pas pour une ligne qui n'en a aucun — la requête ne peut
+  pas distinguer un site dont les contrats ont été purgés d'un site saisi hier. Décision
+  de modèle, pas de script : une `DateCreation` additive, ou l'examen manuel assumé.
+
+  **Deux écarts restent, et aucun par oubli.** Les polices chargées chez Google — le plus
+  urgent, et le seul qui concerne tous les utilisateurs de toutes les instances — demande
+  de récupérer des fichiers depuis une source externe, ce qui réclame un accord explicite.
+  L'effacement d'un compte sans fiche agent demande une migration, que `CLAUDE.md` §14
+  interdit de lancer sans validation. Détail de l'un et de l'autre en `RGPD.md` §11.
+
   ⚠️ **Une AIPD est requise selon toute vraisemblance** : trois critères de l'article
   35(3) sont réunis, là où deux suffisent à la présomption — données de l'article 9
   (`Maladie`), personnes en situation de dépendance économique (des salariés), et
