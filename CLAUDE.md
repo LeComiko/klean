@@ -101,7 +101,8 @@ KLEAN/
 │   │                    ServiceCourrielSmtp, DescripteurErreursFrancais
 │   ├── Middleware/      VerificationCsrf, EnTetesSecurite, LimiteCorpsRequete
 │   ├── Migrations/
-│   └── Scripts/         SQL de maintenance, jeu de démonstration
+│   └── Scripts/         SQL de maintenance, jeu de démonstration,
+│                        contrat-ecrans-reference.py
 └── frontend/
     ├── csp.ts           les deux politiques de sécurité du contenu
     ├── vite.config.ts   serveur https, proxy /api, en-têtes

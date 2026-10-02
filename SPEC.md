@@ -1165,6 +1165,13 @@ minuit UTC, le refus du motif de maladie puis son acceptation à `null`, et les 
 refus de suppression qui comptent leurs enfants et nomment la sortie. Le clic reste à
 faire.
 
+La sonde qui rejoue ce contrat vit dans `backend/Scripts/contrat-ecrans-reference.py`,
+et non dans un fichier jetable : une vérification reportée qui n'est nulle part n'est
+pas reportée, elle est abandonnée. Elle défait ce qu'elle a créé en remontant la
+chaîne, ce qui prouve au passage la seconde moitié de la règle des `Restrict` — la
+sortie qu'un refus nomme doit être franchissable, et le seul moyen de le savoir est de
+l'emprunter.
+
 **Décisions à respecter**
 
 La **matrice des droits de l'étape 8** pilote l'affichage, pas seulement le
