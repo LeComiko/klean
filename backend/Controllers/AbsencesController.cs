@@ -1,4 +1,5 @@
 using Klean.Api.DTOs;
+using Klean.Api.Filtres;
 using Klean.Api.Data;
 using Klean.Api.Models;
 using Klean.Api.Services;
@@ -34,6 +35,7 @@ public class AbsencesController : ControllerBase
     /// filtres globaux écartent — rend une page vide, pas un 404 : une liste filtrée
     /// sur rien reste une liste, et c'est une réponse, pas une erreur.
     /// </summary>
+    [JournaliserAcces(RessourceAccedee.Absence, NatureAcces.Liste)]
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
     public async Task<ActionResult<PageDto<AbsenceDto>>> Lister(
@@ -74,6 +76,7 @@ public class AbsencesController : ControllerBase
         });
     }
 
+    [JournaliserAcces(RessourceAccedee.Absence, NatureAcces.Lecture)]
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<AbsenceDto>> Obtenir(Guid id)

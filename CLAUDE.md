@@ -91,7 +91,8 @@ installation.
 KLEAN/
 ├── CLAUDE.md, SPEC.md, README.md, LICENSE
 ├── backend/
-│   ├── Models/          11 entités métier + Utilisateur + RolesKlean
+│   ├── Models/          11 entités métier + AccesJournalise + Utilisateur
+│   │                    + RolesKlean
 │   ├── Data/            KleanDbContext (filtres multi-tenant)
 │   ├── DTOs/            un fichier par entité, XxxDto + XxxCreateDto
 │   ├── Controllers/     un par entité + Auth + Planning
@@ -100,9 +101,10 @@ KLEAN/
 │   │                    AmorcageService, TenantContext, LimiteurDebit,
 │   │                    ServiceCourrielSmtp, DescripteurErreursFrancais
 │   ├── Middleware/      VerificationCsrf, EnTetesSecurite, LimiteCorpsRequete
+│   ├── Filtres/         JournaliserAcces — filtre d'action MVC, pas un middleware
 │   ├── Migrations/
 │   └── Scripts/         SQL de maintenance, jeu de démonstration,
-│                        contrat-ecrans-reference.py
+│                        contrat-ecrans-reference.py, purge-journal-acces.sql
 └── frontend/
     ├── csp.ts           les deux politiques de sécurité du contenu
     ├── vite.config.ts   serveur https, proxy /api, en-têtes
@@ -133,6 +135,11 @@ répond 403, un jeton mal orthographié qu'aucun navigateur ne signale.
 
 Onze entités métier, toutes avec un `Id` de type `Guid` généré côté
 application et une colonne `EntrepriseId` (dénormalisée, voir §7).
+
+Une douzième entité existe et n'est **pas** métier : `AccesJournalise`, le journal
+d'accès aux données personnelles de §7 bis. Elle suit les mêmes règles — `Guid`
+applicatif, `EntrepriseId` dénormalisé, filtre global — mais elle ne décrit rien du
+nettoyage de bureaux : elle rend compte de l'usage des onze autres.
 
 ```
 Entreprise ─┬─ Client ─── Site ─── Contrat ─── Prestation ─── Intervention
@@ -331,7 +338,7 @@ Mécanisme en trois parties, toutes nécessaires :
    utilisé par l'amorçage qui doit créer la première entreprise avant
    qu'aucun tenant n'existe.
 
-2. **Filtres globaux EF Core**, **onze** au total :
+2. **Filtres globaux EF Core**, **douze** au total :
    ```csharp
    modelBuilder.Entity<X>().HasQueryFilter(e =>
        !TenantFiltrageActif || TenantEntrepriseId == null
@@ -340,8 +347,9 @@ Mécanisme en trois parties, toutes nécessaires :
    où `TenantFiltrageActif` et `TenantEntrepriseId` sont des **propriétés
    privées d'instance du DbContext**. Voir le piège §10.
 
-   Dix filtres sur les entités portant `EntrepriseId`, **plus un sur
-   `Entreprise` elle-même**, sur son propre `Id` :
+   Dix filtres sur les entités métier portant `EntrepriseId`, un onzième sur
+   `AccesJournalise` (§7 bis), **plus un sur `Entreprise` elle-même**, sur son
+   propre `Id` :
    ```csharp
    modelBuilder.Entity<Entreprise>().HasQueryFilter(e =>
        !TenantFiltrageActif || TenantEntrepriseId == null
@@ -365,7 +373,7 @@ Mécanisme en trois parties, toutes nécessaires :
    filtrer à la main sur `EntrepriseId`.
 
    L'échappatoire `TenantEntrepriseId == null` n'est sûre **que parce que** les
-   onze contrôleurs métier portent `[Authorize]`. Retirer cet attribut sur un
+   contrôleurs métier portent tous `[Authorize]`. Retirer cet attribut sur un
    seul d'entre eux ouvrirait l'accès anonyme à toutes les entreprises.
 
 3. **`SaveChangesAsync` surchargé** : **force** `EntrepriseId` à la valeur du
@@ -391,6 +399,109 @@ Mécanisme en trois parties, toutes nécessaires :
 naturellement (Site, Contrat, Prestation, Intervention, Absence,
 Remplacement, Stock). Choix assumé : évite trois jointures par ligne sur la
 vue planning. La cohérence est garantie applicativement, sans clé étrangère.
+
+---
+
+## 7 bis. Journal d'accès aux données personnelles
+
+Numérotée « bis » pour la même raison que §6 bis : ne pas décaler des sections
+référencées depuis des dizaines de commentaires du code.
+
+Le produit détient, sur des salariés, des noms, des adresses, **les coordonnées GPS
+de leur domicile** et des arrêts maladie. `AccesJournalise` consigne qui a lu quoi.
+
+**Huit actions sont journalisées, et deux ne s'en doutaient pas.** C'est le fait
+central de ce mécanisme : chercher « les routes `/api/agents` et `/api/absences` »
+donne un journal qui a l'air complet et qui a deux trous.
+
+| Action | Ressource | Ce qu'elle divulgue |
+|---|---|---|
+| `GET /api/agents` et `/{id}` | `Agent` | nom, adresse, coordonnées du domicile |
+| `GET /api/absences` et `/{id}` | `Absence` | type, dates, motif |
+| `GET /api/interventions/{id}/candidats` | `Candidats` | nom, prénom, **distance au domicile** |
+| `GET /api/remplacements/{id}/candidats` | `Candidats` | la même chose, par une seconde route |
+| `GET /api/planning` | `Planning` | nom de **tous** les agents, et la cause « Agent absent » |
+| `GET /api/journal-acces` | `JournalAcces` | le journal lui-même |
+
+`CandidatDto` expose `DistanceKm`, dérivée des coordonnées du domicile — exactement
+la donnée que `SPEC.md` signale comme relevant de la doctrine CNIL. Et
+`PlanningNonPourvueDto.Cause` vaut littéralement « Agent absent » : **le planning
+divulgue une absence** sans qu'on lise la liste des absences.
+
+**Six règles, et chacune ferme quelque chose.**
+
+1. **Le journal ne contient jamais ce qui a été lu.** Ni nom, ni adresse, ni motif,
+   ni liste d'identifiants. Pour une lecture unitaire, l'identifiant de la ligne ;
+   pour une liste, le **nombre** de lignes. Un journal qui recopie ce qu'il surveille
+   devient une seconde base de données personnelles, moins protégée que la première,
+   et double le risque qu'il existe pour documenter.
+2. **Le compte porte sur les `Elements`, jamais sur `Total`.** Le journal dit ce qui
+   est sorti, pas ce qui existe : confondre les deux ferait écrire « a lu 150 agents »
+   sur une page de 25.
+3. **Aucune adresse IP.** Donnée personnelle de plus, dont la conservation
+   demanderait sa propre justification, et qui n'ajoute rien à « qui a lu quoi » dans
+   un produit où chaque compte est nominatif.
+4. ⚠️ **L'échec d'écriture du journal fait échouer la réponse** — aucun `try/catch`
+   dans `JournaliserAccesAttribute`, et c'est la décision, pas un oubli. Un journal
+   qu'on contourne en cassant son écriture n'en est pas un. Le coût est faible parce
+   que le journal vit dans la **même base** que les données : si l'on a pu lire les
+   agents, on peut insérer une ligne ; un échec signale une dérive de schéma ou un
+   disque plein, pas une panne passagère sans rapport. Pour la même raison, **aucune
+   file d'attente** — une écriture différée rendrait l'échec invisible.
+5. **Seules les divulgations sont consignées.** Un 403, un 404, une écriture ne
+   laissent rien : rien n'est sorti. Journaliser les tentatives serait un journal de
+   sécurité, légitime mais différent — mêlé à celui-ci, le sondage d'un compte mal
+   cadré noierait les divulgations réelles.
+6. **Lecture seule, administrateur seul, purge hors de l'application.**
+   `JournalAccesController` n'expose que `GET` : un journal que l'API permet d'élaguer
+   ne prouve rien, il suffirait d'un compte administrateur compromis. La conservation
+   est de **douze mois**, par `Scripts/purge-journal-acces.sql`. Ouvert au
+   `Responsable` ou au `ChefEquipe`, le journal deviendrait un outil de surveillance
+   des collègues — ce qu'un journal RGPD n'est pas censé être.
+
+**Le branchement est un filtre d'action par attribut**, et ce qui tient n'est pas
+l'attribut, c'est l'invariante : `JournalAccesTests` énumère par réflexion toutes les
+actions de contrôleur, descend dans leurs types de retour jusqu'aux DTOs, et exige
+l'attribut sur toute action **`GET`** dès qu'un DTO atteint porte `Nom`, `Prenom`,
+`Adresse`, `Email`, `Telephone`, `Latitude`, `Longitude` ou `Motif`.
+
+⚠️ **Les `GET` seulement, et c'est de fond.** Une écriture renvoie ce que l'appelant
+vient de fournir : `POST /api/agents` rend l'`AgentDto` qu'on lui a donné, et le
+journaliser consignerait « a lu les données qu'il a lui-même écrites ». Ce que la
+restriction laisse passer, et qu'il faut savoir : un futur `POST` rendant des données
+d'autrui — une recherche par POST, un export — échapperait au filet.
+
+⚠️ La règle est **structurelle et à défaut fermé** : un DTO créé demain avec un `Nom`
+tombe dans le filet sans que personne y pense, et s'en dispenser demande de l'inscrire
+dans une liste d'exemptions motivées. Quatre y figurent aujourd'hui, et leurs raisons
+diffèrent :
+
+| Exempté | Raison |
+|---|---|
+| `ClientDto`, `SiteDto` | coordonnées d'une **personne morale** — entreprise, syndic, copropriété |
+| `ProfilDto` | l'identité de **l'appelant lui-même** ; un journal de « qui a lu son propre nom » est du bruit |
+| `ProduitDto` | le `Nom` d'un produit est « Détergent sols » |
+
+⚠️ `ClientDto` reste discutable : le contact d'une petite copropriété est souvent une
+personne physique. La question appartient au lot de la cartographie des données ; elle
+est consignée dans le test, pas tranchée. Et `ProduitDto` montre le prix de la règle —
+`Nom` est un signal grossier. Le raffiner ne marche pas : exiger `Prenom` manquerait
+`AbsenceDto`, qui ne porte que `Motif` ; exiger `Nom` **et** `Adresse` rattraperait
+`ClientDto`. Une règle grossière dont chaque exception est écrite vaut mieux qu'une
+règle fine qui laisse passer en silence.
+
+Un second test garde l'excès symétrique — les huit actions journalisées sont
+exactement celles attendues, parce qu'un journal bruyant ne se lit plus.
+
+**`Divulgation` et `Compter` sont `public`, pour être éprouvées directement.** Même
+raison que l'extraction de `reference/valeurs.ts` côté écran (§11) : c'est la seule
+partie du filtre qui écrit une donnée **fausse** au lieu de ne rien écrire, et un
+compte erroné ne lève aucune erreur. Plusieurs de leurs branches gardent des formes
+qu'aucune action ne produit aujourd'hui — notamment qu'une `string`, étant un
+`IEnumerable<char>`, vaut **une** ligne et non cent trente-quatre. Trois sabotages y
+sont restés verts avant que ces tests existent.
+
+**Coût assumé** : une insertion synchrone par lecture sur ces huit endpoints.
 
 ---
 
@@ -786,6 +897,31 @@ parlant de donnée de santé, et l'écran n'afficherait plus le champ dont le re
 — la donnée ayant de surcroît quitté le navigateur pour rien. Et la clé doit rester
 présente à `null`, pas être omise : un `PUT` qui l'omet laisse en place le motif déjà
 enregistré au lieu de l'effacer. Vérifié contre le serveur.
+
+**Une donnée personnelle ne sort pas par la route qui porte son nom.** Pour
+journaliser « qui a lu les données d'agents », le réflexe est de chercher
+`/api/agents`. Mesuré sur ce projet : deux endpoints de plus les divulguent, et aucun
+ne porte « agent » dans son chemin. `GET /api/planning` nomme **tous** les agents de
+l'entreprise et sa cause « Agent absent » révèle une absence ; les deux routes de
+candidats exposent nom, prénom et la distance au domicile. Un journal construit sur
+les chemins aurait eu deux trous et l'air complet.
+
+La parade qui tient n'est pas la vigilance mais la **réflexion sur les types** : on
+part des DTOs et des propriétés qui rendent une personne identifiable, pas des URL.
+Voir §7 bis.
+
+**Deux `dotnet test` en parallèle détruisent `klean_test`, et l'erreur n'accuse pas sa
+cause.** Les deux séries partagent la base, et leurs fixtures s'y amorcent : l'une crée
+les deux entreprises de test pendant que l'autre nettoie les comptes. Il reste alors des
+entreprises sans leurs administrateurs, et **toutes** les séries suivantes échouent sur
+`23505: duplicate key value violates unique constraint "IX_Entreprises_Siret"` — 296
+échecs en moins d'une seconde, sur un code qui n'a pas changé. Le message parle de SIRET
+et la cause est la concurrence.
+
+Une seule exécution à la fois, donc — y compris en intégration continue, où deux travaux
+parallèles visant la même base produiraient exactement ce symptôme. Pour s'en sortir,
+vider `klean_test` entièrement, `AspNetUsers` et `Entreprises` comprises, et laisser la
+fixture ré-amorcer.
 
 **`Microsoft.OpenApi` 2.0 a supprimé le namespace `.Models`.**
 `OpenApiSecurityScheme`, `SecuritySchemeType` et `ParameterLocation` sont

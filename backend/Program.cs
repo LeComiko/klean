@@ -146,6 +146,9 @@ builder.Services.AddSingleton<IServiceCourriel, ServiceCourrielSmtp>();
 builder.Services.AddScoped<AffectationService>();
 builder.Services.AddScoped<RemplacementService>();
 builder.Services.AddScoped<PlanningService>();
+// Résolu depuis RequestServices par JournaliserAccesAttribute : un attribut ne
+// reçoit pas d'injection par constructeur.
+builder.Services.AddScoped<ServiceJournalAcces>();
 
 // AddIdentity a déjà posé des schémas cookie par défaut, qui redirigent vers
 // /Account/Login au lieu de retourner 401. Les trois propriétés doivent être

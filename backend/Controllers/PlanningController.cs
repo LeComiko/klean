@@ -1,4 +1,5 @@
 using Klean.Api.DTOs;
+using Klean.Api.Filtres;
 using Klean.Api.Models;
 using Klean.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -30,6 +31,7 @@ public class PlanningController : ControllerBase
     /// interventions, mais pas la liste des noms en colonne de gauche. Un agent
     /// qui doit voir son propre planning aura son endpoint dédié.
     /// </summary>
+    [JournaliserAcces(RessourceAccedee.Planning, NatureAcces.Liste)]
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
     public async Task<ActionResult<PlanningSemaineDto>> Semaine([FromQuery] DateOnly? lundi)

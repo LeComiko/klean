@@ -1,4 +1,5 @@
 using Klean.Api.DTOs;
+using Klean.Api.Filtres;
 using Klean.Api.Data;
 using Klean.Api.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -16,6 +17,7 @@ public class AgentsController : ControllerBase
 
     public AgentsController(KleanDbContext db) => _db = db;
 
+    [JournaliserAcces(RessourceAccedee.Agent, NatureAcces.Liste)]
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
     public async Task<ActionResult<PageDto<AgentDto>>> Lister([FromQuery] PaginationDto pagination)
@@ -54,6 +56,7 @@ public class AgentsController : ControllerBase
         });
     }
 
+    [JournaliserAcces(RessourceAccedee.Agent, NatureAcces.Lecture)]
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<AgentDto>> Obtenir(Guid id)

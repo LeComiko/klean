@@ -1221,6 +1221,46 @@ décision produit.
 
 - **Journal d'accès** : qui a lu quoi, sur les données d'agents et d'absences.
   Il n'existe pas.
+
+  **Lot A fait.** Douzième entité `AccesJournalise`, douzième filtre global, et un
+  filtre d'action MVC posé sur **huit** actions — pas deux.
+
+  ⚠️ C'est le fait qui a orienté tout le lot : **deux endpoints divulguent ces données
+  sans porter « agent » ni « absence » dans leur chemin.** `CandidatDto` expose nom,
+  prénom et `DistanceKm`, dérivée des coordonnées du domicile — la donnée même que
+  l'avertissement CNIL de cette étape désigne — et elle sort par *deux* routes,
+  `/api/interventions/{id}/candidats` et `/api/remplacements/{id}/candidats`. Quant à
+  `PlanningNonPourvueDto.Cause`, elle vaut littéralement « Agent absent » : le planning
+  **révèle une absence** sans qu'on lise la liste des absences. Un journal construit sur
+  les routes évidentes aurait eu deux trous et l'air complet.
+
+  La parade n'est donc pas la vigilance : `JournalAccesTests` énumère par réflexion
+  toutes les actions de contrôleur, descend dans leurs types de retour jusqu'aux DTOs,
+  et exige l'attribut sur toute action `GET` dès qu'un DTO porte `Nom`, `Prenom`,
+  `Adresse`, `Email`, `Telephone`, `Latitude`, `Longitude` ou `Motif`. À **défaut
+  fermé** : un DTO créé demain tombe dans le filet, et s'en dispenser demande une
+  exemption motivée. Quatre existent — `ClientDto` et `SiteDto` pour une personne
+  morale, `ProfilDto` pour l'identité de l'appelant lui-même, `ProduitDto` parce qu'un
+  produit porte un nom aussi. ⚠️ `ClientDto` reste discutable, le contact d'une petite
+  copropriété étant souvent une personne physique : question renvoyée à la cartographie
+  des données, consignée et non tranchée.
+
+  **C'est ce test qui a conduit le lot, et pas l'inverse.** Il a signalé six actions que
+  je n'avais pas prévues : deux créations — qu'il ne faut *pas* journaliser, une écriture
+  renvoyant ce que l'appelant a fourni, d'où la restriction aux `GET` — et quatre
+  réponses portant `ProfilDto` ou `ProduitDto`, d'où deux exemptions. Aucune de ces six
+  n'était visible en relisant les contrôleurs.
+
+  Six règles de conception, détaillées en `CLAUDE.md` §7 bis. Les deux qui coûtent :
+  le journal **ne contient jamais ce qui a été lu** — un compte de lignes, jamais une
+  liste d'identifiants, sinon il recopie la table qu'il surveille — et **l'échec de son
+  écriture fait échouer la réponse**, parce qu'un journal qu'on contourne en cassant
+  son écriture n'en est pas un.
+
+  Conservation **douze mois**, par `Scripts/purge-journal-acces.sql`. La purge est un
+  geste d'exploitation sur la base et non un endpoint : `JournalAccesController`
+  n'expose que `GET`, et un compte administrateur compromis ne doit pas pouvoir effacer
+  la trace de ce qu'il a lu.
 - **Anonymisation.** La clé étrangère `Restrict` sur `Intervention.AgentId` rend
   un agent impossible à supprimer dès qu'il porte une intervention. C'est le bon
   choix pour l'intégrité du planning, et il entre en conflit direct avec une

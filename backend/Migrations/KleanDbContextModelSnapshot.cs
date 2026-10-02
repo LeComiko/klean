@@ -56,6 +56,42 @@ namespace Klean.Api.Migrations
                     b.ToTable("Absences");
                 });
 
+            modelBuilder.Entity("Klean.Api.Models.AccesJournalise", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CibleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EntrepriseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("Horodatage")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Lignes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Nature")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Ressource")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UtilisateurId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntrepriseId", "Horodatage")
+                        .IsDescending(false, true);
+
+                    b.ToTable("AccesJournalises");
+                });
+
             modelBuilder.Entity("Klean.Api.Models.Agent", b =>
                 {
                     b.Property<Guid>("Id")

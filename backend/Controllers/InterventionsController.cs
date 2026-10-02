@@ -1,4 +1,5 @@
 using Klean.Api.DTOs;
+using Klean.Api.Filtres;
 using Klean.Api.Data;
 using Klean.Api.Models;
 using Klean.Api.Services;
@@ -123,6 +124,7 @@ public class InterventionsController : ControllerBase
         };
     }
 
+    [JournaliserAcces(RessourceAccedee.Candidats, NatureAcces.Liste)]
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet("{id:guid}/candidats")]
     public async Task<ActionResult<IEnumerable<CandidatDto>>> Candidats(Guid id)

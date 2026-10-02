@@ -50,6 +50,13 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
     public DbSet<Stock> Stocks => Set<Stock>();
 
     /// <summary>
+    /// Journal d'accès aux données personnelles (SPEC.md étape 17). Douzième
+    /// entité, et la seule qui n'existe pas pour le métier : elle existe pour
+    /// rendre compte de l'usage des onze autres.
+    /// </summary>
+    public DbSet<AccesJournalise> AccesJournalises => Set<AccesJournalise>();
+
+    /// <summary>
     /// Sessions révocables. Volontairement hors du filtrage multi-tenant : le
     /// rafraîchissement s'exécute sans requête authentifiée. Voir le commentaire
     /// de l'entité.
@@ -84,6 +91,8 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Absence>().Property(e => e.Type).HasConversion<string>();
         modelBuilder.Entity<Remplacement>().Property(e => e.Statut).HasConversion<string>();
         modelBuilder.Entity<Stock>().Property(e => e.TypeEmplacement).HasConversion<string>();
+        modelBuilder.Entity<AccesJournalise>().Property(e => e.Ressource).HasConversion<string>();
+        modelBuilder.Entity<AccesJournalise>().Property(e => e.Nature).HasConversion<string>();
 
         modelBuilder.Entity<Produit>().Property(e => e.SeuilAlerte).HasPrecision(10, 2);
         modelBuilder.Entity<Stock>().Property(e => e.Quantite).HasPrecision(10, 2);
@@ -225,6 +234,13 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Stock>().HasQueryFilter(e =>
             !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
 
+        // ⚠️ Le journal d'accès est filtré comme le reste, et l'oublier serait pire
+        // qu'ailleurs : GET /api/journal-acces est réservé à l'administrateur, donc un
+        // administrateur non filtré lirait les habitudes de consultation des autres
+        // entreprises de l'instance — qui a regardé combien d'agents, et quand.
+        modelBuilder.Entity<AccesJournalise>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+
         // ⚠️ AspNetUsers n'est PAS filtrée. Identity interroge les comptes hors
         // de toute requête authentifiée — la connexion, par définition — et sa
         // validation d'unicité d'adresse repose sur des requêtes non filtrées.
@@ -247,6 +263,15 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Remplacement>().HasIndex(e => e.EntrepriseId);
         modelBuilder.Entity<Produit>().HasIndex(e => e.EntrepriseId);
         modelBuilder.Entity<Stock>().HasIndex(e => e.EntrepriseId);
+
+        // ⚠️ Le journal se lit toujours du plus récent au plus ancien, et se purge
+        // par date : l'index est composite et l'horodatage descendant. Un index sur
+        // EntrepriseId seul obligerait à trier une table qui, elle, ne cesse de
+        // croître — c'est la seule du modèle dont la taille n'est bornée par aucun
+        // effectif, seulement par l'usage et par la purge à douze mois.
+        modelBuilder.Entity<AccesJournalise>()
+            .HasIndex(e => new { e.EntrepriseId, e.Horodatage })
+            .IsDescending(false, true);
 
         // La requête de planning filtre sur l'entreprise et une semaine de dates.
         modelBuilder.Entity<Intervention>().HasIndex(e => new { e.EntrepriseId, e.DatePrevue });

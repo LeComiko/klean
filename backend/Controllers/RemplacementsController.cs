@@ -1,4 +1,5 @@
 using Klean.Api.DTOs;
+using Klean.Api.Filtres;
 using Klean.Api.Data;
 using Klean.Api.Models;
 using Klean.Api.Services;
@@ -178,6 +179,7 @@ public class RemplacementsController : ControllerBase
     /// rôles internes, comme la liste de candidats d'une intervention : elle
     /// nomme des agents.
     /// </summary>
+    [JournaliserAcces(RessourceAccedee.Candidats, NatureAcces.Liste)]
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet("{id:guid}/candidats")]
     public async Task<ActionResult<IEnumerable<CandidatDto>>> Candidats(Guid id)
