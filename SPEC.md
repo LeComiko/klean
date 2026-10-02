@@ -1299,6 +1299,42 @@ décision produit.
   distance sans rien signaler.
 - Durées de conservation, par nature de donnée
 - Registre des traitements et cartographie des données
+
+  **Lot D fait.** `RGPD.md`, à la racine du dépôt. Aucun code.
+
+  Six traitements au registre, les douze tables cartographiées colonne par colonne,
+  dix durées de conservation proposées avec leur raison, les droits de la personne avec
+  l'endpoint qui les sert ou la mention qu'aucun ne les sert, un modèle de note
+  d'information aux agents, et le résumé des mesures de l'article 32.
+
+  **Les trois questions laissées ouvertes par les lots A et B sont tranchées.** La
+  qualification est **pseudonymisation**, article 4(5), partout dans le registre — et la
+  conséquence n'est pas cosmétique : une donnée pseudonymisée reste une donnée
+  personnelle, donc elle garde une durée de conservation. Le résidu de santé des
+  absences `Maladie` devient une question de durée, résolue par un basculement de `Type`
+  vers `Indisponibilite` après trois mois, qui conserve l'agent et les dates — ce dont
+  l'historique des remplacements a besoin est **qu'il y avait un trou**, pas pourquoi.
+  L'exemption de `ClientDto` est maintenue, mais sa raison est réécrite : non pas « c'est
+  une personne morale », ce qui est faux pour une copropriété, mais « coordonnées
+  professionnelles d'un interlocuteur dans l'exécution d'un contrat » — et la condition
+  qui la ferait tomber est écrite pour ne plus avoir à rediscuter.
+
+  ⚠️ **Six écarts constatés, dont un qui dépasse largement le périmètre du lot :**
+  `frontend/index.html` charge Figtree et IBM Plex Mono **depuis Google**, donc chaque
+  chargement de page transmet l'adresse IP du navigateur à un tiers, sur toute instance
+  de KLEAN, sans que l'exploitant l'ait choisi. Cela contredit le §2 de `CLAUDE.md` —
+  « pas de service tiers obligatoire » — et la règle avait été lue comme ne portant que
+  sur les dépendances de construction, Google Fonts n'apparaissant pas dans
+  `package.json`. Les cinq autres : l'adresse IP des sessions n'est jamais purgée, aucun
+  chemin d'effacement n'existe pour un compte sans fiche agent, aucun export ne sert la
+  portabilité, `Sites.Consignes` peut nommer une personne sans que rien ne l'en dissuade,
+  et neuf durées sur dix n'ont aucun mécanisme.
+
+  ⚠️ **Une AIPD est requise selon toute vraisemblance** : trois critères de l'article
+  35(3) sont réunis, là où deux suffisent à la présomption — données de l'article 9
+  (`Maladie`), personnes en situation de dépendance économique (des salariés), et
+  évaluation notée (le score de candidat, calculé en partie sur la distance au domicile).
+  Elle appartient à l'exploitant ; `RGPD.md` lui fournit la matière.
 - **Écran de compte**, qui est le premier de KLEAN à en avoir besoin : c'est là
   que vivent le changement de mot de passe et le bouton *Déconnexion de tous les
   appareils*. L'endpoint existe depuis l'étape 16 et n'a aucun bouton ; il n'avait

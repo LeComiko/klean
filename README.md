@@ -13,6 +13,17 @@ facturation complexe.
 Licence : **AGPL v3** (voir `LICENSE`). Toute personne qui exploite KLEAN
 comme service doit publier ses modifications.
 
+⚠️ **Avant d'exploiter une instance avec de vraies données de salariés, lire
+`RGPD.md`.** KLEAN détient sur des agents leur adresse, **les coordonnées GPS de
+leur domicile** et leurs absences. `RGPD.md` porte le registre des traitements, la
+cartographie des données, les durées de conservation proposées, un modèle de note
+d'information aux agents, et la liste honnête des écarts constatés — dont un qui
+concerne tous les utilisateurs de toutes les instances.
+
+Vous êtes **responsable de traitement** dès lors que vous hébergez KLEAN pour votre
+entreprise. L'auteur du logiciel ne l'est pas : il n'y a aucune instance centrale,
+aucune télémétrie, et il ne reçoit aucune donnée.
+
 ---
 
 ## Prérequis
@@ -353,3 +364,8 @@ possède pas les autres sous-domaines de son hôte.
 Le dépôt suit les étapes de `SPEC.md`, dans l'ordre, chacune close par un
 build vert et un commit. Avant toute contribution, lire `CLAUDE.md` :
 conventions de nommage en français, pile technique imposée, pièges connus.
+
+Une contribution qui touche aux données d'agents, d'absences ou de comptes doit en
+plus être relue contre `RGPD.md` : un DTO qui expose un nom tombe dans le filet par
+réflexion de `JournalAccesTests`, et une colonne ajoutée à une table du §3 change la
+cartographie.

@@ -89,7 +89,7 @@ installation.
 
 ```
 KLEAN/
-├── CLAUDE.md, SPEC.md, README.md, LICENSE
+├── CLAUDE.md, SPEC.md, README.md, RGPD.md, LICENSE
 ├── backend/
 │   ├── Models/          11 entités métier + AccesJournalise + Utilisateur
 │   │                    + RolesKlean
@@ -436,6 +436,20 @@ référencées depuis des dizaines de commentaires du code.
 
 Le produit détient, sur des salariés, des noms, des adresses, **les coordonnées GPS
 de leur domicile** et des arrêts maladie. `AccesJournalise` consigne qui a lu quoi.
+
+**`RGPD.md` est le document de référence**, écrit au lot D de l'étape 17 : registre des
+traitements, cartographie table par table, durées de conservation, droits des personnes,
+modèle de note d'information aux agents, et les écarts constatés. Cette section-ci décrit
+le **mécanisme** ; `RGPD.md` décrit le **traitement**. Trois points à en retenir avant
+d'écrire du code ici :
+
+- Une colonne ajoutée à une table du §3 de `RGPD.md` change la cartographie. Une colonne
+  ajoutée à `Clients` qui ne soit pas une coordonnée professionnelle fait tomber
+  l'exemption de `ClientDto` — la condition est écrite, elle n'a pas à être rediscutée.
+- **Une donnée pseudonymisée reste une donnée personnelle**, donc elle garde une durée de
+  conservation. C'est pour cela que le mot compte (§8.1 de `RGPD.md`).
+- **Un seul mécanisme de conservation existe** — la purge du journal. Les neuf autres
+  durées sont déclaratives, et c'est inscrit noir sur blanc plutôt que supposé.
 
 **Huit actions sont journalisées, et deux ne s'en doutaient pas.** C'est le fait
 central de ce mécanisme : chercher « les routes `/api/agents` et `/api/absences` »
