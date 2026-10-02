@@ -338,15 +338,29 @@ deux sens :
 - **L'API** pose la sienne elle-même, sur chaque réponse :
   `default-src 'none'`, rien d'autre. Elle ne sert que du JSON. Aucune
   configuration.
-- **Le document** a besoin de `fonts.googleapis.com` en `style-src` et de
-  `fonts.gstatic.com` en `font-src`, parce que `index.html` y charge Figtree et
-  IBM Plex Mono. La politique est écrite dans `frontend/csp.ts`, appliquée par
-  `npm run preview`, et c'est cette chaîne-là que le serveur web de production
-  doit renvoyer en en-tête `Content-Security-Policy`.
+- **Le document** a besoin de `'self'` sur `script-src`, `style-src`, `font-src`
+  et `connect-src` : il charge une feuille de style, un script et quatre polices,
+  tous servis par lui-même. La politique est écrite dans `frontend/csp.ts`,
+  appliquée par `npm run preview`, et c'est cette chaîne-là que le serveur web de
+  production doit renvoyer en en-tête `Content-Security-Policy`. **La lire, ne
+  jamais la recopier** : recopiée dans un `nginx.conf`, elle divergera du jour où
+  `index.html` changera.
 
-⚠️ Ne pas recopier la politique de l'API sur le document : les polices seraient
-bloquées, et le défaut ne se verrait pas au développement, où le cache du
-navigateur les garde.
+⚠️ Ne pas recopier la politique de l'API sur le document : la feuille de style, le
+script et les polices seraient bloqués, et le défaut ne se verrait pas au
+développement, où le cache du navigateur garde les polices.
+
+**Aucune des deux politiques ne déclare d'origine externe**, et c'est une
+propriété à conserver. Figtree et IBM Plex Mono sont servies depuis
+`frontend/public/polices/` — 79 Ko, licences OFL incluses. Jusqu'au
+3 octobre 2026 elles venaient de Google, ce qui transmettait l'adresse IP de
+chaque visiteur à un tiers, sur toute instance et sans que l'exploitant l'ait
+choisi : voir `RGPD.md` §9.1. `npm run verifier` échoue désormais sur toute
+origine externe réapparue dans `csp.ts` ou `index.html`.
+
+Conséquence pratique pour le déploiement : **KLEAN n'a besoin d'aucun accès
+sortant pour servir son interface.** Une instance derrière un pare-feu sans route
+vers l'extérieur affiche la même typographie qu'une autre.
 
 ### HTTPS
 

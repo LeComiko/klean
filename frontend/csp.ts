@@ -1,13 +1,20 @@
 /**
  * Politique de sécurité du contenu du **document** KLEAN.
  *
- * ⚠️ Ce n'est pas la politique de l'API, et les confondre serait une faute dans
- * les deux sens. L'API ne rend que du JSON : sa politique est
+ * ⚠️ Ce n'est pas la politique de l'API, et les confondre reste une faute — mais
+ * plus pour la raison d'avant. L'API ne rend que du JSON : sa politique est
  * `default-src 'none'` et rien d'autre, écrite dans
- * `backend/Middleware/EnTetesSecurite.cs`. Y ajouter les origines de polices
- * ci-dessous l'affaiblirait pour un besoin qu'elle n'a pas ; inversement,
- * appliquer sa politique au document bloquerait la feuille de style et les
- * polices.
+ * `backend/Middleware/EnTetesSecurite.cs`. Le document, lui, charge une feuille de
+ * style, un script et des polices, tous servis par lui-même : appliquer la
+ * politique de l'API au document les bloquerait tous les trois.
+ *
+ * ⚠️ **Depuis le 3 octobre 2026, aucune des deux politiques ne déclare d'origine
+ * externe.** Les polices étaient chargées depuis Google Fonts, ce qui transmettait
+ * l'adresse IP de chaque visiteur de chaque instance de KLEAN à un tiers
+ * (RGPD.md §9.1) ; elles sont désormais dans `public/polices/`. Ne pas réintroduire
+ * d'origine distante ici : ce serait une régression de conformité avant d'être une
+ * question technique, et le §2 de `CLAUDE.md` l'interdit — « pas de service tiers
+ * obligatoire » vaut aussi pour ce qui ne figure pas dans `package.json`.
  *
  * ## Pourquoi ce fichier existe
  *
@@ -38,17 +45,18 @@
  * l'origine de l'API, en plus de la déclarer dans `Cors:Origines` côté backend.
  * Les deux sont nécessaires et aucune ne remplace l'autre.
  *
- * ⚠️ `style-src` et `font-src` portent les deux origines de Google Fonts parce
- * que `index.html` y charge Figtree et IBM Plex Mono, dont dépend toute la
- * typographie de `CLAUDE.md` §12. Les retirer ne casse rien de visible au
- * développement — la police est en cache — et rend l'interface méconnaissable en
- * production.
+ * ⚠️ `font-src 'self'` et non l'absence de directive : `default-src 'none'`
+ * s'appliquerait sinon par héritage et bloquerait les quatre `.woff2` de
+ * `public/polices/`. Le défaut ne se verrait pas au développement — le cache du
+ * navigateur garde les polices — et rendrait l'interface méconnaissable en
+ * production, ce qui est exactement le piège qu'avait tendu la version précédente
+ * de ce fichier dans l'autre sens.
  */
 export const CspProduction = [
   "default-src 'none'",
   "script-src 'self'",
-  "style-src 'self' https://fonts.googleapis.com",
-  "font-src https://fonts.gstatic.com",
+  "style-src 'self'",
+  "font-src 'self'",
   "img-src 'self' data:",
   "connect-src 'self'",
   "base-uri 'none'",
@@ -64,13 +72,16 @@ export const CspProduction = [
  * de React est un script en ligne, le remplacement de module à chaud injecte des
  * balises `<style>`, et il dialogue par WebSocket.
  *
- * C'est exactement la raison pour laquelle les deux politiques sont séparées.
+ * C'est exactement la raison pour laquelle les deux politiques sont séparées — et
+ * c'est désormais la **seule** : les polices étant servies en propre, les deux
+ * politiques ne diffèrent plus que par `'unsafe-inline'` et `ws:`, que Vite exige
+ * et que la production n'aura jamais.
  */
 export const CspDeveloppement = [
   "default-src 'none'",
   "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
   "img-src 'self' data:",
   "connect-src 'self' ws: wss:",
   "base-uri 'none'",

@@ -109,6 +109,7 @@ KLEAN/
 │                        degradation-absences-maladie (RGPD.md §5)
 └── frontend/
     ├── csp.ts           les deux politiques de sécurité du contenu
+    ├── public/polices/  Figtree et IBM Plex Mono, servies en propre (RGPD.md §9.1)
     ├── vite.config.ts   serveur https, proxy /api, en-têtes
     ├── scripts/         verifier-interface.mjs, tests.mjs
     └── src/
@@ -310,19 +311,31 @@ l'une sur l'autre.**
 | | Où | Contenu |
 |---|---|---|
 | API | `Middleware/EnTetesSecurite.cs` | `default-src 'none'` et rien d'autre |
-| Document | `frontend/csp.ts` | ouvre `style-src` sur `fonts.googleapis.com`, `font-src` sur `fonts.gstatic.com` |
+| Document | `frontend/csp.ts` | `'self'` sur `script-src`, `style-src`, `font-src`, `connect-src` |
 
 L'API ne rend que du JSON : rien ne doit jamais être chargé depuis une de ses
-réponses. Le document, lui, charge Figtree et IBM Plex Mono depuis Google Fonts,
-dont dépend toute la typographie de §12. Appliquer la politique de l'API au
-document bloque les polices — et le défaut **ne se voit pas au développement**,
-où le cache du navigateur les garde et où la politique servie est plus permissive.
+réponses. Le document, lui, charge une feuille de style, un script et quatre
+polices — tous servis par lui-même. Appliquer la politique de l'API au document
+bloquerait les trois, et le défaut **ne se voit pas au développement**, où le cache
+du navigateur garde les polices et où la politique servie est plus permissive.
 
-`frontend/csp.ts` porte les deux variantes. Celle de développement ajoute
-`'unsafe-inline'` et `ws:`, qu'exige le serveur de Vite ; c'est la raison de la
-séparation, une politique unique aurait dû affaiblir la production pour le confort
-du développement. `npm run preview` sert la variante de production — le seul
-endroit où l'on constate qu'elle ne bloque rien avant de déployer.
+⚠️ **Aucune des deux politiques ne déclare d'origine externe, et il ne faut pas en
+réintroduire.** `style-src` et `font-src` ont porté `fonts.googleapis.com` et
+`fonts.gstatic.com` jusqu'au 3 octobre 2026, parce qu'`index.html` chargeait les
+polices chez Google. Cela transmettait l'adresse IP de chaque visiteur de chaque
+instance de KLEAN à un tiers, sans que l'exploitant l'ait choisi, et contredisait le
+§2 — « pas de service tiers obligatoire ». Les fichiers sont maintenant dans
+`frontend/public/polices/` (RGPD.md §9.1), et `npm run verifier` échoue sur toute
+origine externe réapparue dans `csp.ts` ou `index.html` : **le rappel est mécanique,
+pas verbal.**
+
+`frontend/csp.ts` porte les deux variantes, et elles ne diffèrent désormais plus que
+par `'unsafe-inline'` et `ws:`, qu'exige le serveur de Vite — le préambule de
+rafraîchissement de React est un script en ligne, le remplacement de module à chaud
+injecte des `<style>`, et il dialogue par WebSocket. C'est toute la raison de la
+séparation : une politique unique aurait dû affaiblir la production pour le confort du
+développement. `npm run preview` sert la variante de production — le seul endroit où
+l'on constate qu'elle ne bloque rien avant de déployer.
 
 **CORS** : politique nommée, origines lues dans `Cors:Origines`, **vide par
 défaut**. Une origine déclarée obtient `AllowCredentials`, indispensable puisque
@@ -1284,7 +1297,21 @@ réapparition devient une **erreur dure** — `npm run verifier` échoue sur tou
 
 **Typographie.** Figtree pour l'interface, IBM Plex Mono pour **tout chiffre
 comparé en colonne** — heures, km, scores, quantités. La chasse fixe aligne
-verticalement sans effort. Chargées depuis Google Fonts.
+verticalement sans effort.
+
+⚠️ **Servies par KLEAN, depuis `frontend/public/polices/`, et jamais par un tiers.**
+Quatre fichiers, 79 Ko au total : la fonte **variable** de Figtree couvre à elle seule
+les graisses 400 à 700, et IBM Plex Mono vient en trois graisses dans son
+sous-ensemble **Latin1** — trois fois plus léger que la fonte complète, et suffisant
+pour une interface française, `œ` et guillemets compris. Les `@font-face` sont en tête
+de `tokens.css` ; la plage `unicode-range` y est recopiée des déclarations amont d'IBM
+et doit y rester, sinon un caractère hors sous-ensemble s'afficherait en tofu au lieu
+de retomber sur la fonte système.
+
+Elles étaient chargées depuis Google Fonts jusqu'au 3 octobre 2026 — voir §6 bis et
+`RGPD.md` §9.1. `npm run verifier` vérifie désormais que chaque `url()` du CSS pointe
+sur un fichier présent, que chaque `.woff2` porte sa signature, que les deux licences
+OFL sont versées, et qu'aucune origine externe ne réapparaît.
 
 Échelle (taille / interligne / graisse) : 32/36/700 titre d'écran ·
 20/26/600 titre de section · 16/24/500 corps mobile · 14/20/400 corps

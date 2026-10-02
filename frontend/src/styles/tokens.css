@@ -11,6 +11,82 @@
    · le focus clavier n'est jamais supprimé.
    ============================================================================ */
 
+/* ============================================================================
+   Polices — servies par KLEAN, jamais par un tiers
+   ----------------------------------------------------------------------------
+   ⚠️ Les fichiers sont dans `public/polices/`, et ce n'est pas du confort de
+   déploiement : c'est une correction de conformité (RGPD.md §9.1).
+
+   Jusqu'au 3 octobre 2026, `index.html` chargeait ces deux familles depuis
+   `fonts.googleapis.com` et `fonts.gstatic.com`. Chaque chargement de page
+   transmettait donc à Google LLC l'adresse IP du navigateur, son agent et le
+   référent — sur TOUTE instance de KLEAN, sans que l'exploitant l'ait choisi, et
+   en contradiction directe avec le §2 de CLAUDE.md : « pas de service tiers
+   obligatoire ». La règle avait été lue comme ne portant que sur les dépendances
+   de construction, Google Fonts n'apparaissant pas dans `package.json`.
+
+   Ne jamais revenir à un chargement distant, ni ajouter une famille servie par un
+   tiers. Le coût de l'auto-hébergement est de 79 Ko, mis en cache une fois.
+
+   Provenance, vérifiable : les deux familles sont sous licence OFL, dont le texte
+   est versé à côté des fichiers — ce qu'exige la redistribution sous AGPL.
+   · Figtree, variable 300–900 : github.com/erikdkennedy/figtree
+   · IBM Plex Mono, sous-ensemble Latin1 : github.com/IBM/plex
+   ============================================================================ */
+
+/* Une seule ressource pour toutes les graisses de 400 à 700 : la fonte variable
+   remplace les quatre fichiers statiques qu'il aurait fallu sinon, pour 27 Ko. */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('/polices/Figtree-variable.woff2') format('woff2-variations');
+}
+
+/* ⚠️ `unicode-range` est recopié des déclarations amont d'IBM, et il est
+   nécessaire : ces trois fichiers sont le sous-ensemble **Latin1**, trois fois plus
+   léger que la fonte complète (17 Ko contre 50 Ko par graisse). Il couvre tout ce
+   qu'une interface française écrit — accents, Œ et œ, guillemets, tiret cadratin,
+   euro, points de suspension — et sans cette plage, un caractère hors sous-ensemble
+   s'afficherait en tofu. Avec elle, le navigateur retombe proprement sur la fonte
+   à chasse fixe du système pour ce seul glyphe.
+
+   Trois graisses et pas plus, parce que §12 n'en demande que trois : 400 pour un
+   chiffre de tableau, 500 pour un bloc de planning, 700 pour un total. */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/polices/IBMPlexMono-Regular-Latin1.woff2') format('woff2');
+  unicode-range: U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA,
+    U+02DC, U+2013-2014, U+2018-201A, U+201C-201E, U+2020-2022, U+2026, U+2030,
+    U+2039-203A, U+2044, U+20AC, U+2122, U+2212, U+FB01-FB02;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/polices/IBMPlexMono-Medium-Latin1.woff2') format('woff2');
+  unicode-range: U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA,
+    U+02DC, U+2013-2014, U+2018-201A, U+201C-201E, U+2020-2022, U+2026, U+2030,
+    U+2039-203A, U+2044, U+20AC, U+2122, U+2212, U+FB01-FB02;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/polices/IBMPlexMono-Bold-Latin1.woff2') format('woff2');
+  unicode-range: U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA,
+    U+02DC, U+2013-2014, U+2018-201A, U+201C-201E, U+2020-2022, U+2026, U+2030,
+    U+2039-203A, U+2044, U+20AC, U+2122, U+2212, U+FB01-FB02;
+}
+
 :root {
   /* ---- Marque ------------------------------------------------------------
      Ardoise chaude, pas un bleu : elle remplit des dizaines de blocs de

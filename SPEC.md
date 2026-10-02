@@ -1351,11 +1351,27 @@ décision produit.
   pas distinguer un site dont les contrats ont été purgés d'un site saisi hier. Décision
   de modèle, pas de script : une `DateCreation` additive, ou l'examen manuel assumé.
 
-  **Deux écarts restent, et aucun par oubli.** Les polices chargées chez Google — le plus
-  urgent, et le seul qui concerne tous les utilisateurs de toutes les instances — demande
-  de récupérer des fichiers depuis une source externe, ce qui réclame un accord explicite.
-  L'effacement d'un compte sans fiche agent demande une migration, que `CLAUDE.md` §14
-  interdit de lancer sans validation. Détail de l'un et de l'autre en `RGPD.md` §11.
+  **L'écart le plus sérieux est également corrigé** : `frontend/index.html` chargeait
+  Figtree et IBM Plex Mono **depuis Google**, donc chaque chargement de page transmettait
+  l'adresse IP du navigateur à un tiers, sur toute instance et sans que l'exploitant
+  l'ait choisi. C'était le seul écart à concerner tous les utilisateurs de toutes les
+  instances, et il contredisait le §2 de `CLAUDE.md` — « pas de service tiers
+  obligatoire » — en ayant échappé à la règle parce qu'il n'apparaissait pas dans
+  `package.json`.
+
+  Les quatre fichiers sont désormais dans `frontend/public/polices/`, licences OFL
+  incluses : 79 Ko, grâce à la fonte **variable** de Figtree et au sous-ensemble
+  **Latin1** d'IBM Plex Mono, dont la plage Unicode couvre tout ce qu'une interface
+  française écrit. Les deux politiques de sécurité du contenu sont refermées sur
+  `'self'`, et `npm run verifier` échoue sur toute origine externe réapparue, sur une
+  `url()` pointant dans le vide, sur un `.woff2` sans signature et sur une licence
+  manquante — **le rappel est mécanique, pas verbal**, parce qu'une police absente ne
+  casse rien de visible.
+
+  ⚠️ **Un seul écart reste, et pas par oubli.** L'effacement d'un compte sans fiche
+  agent demande une colonne `DateAnonymisation` sur `AspNetUsers` — une date et non un
+  drapeau, pour que le registre puisse répondre « quand cet effacement a-t-il été
+  exécuté ». Détail en `RGPD.md` §11, plus la décision de modèle du §9.7.
 
   ⚠️ **Une AIPD est requise selon toute vraisemblance** : trois critères de l'article
   35(3) sont réunis, là où deux suffisent à la présomption — données de l'article 9
@@ -1422,6 +1438,12 @@ requise. **Ce fichier ne remplace pas une relecture juridique.**
   `CspProduction` dans `frontend/csp.ts` — ne pas la recopier, la lire, sinon les
   deux divergeront au premier `index.html` modifié. Servir le frontend et l'API
   sous la même origine est le déploiement le plus simple et évite CORS entièrement.
+
+  ⚠️ Depuis le 3 octobre 2026, **cette politique ne déclare plus aucune origine
+  externe** : les polices sont servies par KLEAN (`RGPD.md` §9.1). Conséquence pour
+  cette étape — l'instance n'a besoin d'**aucun accès sortant** pour servir son
+  interface, ce qui simplifie le `docker-compose.yml` et rend un déploiement derrière
+  un pare-feu fermé possible sans dégrader la typographie.
 - **`UseExceptionHandler`.** Aujourd'hui une exception non rattrapée rend un 500
   au corps vide hors développement, ce qui ne fuite rien mais ne laisse rien à
   corréler non plus. C'est le pendant du point de journalisation ci-dessus.

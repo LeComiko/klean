@@ -208,7 +208,7 @@ exception près, §9.1.
 
 ## 4. Où les données sortent de l'instance
 
-Quatre sorties, et deux seulement sont voulues.
+Trois sorties depuis la correction du §9.1, et toutes les trois sont voulues.
 
 1. **Vers le navigateur de l'utilisateur** — c'est l'usage. Protégé par HTTPS, par
    les trois cookies `HttpOnly Secure SameSite=Strict`, et par la politique de
@@ -218,8 +218,10 @@ Quatre sorties, et deux seulement sont voulues.
    SMTP, KLEAN démarre et seul ce parcours est désactivé — il répond 503 en disant
    quoi configurer.
 3. **Vers l'hébergeur** — la base entière. Sous-traitant à déclarer.
-4. ⚠️ **Vers Google**, à chaque chargement de page, sans que l'exploitant l'ait
-   choisi. Voir §9.1 : c'est l'écart le plus sérieux de cette revue.
+4. ~~**Vers Google**, à chaque chargement de page.~~ **Supprimée** le 3 octobre 2026 :
+   les polices sont servies par KLEAN, et les deux politiques de sécurité du contenu ne
+   déclarent plus aucune origine externe. Voir §9.1 — c'était l'écart le plus sérieux de
+   cette revue, et il n'en reste **trois** sorties.
 
 ---
 
@@ -428,26 +430,62 @@ chaque lecture de site, mais d'empêcher que la donnée y entre. Voir §9.5.
 Classés par gravité. Aucun n'est corrigé par ce lot, qui est de la documentation ;
 chacun est écrit pour être pris ou refusé en connaissance de cause.
 
-### 9.1 — Les polices sont chargées chez Google, à chaque page
+### 9.1 — ✅ CORRIGÉ — les polices étaient chargées chez Google, à chaque page
 
-`frontend/index.html` charge Figtree et IBM Plex Mono depuis `fonts.googleapis.com` et
-`fonts.gstatic.com`. Chaque chargement de page transmet donc à Google LLC l'**adresse
-IP** du navigateur, son agent et le référent — sans que l'exploitant l'ait choisi, et
-pour toute instance de KLEAN.
+`frontend/index.html` chargeait Figtree et IBM Plex Mono depuis `fonts.googleapis.com`
+et `fonts.gstatic.com`. Chaque chargement de page transmettait donc à Google LLC
+l'**adresse IP** du navigateur, son agent et le référent — sans que l'exploitant l'ait
+choisi, et pour toute instance de KLEAN.
 
-⚠️ **Cela contredit directement le §2 de `CLAUDE.md`** : « pas de dépendance
-propriétaire, pas de service tiers obligatoire ». Google Fonts **est** un service tiers
-obligatoire à l'exécution, et il a échappé à cette règle parce qu'il n'apparaît pas
-dans `package.json` — la règle avait été lue comme portant sur les dépendances de
-construction.
+⚠️ **Cela contredisait directement le §2 de `CLAUDE.md`** : « pas de dépendance
+propriétaire, pas de service tiers obligatoire ». Google Fonts **était** un service
+tiers obligatoire à l'exécution, et il avait échappé à cette règle parce qu'il
+n'apparaît pas dans `package.json` — la règle avait été lue comme portant sur les
+dépendances de construction.
 
-C'est l'écart le plus sérieux de cette revue, parce qu'il est le seul qui concerne
-**tous les utilisateurs de toutes les instances** et le seul qui soit un transfert à un
-tiers. **Correction proposée** : verser les deux familles dans `frontend/public/`, les
-déclarer en `@font-face`, et refermer `style-src` et `font-src` sur `'self'` dans
-`frontend/csp.ts` — ce qui supprime les deux seules origines externes des deux
-politiques. Aucun compromis d'interface : §12 impose ces deux familles, pas leur
-provenance.
+C'était l'écart le plus sérieux de cette revue : le seul à concerner **tous les
+utilisateurs de toutes les instances**, et le seul à être un transfert à un tiers.
+
+**Corrigé.** Les quatre fichiers sont dans `frontend/public/polices/`, déclarés en
+`@font-face` en tête de `tokens.css`, et les deux politiques de `frontend/csp.ts` sont
+refermées sur `'self'` — elles ne déclarent plus **aucune** origine externe.
+
+| Fichier | Taille | Provenance |
+|---|---|---|
+| `Figtree-variable.woff2` | 27 Ko | github.com/erikdkennedy/figtree, fonte variable 300–900 |
+| `IBMPlexMono-Regular-Latin1.woff2` | 17 Ko | github.com/IBM/plex, sous-ensemble Latin1 |
+| `IBMPlexMono-Medium-Latin1.woff2` | 17 Ko | idem |
+| `IBMPlexMono-Bold-Latin1.woff2` | 17 Ko | idem |
+
+Les deux licences **OFL** sont versées à côté des fichiers, ce qu'exige leur
+redistribution dans un dépôt sous AGPL.
+
+**79 Ko au total, et deux choix qui expliquent ce chiffre.** La fonte **variable** de
+Figtree remplace à elle seule les quatre fichiers statiques qu'auraient demandés les
+graisses 400 à 700. Et IBM Plex Mono vient en sous-ensemble **Latin1** — 17 Ko par
+graisse contre 50 pour la fonte complète — dont la plage Unicode, vérifiée dans les
+déclarations amont d'IBM, couvre tout ce qu'une interface française écrit : accents,
+`Œ` et `œ`, guillemets, tiret cadratin, euro, points de suspension. La plage
+`unicode-range` est recopiée telle quelle dans `tokens.css` et doit y rester : sans
+elle, un caractère hors sous-ensemble s'afficherait en tofu au lieu de retomber
+proprement sur la fonte à chasse fixe du système.
+
+⚠️ **Vérifié de bout en bout, parce qu'une police absente ne casse rien de visible** —
+la typographie serait seulement « un peu différente », et le cache du navigateur
+masquerait même la requête manquante. `npm run preview` sert désormais
+`default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; …` sans une
+seule origine externe, et les quatre `.woff2` y répondent 200 en `font/woff2`, aux
+tailles exactes de leurs sources amont.
+
+⚠️ **Et la garde est mécanique, pas verbale.** `npm run verifier` échoue si une `url()`
+du CSS pointe sur un fichier absent, si un `.woff2` perd sa signature, si une licence
+OFL disparaît, ou si une origine externe réapparaît dans `csp.ts` ou `index.html`.
+Trois sabotages l'ont éprouvée : origines de Google réintroduites, fichier de police
+retiré, signature de fichier cassée.
+
+**Effet de bord utile pour le déploiement** : KLEAN n'a plus besoin d'aucun accès
+sortant pour servir son interface. Une instance derrière un pare-feu fermé affiche la
+même typographie qu'une autre.
 
 ### 9.2 — ✅ CORRIGÉ — l'adresse IP des sessions n'était jamais purgée
 
@@ -601,7 +639,7 @@ et le fournisseur SMTP, tenir l'AIPD du §9.6, désigner un point de contact.
 
 | Écart | État |
 |---|---|
-| §9.1 — les polices chargées chez Google | ⬜ **à faire, et c'est le plus urgent** |
+| §9.1 — les polices chargées chez Google | ✅ servies en propre, garde dans `npm run verifier` |
 | §9.2 — l'adresse IP des sessions jamais purgée | ✅ `purge-jetons-rafraichissement.sql` |
 | §5 — aucun mécanisme de conservation métier | 📋 `conservation-donnees-metier.sql`, rapport avec `DELETE` commenté |
 | §8.2 — le résidu de santé des absences `Maladie` | 📋 `degradation-absences-maladie.sql`, rapport avec `UPDATE` commenté |
@@ -610,16 +648,9 @@ et le fournisseur SMTP, tenir l'AIPD du §9.6, désigner un point de contact.
 | §9.4 — aucun export ni portabilité | ✅ `GET /api/agents/{id}/dossier` |
 | §9.7 — sites et clients sans contrat ni date | ⬜ décision de modèle, voir §9.7 |
 
-**Les deux restants ne sont pas restés par oubli.**
+**Les deux restants ne sont pas restés par oubli.** §9.7 est une décision de modèle, et
+§9.3 attend une migration :
 
-- **§9.1, les polices.** La correction demande de récupérer les fichiers `.woff2` de
-  Figtree et d'IBM Plex Mono pour les verser au dépôt. Télécharger des fichiers depuis
-  une source externe demande un accord explicite, et il n'a pas été donné. Tout le reste
-  de la correction est connu : `@font-face` dans `tokens.css`, fichiers dans
-  `frontend/public/`, et `style-src` et `font-src` refermés sur `'self'` dans
-  `frontend/csp.ts` — ce qui supprime les deux seules origines externes des deux
-  politiques. Les deux familles sont sous licence OFL, donc redistribuables avec le
-  dépôt sous AGPL, à condition d'y joindre leur licence.
 - **§9.3, l'effacement d'un compte sans fiche agent.** Le registre a besoin de savoir
   **quand** un effacement a été exécuté — c'est la raison pour laquelle `Agent` porte une
   `DateAnonymisation` plutôt qu'un drapeau. La même colonne sur `AspNetUsers` demande

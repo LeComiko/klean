@@ -14,7 +14,7 @@
  *     npm run verifier
  */
 
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -284,6 +284,80 @@ function contraste(premier, second) {
   const b = luminance(second)
 
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+}
+
+// ---------------------------------------------------------------------------
+// Polices servies en propre — RGPD.md §9.1
+// ---------------------------------------------------------------------------
+
+titre('Polices : servies par KLEAN, jamais par un tiers')
+
+// ⚠️ Cette section ne vérifie pas du goût, elle vérifie une conformité. Les deux
+// familles de §12 étaient chargées depuis Google Fonts, ce qui transmettait
+// l'adresse IP de chaque visiteur de chaque instance de KLEAN à un tiers, sans que
+// l'exploitant l'ait choisi. Une régression ici ne casserait RIEN de visible — la
+// typographie serait identique, le cache du navigateur masquerait même la requête —
+// et ce silence est précisément la raison d'être de cette garde.
+
+const dossierPublic = join(racine, 'public')
+
+// 1. Chaque `url()` du CSS doit pointer sur un fichier réellement présent. Une
+//    police absente ne lève aucune erreur de construction : le navigateur retombe
+//    sur la fonte système, et l'interface « a juste l'air un peu différente ».
+const referencees = new Set()
+
+for (const { relatif, contenu } of css) {
+  for (const [, cible] of contenu.matchAll(/url\(\s*['"]?([^'")]+)['"]?\s*\)/g)) {
+    if (cible.startsWith('data:')) continue
+
+    referencees.add(cible)
+
+    if (/^https?:/i.test(cible)) {
+      verdict(false, `ressource distante dans ${relatif}`, cible)
+      continue
+    }
+
+    const surDisque = join(dossierPublic, cible.replace(/^\//, ''))
+    verdict(existsSync(surDisque), `${cible} présent dans public/`, relatif)
+  }
+}
+
+verdict(referencees.size >= 4, 'les quatre fichiers de police sont référencés',
+  `${String(referencees.size)} url() trouvée(s)`)
+
+// 2. Chaque police présente doit porter la signature `wOF2`. Un fichier tronqué par
+//    un téléchargement interrompu fait exactement le même effet qu'un fichier
+//    absent, sans l'avertissement d'un 404.
+for (const fichier of readdirSync(join(dossierPublic, 'polices'))) {
+  if (!fichier.endsWith('.woff2')) continue
+
+  const entete = readFileSync(join(dossierPublic, 'polices', fichier)).subarray(0, 4).toString()
+  verdict(entete === 'wOF2', `${fichier} est un woff2 valide`, entete)
+}
+
+// 3. La licence OFL de chaque famille doit accompagner les fichiers : c'est ce
+//    qu'exige leur redistribution dans un dépôt sous AGPL.
+for (const licence of ['Figtree-OFL.txt', 'IBMPlexMono-OFL.txt']) {
+  verdict(existsSync(join(dossierPublic, 'polices', licence)), `licence ${licence} versée`)
+}
+
+// 4. Aucune origine externe, ni dans les deux politiques de sécurité du contenu, ni
+//    dans le document. C'est la garde qui empêche de refaire le défaut : réintroduire
+//    une police distante demande de rouvrir la politique, et ce test le refuse.
+for (const fichier of ['csp.ts', 'index.html']) {
+  const source = readFileSync(join(racine, fichier), 'utf8')
+
+  // Les commentaires nomment les origines d'avant pour expliquer la correction : on
+  // ne regarde donc que les lignes de code, pas la prose qui les documente.
+  const code = source
+    .split('\n')
+    .filter((ligne) => !/^\s*(\*|\/\/|<!--|\s{6}[A-ZÀ-Ü⚠`])/.test(ligne))
+    .join('\n')
+
+  const externes = [...code.matchAll(/https?:\/\/(?!localhost)[a-z0-9.-]+/gi)].map((m) => m[0])
+
+  verdict(externes.length === 0, `${fichier} ne déclare aucune origine externe`,
+    externes.join(' '))
 }
 
 // ---------------------------------------------------------------------------

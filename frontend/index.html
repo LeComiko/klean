@@ -6,22 +6,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!--
-      Figtree pour l'interface, IBM Plex Mono pour tout chiffre comparé en
-      colonne (CLAUDE.md §12).
+      ⚠️ AUCUNE ressource externe ici, et aucune à ajouter.
 
-      ⚠️ Ces deux origines figurent dans la politique de sécurité du contenu, à
-      `frontend/csp.ts` — fonts.googleapis.com en style-src, fonts.gstatic.com en
-      font-src. Ajouter ici une ressource d'une autre origine demande de l'y
-      déclarer aussi, sinon elle sera bloquée en production et nulle part ailleurs :
-      le serveur de développement porte une politique plus permissive, et le cache
-      du navigateur masque une police manquante.
+      Figtree et IBM Plex Mono (CLAUDE.md §12) étaient chargées depuis Google
+      jusqu'au 3 octobre 2026, ce qui transmettait l'adresse IP de chaque visiteur
+      de chaque instance à un tiers (RGPD.md §9.1). Elles sont désormais servies par
+      KLEAN : fichiers dans `public/polices/`, déclarations `@font-face` en tête de
+      `src/styles/tokens.css`.
+
+      Conséquence sur la politique de sécurité du contenu : `frontend/csp.ts` ne
+      déclare plus AUCUNE origine externe, en production comme en développement.
+      Ajouter une ressource distante ici demanderait de rouvrir cette politique, et
+      ce serait une régression de conformité avant d'être une question technique —
+      le défaut ne se verrait d'ailleurs pas au développement, dont la politique est
+      plus permissive et dont le cache masque une police manquante.
     -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Figtree:wght@400..700&family=IBM+Plex+Mono:wght@400;500;700&display=swap"
-      rel="stylesheet"
-    />
 
     <title>KLEAN</title>
   </head>
