@@ -187,7 +187,7 @@ Les douze tables du modèle, plus les tables d'Identity. « DP » = donnée pers
 | `Contrats`, `Prestations` | aucune — `Prestation.Libelle` est un intitulé de prestation | — | `/api/contrats`, `/api/prestations` |
 | `Produits`, `Stocks` | aucune | — | — |
 | `AccesJournalises` | `UtilisateurId`, `CibleId`, `Horodatage` | trace d'activité d'un utilisateur | `/api/journal-acces` |
-| `AspNetUsers` | `Email`, `UserName`, `PhoneNumber`, `Nom`, `Prenom`, `PasswordHash`, verrouillage | identité et **secret d'authentification** | `/api/auth/moi` seulement |
+| `AspNetUsers` | `Email`, `UserName`, `PhoneNumber`, `Nom`, `Prenom`, `PasswordHash`, verrouillage, `DateAnonymisation` | identité et **secret d'authentification** | `/api/auth/moi` seulement |
 | `JetonsRafraichissement` | `UtilisateurId`, **`AdresseIp`**, dates | trace de connexion | **aucune route** |
 
 ⚠️ **Deux colonnes sont des données personnelles que personne ne cherche là.**
@@ -239,7 +239,7 @@ est la dernière : une durée sans mécanisme est une promesse que personne ne t
 | Interventions et leur statut | 5 ans | preuve des passages facturés, prescription de l'action contractuelle | 📋 `conservation-donnees-metier.sql` §1 |
 | Remplacements et scores | 1 an | état dérivé, sans valeur probante au-delà de l'exercice | 📋 `conservation-donnees-metier.sql` §3 |
 | Clients et sites | durée du contrat, puis 5 ans | relation commerciale | 📋 `conservation-donnees-metier.sql` §4 — partiel, voir §9.7 |
-| Comptes (`AspNetUsers`) | désactivation à la sortie, effacement à 5 ans | un compte désactivé reste nécessaire pour attribuer les lignes du journal | **aucun** — voir §9.3 |
+| Comptes (`AspNetUsers`) | désactivation à la sortie, effacement à 5 ans | un compte désactivé reste nécessaire pour attribuer les lignes du journal | 📋 geste manuel par `POST /api/auth/comptes/{id}/anonymiser` (§9.3) |
 | Jetons de rafraîchissement | **30 jours après révocation ou expiration** | la fenêtre de diagnostic d'un rejeu ; au-delà, seule l'adresse IP survit, sans usage | ✅ `purge-jetons-rafraichissement.sql` |
 | Journal d'accès | **12 mois** | un journal RGPD est lui-même une donnée personnelle | ✅ `purge-journal-acces.sql` |
 
@@ -276,7 +276,7 @@ contrat de travail.
 | Information (art. 13) | rien dans le produit | **manquant** — modèle de note au §7 |
 | Accès (art. 15) | **`GET /api/agents/{id}/dossier`**, administrateur seul | ✅ dossier consolidé en une réponse |
 | Rectification (art. 16) | `PUT /api/agents/{id}` | ✅ |
-| Effacement (art. 17) | `POST /api/agents/{id}/anonymiser` | partiel — voir §8.1 et §9.3 |
+| Effacement (art. 17) | `POST /api/agents/{id}/anonymiser` et `POST /api/auth/comptes/{id}/anonymiser` | ✅ sur les deux chemins — mais c'est une **pseudonymisation**, voir §8.1 |
 | Limitation (art. 18) | `Actif = false` sur l'agent et sur le compte | approximatif : c'est une désactivation, pas un gel |
 | Portabilité (art. 20) | **`GET /api/agents/{id}/dossier`** | ✅ JSON structuré et lisible par machine |
 | Opposition (art. 21) | sans objet sur T1, T3, T4 (exécution du contrat) ; recevable sur T2 | à traiter au cas par cas, hors code |
@@ -511,18 +511,61 @@ lointaine passe la seconde condition dès que `DateRevocation` est nulle. Le pr�
 expiré sans révocation à 10 et 40 jours — et la classification du rapport s'accorde
 exactement avec ce que le `DELETE` emporterait.
 
-### 9.3 — Aucun chemin d'effacement pour un compte sans fiche agent
+### 9.3 — ✅ CORRIGÉ — il n'existait aucun chemin d'effacement pour un compte sans fiche agent
 
 `ServiceAnonymisation.ExecuterAsync` part d'un `agentId` et ne touche `AspNetUsers` que
 si un compte porte cet `AgentId`. Un compte de rôle `Responsable`, `Administrateur` ou
-`ClientSyndic` a `AgentId = null` : **aucun endpoint ne permet d'effacer ses données.**
-Son nom, son prénom et son courriel restent en base indéfiniment, et il n'existe même
-pas de route pour le désactiver — la fixture de tests le fait directement en base,
-faute d'endpoint.
+`ClientSyndic` a `AgentId = null` : **aucun endpoint ne permettait d'effacer ses
+données.** Son nom, son prénom et son courriel restaient en base indéfiniment, et il
+n'existait même pas de route pour le désactiver — la fixture de tests le fait directement
+en base, faute d'endpoint.
 
-Ce n'est pas un oubli du lot B, qui traitait la demande d'effacement d'un **agent** ;
-c'est un trou du modèle de droits, et il concerne les personnes les mieux placées pour
-s'en apercevoir.
+Ce n'était pas un oubli du lot B, qui traitait la demande d'effacement d'un **agent** ;
+c'était un trou du modèle de droits, et il concernait les personnes les mieux placées
+pour s'en apercevoir.
+
+**Corrigé** par `POST /api/auth/comptes/{id}/anonymiser`, administrateur seul,
+irréversible, journalisé en `Compte` / `Anonymisation`. Il remplace l'identité, substitue
+l'adresse sur `anonymise.invalid`, désactive le compte, régénère l'empreinte de sécurité,
+révoque les sessions et pose `DateAnonymisation` — **une date et non un drapeau**, pour
+que le registre puisse répondre « quand cet effacement a-t-il été exécuté ». La colonne
+est ajoutée par la migration `AnonymisationDesComptes`, un `AddColumn` nullable.
+
+**Quatre refus en 409, et chacun nomme sa sortie** — déjà anonymisé, rattaché à un agent,
+son propre compte, et le cas du dernier administrateur ci-dessous. Un compte rattaché à un
+agent est renvoyé vers `POST /api/agents/{id}/anonymiser` avec l'identifiant exact :
+cette route seule traite les trois endroits où la personne est nommée, et le traiter ici
+laisserait la fiche agent intacte, c'est-à-dire donnerait un effacement qui n'efface pas.
+Un test vérifie que la sortie nommée est **franchissable**.
+
+⚠️ **Un sabotage a fait apparaître un trou que je n'avais pas vu, et déplacé une garde
+que j'avais mal placée.** J'avais écrit un refus « jamais le dernier administrateur
+actif » sur cette route. Le retirer n'a fait rougir aucun test — parce que la garde est
+**inatteignable** : l'appelant est nécessairement un administrateur actif, donc si la
+cible en est un autre, ils sont deux ; elle ne pourrait se déclencher que pour cible =
+appelant, cas que le refus de s'effacer soi-même traite déjà. C'est donc **ce** refus qui
+porte l'invariante « une entreprise conserve toujours au moins un administrateur actif ».
+
+Le risque est réel, mais il est sur **l'autre route**. `POST /api/auth/comptes` exige un
+`AgentId` pour le rôle `Agent` et ne l'interdit à aucun autre : un compte
+`Administrateur` peut donc porter une fiche agent — le cas normal dans une entreprise de
+cinq personnes où le responsable fait aussi le ménage. Anonymiser cette fiche neutralise
+son compte **sans** passer par le refus de s'effacer soi-même, et l'entreprise se
+retrouve sans aucun compte capable d'en créer un, `POST /api/auth/comptes` étant réservé
+à l'administrateur — sans rattrapage par l'API. La garde est désormais là, et elle y est
+éprouvée dans les deux sens : le refus, et la franchissabilité de la sortie qu'il nomme.
+
+**Ce qui subsiste**, et c'est l'exact symétrique des interventions d'un agent :
+l'identifiant technique du compte, parce que `AccesJournalise` attribue chaque lecture de
+données personnelles à un `UtilisateurId`. Le supprimer rendrait illisible le journal qui
+existe pour rendre des comptes — y compris les lignes documentant les accès d'autres
+personnes. Le rôle subsiste aussi : il dit la fonction occupée, ne nomme personne, et
+rend les lignes du journal interprétables.
+
+⚠️ Et une troisième fois dans ce projet, `Actif = false` et le `SecurityStamp` se sont
+couverts l'un l'autre : un sabotage retirant `UpdateSecurityStampAsync` est resté vert,
+les deux assertions HTTP passant par le seul effet de `Actif`. Ce qui l'attrape est une
+relecture de l'empreinte **en base**, avant et après.
 
 ### 9.4 — ✅ CORRIGÉ — il n'existait aucun export, donc aucune portabilité
 
@@ -644,17 +687,15 @@ et le fournisseur SMTP, tenir l'AIPD du §9.6, désigner un point de contact.
 | §5 — aucun mécanisme de conservation métier | 📋 `conservation-donnees-metier.sql`, rapport avec `DELETE` commenté |
 | §8.2 — le résidu de santé des absences `Maladie` | 📋 `degradation-absences-maladie.sql`, rapport avec `UPDATE` commenté |
 | §9.5 — `Sites.Consignes` nommant une personne | ✅ aide du champ, gardée par un test |
-| §9.3 — aucun effacement pour un compte sans fiche agent | ⬜ à faire |
+| §9.3 — aucun effacement pour un compte sans fiche agent | ✅ `POST /api/auth/comptes/{id}/anonymiser` |
 | §9.4 — aucun export ni portabilité | ✅ `GET /api/agents/{id}/dossier` |
 | §9.7 — sites et clients sans contrat ni date | ⬜ décision de modèle, voir §9.7 |
 
-**Les deux restants ne sont pas restés par oubli.** §9.7 est une décision de modèle, et
-§9.3 attend une migration :
+**Un seul écart reste**, et c'est une décision de modèle, pas un travail en attente :
+§9.7, un site ou un client sans contrat n'a aucune date dont partir. Les deux issues sont
+écrites — une `DateCreation` additive, ou l'examen manuel assumé.
 
-- **§9.3, l'effacement d'un compte sans fiche agent.** Le registre a besoin de savoir
-  **quand** un effacement a été exécuté — c'est la raison pour laquelle `Agent` porte une
-  `DateAnonymisation` plutôt qu'un drapeau. La même colonne sur `AspNetUsers` demande
-  `dotnet ef migrations add`, que `CLAUDE.md` §14 interdit de lancer sans validation
-  explicite. Un contournement existe — reconnaître un compte effacé à son adresse
-  substituée sur `anonymise.invalid` — mais c'est renifler une chaîne là où une date
-  répondrait, et le registre y perdrait la réponse à sa propre question.
+⚠️ **Deux des sept corrections sont des rapports, pas des purges**, et il ne faut pas lire
+le tableau trop vite : `conservation-donnees-metier.sql` et
+`degradation-absences-maladie.sql` portent leurs `DELETE` et `UPDATE` en commentaire. Ils
+attendent la validation juridique des durées du §5, qui appartient à l'exploitant.

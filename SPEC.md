@@ -1368,10 +1368,33 @@ décision produit.
   manquante — **le rappel est mécanique, pas verbal**, parce qu'une police absente ne
   casse rien de visible.
 
-  ⚠️ **Un seul écart reste, et pas par oubli.** L'effacement d'un compte sans fiche
-  agent demande une colonne `DateAnonymisation` sur `AspNetUsers` — une date et non un
-  drapeau, pour que le registre puisse répondre « quand cet effacement a-t-il été
-  exécuté ». Détail en `RGPD.md` §11, plus la décision de modèle du §9.7.
+  **Le dernier chemin d'effacement du produit est également ouvert** :
+  `POST /api/auth/comptes/{id}/anonymiser`, pour les comptes sans fiche agent —
+  `Responsable`, `Administrateur`, `ClientSyndic` — qui n'avaient aucun chemin, ni même
+  une route pour être désactivés. Migration `AnonymisationDesComptes`, un `AddColumn`
+  nullable : une **date** et non un drapeau, pour que le registre réponde « quand cet
+  effacement a-t-il été exécuté ».
+
+  ⚠️ **Un sabotage a fait apparaître un trou réel et déplacé une garde mal placée.**
+  J'avais posé le refus « jamais le dernier administrateur actif » sur cette nouvelle
+  route ; le retirer ne faisait rougir aucun test, parce que la garde y est
+  **inatteignable** — l'appelant étant forcément un administrateur actif, une cible
+  administratrice différente fait deux administrateurs. C'est le refus de s'effacer
+  soi-même qui porte l'invariante.
+
+  Le risque est sur l'**autre** route : `POST /api/auth/comptes` exige un `AgentId` pour
+  le rôle `Agent` et ne l'interdit à aucun autre, donc un compte `Administrateur` peut
+  porter une fiche agent — le cas normal dans une entreprise de cinq personnes où le
+  responsable fait aussi le ménage. Anonymiser cette fiche neutralise son compte sans
+  passer par ce refus, et laisse l'entreprise sans aucun compte capable d'en créer un.
+  La garde est désormais là, éprouvée dans les deux sens.
+
+  **Leçon à retenir du lot** : un sabotage resté vert ne dit pas toujours qu'un test
+  manque — parfois il dit que le code est mort, et la vraie garde est ailleurs.
+
+  ⚠️ **Un seul écart reste, et c'est une décision de modèle** : §9.7, un site ou un client
+  sans contrat n'a aucune date dont partir. Les deux issues sont écrites — une
+  `DateCreation` additive, ou l'examen manuel assumé.
 
   ⚠️ **Une AIPD est requise selon toute vraisemblance** : trois critères de l'article
   35(3) sont réunis, là où deux suffisent à la présomption — données de l'article 9

@@ -33,7 +33,18 @@ public enum RessourceAccedee
     Planning,
 
     /// <summary>Le journal lui-même, qui est l'accès le plus sensible.</summary>
-    JournalAcces
+    JournalAcces,
+
+    /// <summary>
+    /// Un compte de connexion — nom, prénom, courriel, téléphone (RGPD.md §9.3).
+    ///
+    /// ⚠️ Aucune <b>lecture</b> de compte n'est journalisée, et ce n'est pas un oubli :
+    /// aucune route ne liste les comptes, et <c>GET /api/auth/moi</c> ne rend que
+    /// l'identité de l'appelant lui-même — un journal de « qui a lu son propre nom » est
+    /// du bruit. Cette valeur ne sert donc que la pseudonymisation d'un compte, qui est
+    /// une écriture irréversible.
+    /// </summary>
+    Compte
 }
 
 /// <summary>Nature de l'accès.</summary>

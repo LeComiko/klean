@@ -527,6 +527,9 @@ namespace Klean.Api.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("DateAnonymisation")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("DateCreation")
                         .HasColumnType("timestamp with time zone");
 

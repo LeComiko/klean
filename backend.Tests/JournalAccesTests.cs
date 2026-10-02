@@ -150,7 +150,7 @@ public class JournalAccesTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Les_dix_actions_journalisees_sont_celles_attendues()
+    public void Les_onze_actions_journalisees_sont_celles_attendues()
     {
         // Le miroir du test précédent : il garde l'absence d'oubli, celui-ci garde
         // l'absence d'excès. Journaliser une action qui ne divulgue rien gonflerait le
@@ -172,6 +172,7 @@ public class JournalAccesTests : IAsyncLifetime
                 "AgentsController.Dossier",
                 "AgentsController.Lister",
                 "AgentsController.Obtenir",
+                "AuthController.AnonymiserCompte",
                 "InterventionsController.Candidats",
                 "JournalAccesController.Lister",
                 "PlanningController.Semaine",

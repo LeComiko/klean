@@ -695,6 +695,49 @@ irréversible, une réussite silencieuse masquerait une erreur d'identifiant. C'
 pourquoi `DateAnonymisation` est une date et non un drapeau : elle répond à la question
 du registre — quand cet effacement a-t-il été exécuté.
 
+⚠️ **Jamais la fiche de l'agent rattaché au dernier administrateur actif**, et c'est le
+seul endroit du produit où cette garde est atteignable. `POST /api/auth/comptes` exige un
+`AgentId` pour le rôle `Agent` et ne l'interdit à aucun autre : un compte
+`Administrateur` peut donc porter une fiche agent, ce qui est le cas normal dans une
+entreprise de cinq personnes où le responsable fait aussi le ménage. Anonymiser cette
+fiche neutralise son compte, et l'entreprise se retrouve sans aucun compte capable d'en
+créer un — `POST /api/auth/comptes` étant réservé à l'administrateur, il n'existe aucun
+rattrapage par l'API.
+
+### Pseudonymisation d'un compte sans fiche agent
+
+`POST /api/auth/comptes/{id}/anonymiser`, administrateur seul, irréversible, journalisée
+en `RessourceAccedee.Compte` / `NatureAcces.Anonymisation`. C'est le dernier chemin
+d'effacement du produit : un compte `Responsable`, `Administrateur` ou `ClientSyndic`
+porte `AgentId = null`, donc la pseudonymisation d'agent ne le touchait pas, et aucune
+route ne permettait d'effacer ses données — ni même de le désactiver.
+
+Mêmes gestes que sur le compte d'un agent — identité remplacée, adresse substituée sur
+`anonymise.invalid`, `Actif = false`, empreinte régénérée, sessions révoquées — plus
+`DateAnonymisation`, posée par les **deux** chemins pour que le registre réponde quel que
+soit celui qui a servi.
+
+**Quatre refus en 409, et chacun nomme sa sortie.** Déjà anonymisé en disant la date ;
+rattaché à un agent, en donnant la route exacte de l'agent, parce qu'elle seule traite
+les trois endroits où la personne est nommée ; son propre compte ; et le cas du dernier
+administrateur, traité sur l'autre route. Un test vérifie que chaque sortie nommée est
+franchissable.
+
+⚠️ **Ce qui subsiste est l'exact symétrique des interventions d'un agent.**
+`AccesJournalise` attribue chaque lecture de données personnelles à un `UtilisateurId` :
+supprimer le compte rendrait illisible le journal qui existe pour rendre des comptes, y
+compris les lignes documentant les accès d'autres personnes. C'est pourquoi l'identifiant
+survit, donc pourquoi c'est une pseudonymisation.
+
+⚠️ **Une garde inatteignable ne fait rougir aucun sabotage, parce qu'elle n'a aucun cas à
+traiter.** J'avais posé le refus « dernier administrateur » sur cette route : l'appelant
+étant nécessairement un administrateur actif, si la cible en est un autre, ils sont deux
+— la garde ne pouvait se déclencher que pour cible = appelant, cas que le refus de
+s'effacer soi-même traite déjà. C'est donc **ce** refus qui porte l'invariante « une
+entreprise conserve toujours au moins un administrateur actif ». Leçon générale : un
+sabotage resté vert ne dit pas toujours qu'un test manque — parfois il dit que le code
+est mort.
+
 ---
 
 ## 8. Moteur d'affectation

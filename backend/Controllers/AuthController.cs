@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Klean.Api.DTOs;
 using Klean.Api.Data;
+using Klean.Api.Filtres;
 using Klean.Api.Models;
 using Klean.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -21,6 +22,7 @@ public class AuthController : ControllerBase
     private readonly IServiceCourriel _courriel;
     private readonly LimiteurDebit _debit;
     private readonly IConfiguration _configuration;
+    private readonly ServiceAnonymisation _anonymisation;
 
     public AuthController(
         KleanDbContext db,
@@ -29,8 +31,10 @@ public class AuthController : ControllerBase
         ServiceSession session,
         IServiceCourriel courriel,
         LimiteurDebit debit,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ServiceAnonymisation anonymisation)
     {
+        _anonymisation = anonymisation;
         _db = db;
         _utilisateurs = utilisateurs;
         _connexions = connexions;
@@ -391,6 +395,53 @@ public class AuthController : ControllerBase
         }
 
         return Ok(Vers(utilisateur, [dto.Role]));
+    }
+
+    /// <summary>
+    /// Pseudonymisation d'un compte de connexion <b>sans fiche agent</b> —
+    /// <c>POST /api/auth/comptes/{id}/anonymiser</c> (RGPD.md §9.3).
+    ///
+    /// Comble le dernier trou d'effacement du produit. Un compte `Responsable`,
+    /// `Administrateur` ou `ClientSyndic` porte `AgentId = null` : la pseudonymisation
+    /// d'agent ne le touchait donc pas, et aucune route ne permettait d'effacer ses
+    /// données — ni même de le désactiver, ce que la fixture de tests faisait
+    /// directement en base, faute d'endpoint.
+    ///
+    /// ⚠️ <b>Cinq refus en 409, et chacun nomme sa sortie.</b> Déjà anonymisé, rattaché à
+    /// un agent — auquel cas c'est la route de l'agent qu'il faut, parce qu'elle seule
+    /// traite les trois endroits où la personne est nommée —, son propre compte, et le
+    /// dernier administrateur actif de l'entreprise. Une friction n'a de valeur que si
+    /// elle est franchissable.
+    ///
+    /// Journalisé en <see cref="RessourceAccedee.Compte"/> /
+    /// <see cref="NatureAcces.Anonymisation"/> : aucune <i>lecture</i> de compte n'est
+    /// journalisée — aucune route n'en liste — mais une écriture irréversible sur les
+    /// données d'une personne doit laisser une trace.
+    /// </summary>
+    [JournaliserAcces(RessourceAccedee.Compte, NatureAcces.Anonymisation)]
+    [Authorize(Roles = RolesKlean.Administrateur)]
+    [HttpPost("comptes/{id:guid}/anonymiser")]
+    public async Task<ActionResult<AnonymisationCompteDto>> AnonymiserCompte(Guid id)
+    {
+        var entrepriseId = EntrepriseIdDuJeton();
+        if (entrepriseId is null)
+        {
+            return Unauthorized("Jeton sans revendication entrepriseId.");
+        }
+
+        var appelant = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(appelant, out var appelantId))
+        {
+            return Unauthorized("Jeton sans identifiant exploitable.");
+        }
+
+        var resultat = await _anonymisation.ExecuterSurCompteAsync(id, entrepriseId.Value, appelantId);
+
+        if (resultat is null) return NotFound();
+
+        return resultat.Value.Conflit is { } conflit
+            ? Conflict(conflit)
+            : Ok(resultat.Value.Valeur);
     }
 
     [Authorize]
