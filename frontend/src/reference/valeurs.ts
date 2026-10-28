@@ -303,6 +303,19 @@ export function designer(singulier: string, genre: Genre): string {
   return genre === 'feminin' ? `la ${singulier}` : `le ${singulier}`
 }
 
+/**
+ * « Nouveau client », « Nouvelle prestation », « Nouvel agent ».
+ *
+ * La forme unique « Nouveau » a tenu jusqu'à l'étape 20, et deux boutons sur sept
+ * disaient « Nouveau agent » et « Nouveau prestation » : constaté dans le navigateur,
+ * jamais en relisant, puisque le code compose le libellé.
+ */
+export function nouveau(singulier: string, genre: Genre): string {
+  if (genre === 'feminin') return `Nouvelle ${singulier}`
+
+  return Voyelles.test(singulier) ? `Nouvel ${singulier}` : `Nouveau ${singulier}`
+}
+
 /** Accord du participe passé : « créé » ou « créée ». */
 export function accorder(genre: Genre): string {
   return genre === 'feminin' ? 'e' : ''

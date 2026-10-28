@@ -28,6 +28,7 @@ import {
   designer,
   filtreDe,
   majuscule,
+  nouveau,
   rendu,
   texteDe,
   tousLes,
@@ -368,7 +369,7 @@ function EcranReference({
                 setAnnonce(null)
               }}
             >
-              Nouveau {description.singulier}
+              {nouveau(description.singulier, description.genre)}
             </button>
           ) : undefined
         }
@@ -455,7 +456,7 @@ function EcranReference({
               key={edition.mode === 'creation' ? 'creation' : edition.ligne.id}
               titre={
                 edition.mode === 'creation'
-                  ? `Nouveau ${description.singulier}`
+                  ? nouveau(description.singulier, description.genre)
                   : `${lectureSeule ? '' : 'Modifier '}${etiquetteDe(edition.ligne)}`
               }
               champs={description.champs}
@@ -500,7 +501,7 @@ function messageVide(
 
   if (!ecriture) return `${quoi}.`
 
-  const ouvre = `Le bouton « Nouveau ${description.singulier} » ouvre le formulaire`
+  const ouvre = `Le bouton « ${nouveau(description.singulier, description.genre)} » ouvre le formulaire`
 
   return filtre && parente !== undefined
     ? `${quoi}. ${ouvre}, avec ${designer(parente.singulier, parente.genre)} déjà choisi.`

@@ -15,6 +15,7 @@ import {
   filtreDe,
   majuscule,
   masque,
+  nouveau,
   rendu,
   texteDe,
   tousLes,
@@ -479,6 +480,13 @@ describe('les formules de langue', () => {
   test('l’apostrophe est typographique, comme partout ailleurs', () => {
     assert.ok(designer('absence', 'feminin').includes('’'))
     assert.equal(designer('absence', 'feminin').includes("'"), false)
+  })
+
+  test('l’adjectif « nouveau » s’accorde et s’élide', () => {
+    assert.equal(nouveau('client', 'masculin'), 'Nouveau client')
+    assert.equal(nouveau('agent', 'masculin'), 'Nouvel agent')
+    assert.equal(nouveau('prestation', 'feminin'), 'Nouvelle prestation')
+    assert.equal(nouveau('absence', 'feminin'), 'Nouvelle absence')
   })
 
   test('le participe passé s’accorde', () => {

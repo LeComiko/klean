@@ -100,12 +100,16 @@ function Rapport({ rapport, onFermer }: { rapport: RapportGeneration; onFermer: 
             arrive, et le seul morceau en contenu phrastique — les listes et les
             `details` qui suivent n'y sont pas admis. */}
         <output className="rapport__resume">
-          Du {du} au {au} :{' '}
-          <strong className="chiffres">{rapport.creees}</strong>{' '}
-          {rapport.creees > 1 ? 'vacations créées' : 'vacation créée'}, dont{' '}
-          <strong className="chiffres">{rapport.pourvues}</strong> avec leur titulaire.{' '}
-          <span className="chiffres">{rapport.dejaPresentes}</span> déjà{' '}
-          {rapport.dejaPresentes > 1 ? 'présentes' : 'présente'}, non recréées.
+          Du {du} au {au} : <Creees rapport={rapport} />
+          {rapport.dejaPresentes > 0 && (
+            <>
+              {' '}
+              <span className="chiffres">{rapport.dejaPresentes}</span>{' '}
+              {rapport.dejaPresentes > 1
+                ? 'déjà présentes, non recréées.'
+                : 'déjà présente, non recréée.'}
+            </>
+          )}
         </output>
         <button className="rapport__fermer" type="button" onClick={onFermer}>
           Fermer le rapport
@@ -115,7 +119,9 @@ function Rapport({ rapport, onFermer }: { rapport: RapportGeneration; onFermer: 
       <Section
         titre="Restées à pourvoir"
         lignes={rapport.nonPourvues}
-        vide="Toutes les vacations créées ont reçu leur titulaire."
+        vide={rapport.creees === 0
+          ? 'Aucune vacation créée.'
+          : 'Toutes les vacations créées ont reçu leur titulaire.'}
         alerte
       />
       <Section
@@ -130,6 +136,32 @@ function Rapport({ rapport, onFermer }: { rapport: RapportGeneration; onFermer: 
         aide="Planifiées avant un changement de contrat ou de prestation. La génération ne les modifie ni ne les supprime : à revoir une par une."
       />
     </div>
+  )
+}
+
+/**
+ * « Aucune vacation créée. », « 1 vacation créée, avec son titulaire. », « 6 vacations
+ * créées, dont 4 avec leur titulaire. » Mesuré dans le navigateur : la forme unique
+ * donnait « 0 vacation créée, dont 0 avec leur titulaire » sur une génération rejouée,
+ * qui est le cas courant puisqu'elle est idempotente.
+ */
+function Creees({ rapport }: { rapport: RapportGeneration }) {
+  if (rapport.creees === 0) return <>Aucune vacation créée.</>
+
+  if (rapport.creees === 1) {
+    return (
+      <>
+        <strong className="chiffres">1</strong> vacation créée,{' '}
+        {rapport.pourvues === 1 ? 'avec son titulaire.' : 'sans titulaire.'}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <strong className="chiffres">{rapport.creees}</strong> vacations créées, dont{' '}
+      <strong className="chiffres">{rapport.pourvues}</strong> avec leur titulaire.
+    </>
   )
 }
 
