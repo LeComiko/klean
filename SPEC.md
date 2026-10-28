@@ -1592,7 +1592,78 @@ sites, elle ne dit pas quel chef supervise qui. Il faut dans tous les cas un
 lien chef → sites ou chef → agents. C'est ce qui rend la question préalable, et
 non postérieure, au choix du modèle.
 
-**Périmètre** — une fois la réponse connue
+**Réponse obtenue le 28 octobre 2026 — des personnes, et une vraie frontière.** Le
+patron voit tout ; chaque chef d'équipe encadre des agents, qui travaillent en
+copropriété, et **ne voit que son équipe**. Le patron est le rôle `Administrateur`, qui
+voit déjà tout dans son entreprise, comme le `Responsable` : ce n'est pas un super
+administrateur de l'instance, et la frontière entre entreprises ne bouge pas.
+
+| Question | Réponse | Conséquence |
+|---|---|---|
+| Le chef a-t-il une fiche agent ? | **Non** : il pilote les agents et fait des devis simples, il ne fait pas de vacations | le rattachement vise son **compte** : `Agent.ChefEquipeId` → `AspNetUsers` |
+| Un agent appartient-il à plusieurs équipes ? | **Non**, une seule | une colonne, pas de table de liaison |
+| Quelle vacation sans agent voit-il ? | celle dont le **titulaire** de la prestation est dans son équipe (étape 20) | sans titulaire, seuls le patron et les responsables la voient |
+| Parmi qui choisit-il un remplaçant ? | **son équipe seulement** | au-delà, le patron ou un responsable pourvoit |
+
+⚠️ Une première réponse, le même jour, donnait au chef toutes les non pourvues et toute
+l'entreprise comme candidats ; le périmètre n'aurait alors été qu'une vue. Elle a été
+corrigée dans la foulée : avec plusieurs chefs, chacun aurait vu les équipes des
+autres. Le périmètre est donc une **frontière**, du même ordre que celle du
+`ClientSyndic` — et cette étape devient un chantier de sécurité, pas un filtre de
+confort.
+
+**Ce que voit un chef d'équipe**
+
+| Donnée | Règle |
+|---|---|
+| Agents | `ChefEquipeId` = son compte |
+| Absences | celles de ses agents |
+| Interventions, planning | celles de ses agents ; plus celles sans agent dont le titulaire de la prestation est l'un de ses agents |
+| Remplacements | ceux des interventions qu'il voit |
+| Candidats | ses agents — par construction, si le moteur lit le contexte filtré |
+| Clients, sites, contrats, prestations | inchangé, à confirmer : données de référence, sans personne dedans |
+
+**Mécanisme envisagé** : un quatrième axe de filtrage, comme `ClientId` pour le syndic —
+`ITenantContext` expose le compte du chef quand le rôle est `ChefEquipe`, et les filtres
+globaux du `DbContext` s'en servent (`CLAUDE.md` §7). Le moteur d'affectation et le
+planning lisent le contexte filtré : ils n'ont rien à savoir du chef.
+
+**Points à éprouver ou trancher avant le lot A**
+
+- ⚠️ **`AspNetUsers` n'est pas filtrée** (`CLAUDE.md` §7). À l'écriture de
+  `ChefEquipeId`, le compte visé doit être vérifié à la main : même entreprise **et**
+  rôle `ChefEquipe`. Le test construira le compte intrus directement en base, comme à
+  l'étape 17.
+- ⚠️ **Le filtre des interventions traverse deux navigations** — l'agent, et le
+  titulaire de la prestation pour les non pourvues. À mesurer : il s'applique à toute
+  lecture d'intervention, moteur d'affectation compris.
+- ⚠️ **La bascule laisse un chef sans équipe devant un planning vide.** Dès que la
+  frontière est active, un chef ne voit rien tant que l'administrateur n'a pas rattaché
+  ses agents. Livrer l'écran de rattachement avant ou avec la frontière, jamais après.
+- **Qui pose le rattachement** — l'administrateur, sur la fiche de l'agent. Le champ vise
+  un compte, et les comptes n'ont pas d'écran de référence : il faudra une liste des
+  chefs d'équipe de l'entreprise. La parité avec les DTOs de l'étape 20 rendra le champ
+  obligatoire dans la description : c'est voulu.
+- **Les écritures du chef** — il modifie une intervention (`Interne`) : sur une
+  vacation hors de son équipe, le filtre rend 404. Vérifier qu'aucune écriture ne lit
+  hors du contexte filtré.
+- **RGPD** — `ChefEquipeId` est un lien hiérarchique entre deux personnes : cartographie
+  de `RGPD.md` §3, et dossier de l'agent. La frontière **réduit** ce que lit un chef,
+  donc ce que le journal d'accès consigne ; le dire dans le registre.
+- **Les devis** — le chef d'équipe en fait. Le module devis, adossé au catalogue de
+  l'étape 21, devra lui être ouvert : à noter au cadrage du devis.
+
+**Lots, provisoires**
+
+- **A** — `ChefEquipeId`, migration additive, validation à l'écriture, liste des chefs
+  d'équipe, tests dont l'intrus construit en base.
+- **B** — la frontière : axe du chef dans `ITenantContext`, filtres globaux, tests
+  d'isolation à deux chefs et deux équipes sur chaque donnée du tableau, sabotages.
+- **C** — le rattachement sur la fiche de l'agent, le planning du chef, `RGPD.md`,
+  `CLAUDE.md` §7. Livré **avec** B, pour la raison écrite plus haut.
+
+**Périmètre initial** — écrit avant la réponse, conservé pour mémoire
+
 - le modèle retenu, sa migration présentée pour relecture
 - le filtre de périmètre appliqué côté requête, comme pour `ClientSyndic`
 - l'écran de planning limité au périmètre du chef connecté
@@ -1877,6 +1948,7 @@ Quand un client demande « pourquoi ce montant ? », on peut répondre.
 | Pagination | `?page&taille` plafonnée, réponse enveloppée | Onze endpoints renvoyaient tout : épuisement de ressources, et forme à figer avant d'écrire les écrans |
 | Base de test | PostgreSQL dédiée `klean_test` | Le fournisseur InMemory ne reproduit ni les filtres globaux, ni les contraintes, ni le refus des `DateTime` non datés — ce qu'on veut justement tester |
 | Cadrage `ChefEquipe` | Par le verbe à l'étape 8, par le périmètre à l'étape 19 | Le modèle dépend d'une information métier — périmètre en personnes ou en bâtiments — qu'un client donne et qu'un raisonnement ne produit pas. Deviner, c'est risquer une migration sur une table peuplée |
+| Périmètre du chef d'équipe | Des **personnes** : `Agent.ChefEquipeId` vers son compte, une équipe par agent. Une **frontière**, comme le syndic | Réponse du 28 octobre 2026. Le patron voit tout, chaque chef ne voit que son équipe : agents, absences, planning, candidats. Une vacation sans agent appartient à l'équipe du titulaire de sa prestation |
 | `Absence.Motif` | Interdit sur `Maladie`, conservé sur les autres types | Le champ est indispensable pour `Autre` et utile pour `Indisponibilite` : le supprimer pousserait à écrire le motif ailleurs. Restreindre l'accès par rôle serait plus faible — ça conserve la donnée de santé en ajoutant une porte devant, alors que la minimisation dit de ne pas la collecter. En AGPL auto-hébergé, le produit doit être sûr par défaut : aucun DPO en aval ne relira le schéma |
 | SMTP | Optionnel ; absent = 503, incomplet = échec au démarrage | `CLAUDE.md` §2 interdit d'imposer un service tiers. Mais une configuration à moitié faite est une erreur, et elle doit se voir au démarrage, pas au premier mot de passe oublié |
 | Limitation de débit | Par adresse **et** par compte | Le verrouillage d'Identity est par compte : il ne ralentit pas d'un essai sur cent comptes, qui est la forme réelle du bourrage d'identifiants |
