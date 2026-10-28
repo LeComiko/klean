@@ -189,8 +189,31 @@ async function messageDErreur(reponse: Response): Promise<string> {
     detail?: unknown
     title?: unknown
     errors?: unknown
+    correlation?: unknown
   }
 
+  const message = messageDuProbleme(details) ?? brut
+
+  // Une erreur serveur demande à l'utilisateur de communiquer l'identifiant de
+  // corrélation à l'exploitant (SPEC.md étape 18) : encore faut-il qu'il le voie.
+  // Sur un 4xx, non — le serveur le joint aussi, mais l'utilisateur corrige sa
+  // saisie, il n'appelle personne.
+  if (
+    reponse.status >= 500
+    && typeof details.correlation === 'string'
+    && details.correlation !== ''
+  ) {
+    return `${message} Identifiant : ${details.correlation}`
+  }
+
+  return message
+}
+
+function messageDuProbleme(details: {
+  detail?: unknown
+  title?: unknown
+  errors?: unknown
+}): string | undefined {
   if (typeof details.detail === 'string' && details.detail !== '') {
     return details.detail
   }
@@ -208,7 +231,7 @@ async function messageDErreur(reponse: Response): Promise<string> {
     return details.title
   }
 
-  return brut
+  return undefined
 }
 
 // ---------------------------------------------------------------------------

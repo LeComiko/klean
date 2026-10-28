@@ -29,8 +29,13 @@ x-journaux: &journaux
 # Configuration lue par Program.cs. Partagée par l'API et par le bundle de
 # migration, qui exécute Program.cs jusqu'à Build() et a donc besoin des mêmes
 # valeurs. Aucun secret n'est écrit ici : ils viennent de .env.
+#
+# `Gss Encryption Mode=Disable` : par défaut Npgsql tente le chiffrement Kerberos,
+# cherche libgssapi_krb5, que l'image .NET n'a pas, et écrit « Error: … cannot
+# open shared object file » au premier démarrage. Sans conséquence, mais un
+# exploitant qui lit « Error » cherche une panne. Aucun Kerberos sur ce réseau.
 x-configuration-api: &configuration-api
-  ConnectionStrings__Klean: "Host=postgres;Port=5432;Database=klean;Username=klean;Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manque dans .env}"
+  ConnectionStrings__Klean: "Host=postgres;Port=5432;Database=klean;Username=klean;Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manque dans .env};Gss Encryption Mode=Disable"
   Jwt__Cle: "${KLEAN_JWT_CLE:?KLEAN_JWT_CLE manque dans .env}"
   Jwt__Emetteur: klean
   Jwt__Audience: klean

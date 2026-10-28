@@ -402,6 +402,52 @@ describe('client — messages d’erreur', () => {
     )
   })
 
+  test('une erreur serveur montre son identifiant de corrélation', async () => {
+    // Le corps du 500 dit « communiquez l'identifiant de corrélation » : sans
+    // l'identifiant à l'écran, la consigne est impossible à suivre.
+    repondre = () =>
+      json(
+        {
+          title: 'Erreur interne',
+          detail: 'Une erreur inattendue a interrompu la requête.',
+          status: 500,
+          correlation: '8636344d0a3c1c0a01ae7cf0af64da27',
+        },
+        500,
+      )
+
+    await assert.rejects(
+      () => api.get('/api/planning'),
+      (echec: unknown) =>
+        echec instanceof ErreurApi
+        && echec.statut === 500
+        && echec.message
+          === 'Une erreur inattendue a interrompu la requête. '
+            + 'Identifiant : 8636344d0a3c1c0a01ae7cf0af64da27',
+    )
+  })
+
+  test('une erreur de saisie ne montre pas l’identifiant de corrélation', async () => {
+    // Le serveur le joint à tout corps d'erreur ; sous « le champ est requis »,
+    // ce ne serait que du bruit. L'utilisateur corrige sa saisie, il n'appelle
+    // pas l'exploitant.
+    repondre = () =>
+      json(
+        {
+          title: 'One or more validation errors occurred.',
+          errors: { Nom: ['Le champ Nom est requis.'] },
+          correlation: '8636344d0a3c1c0a01ae7cf0af64da27',
+        },
+        400,
+      )
+
+    await assert.rejects(
+      () => api.post('/api/clients', {}),
+      (echec: unknown) =>
+        echec instanceof ErreurApi && echec.message === 'Le champ Nom est requis.',
+    )
+  })
+
   test('un corps vide donne au moins le code', async () => {
     repondre = () => vide(500)
 

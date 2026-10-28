@@ -226,6 +226,12 @@ Trois sorties depuis la correction du §9.1, et toutes les trois sont voulues.
    SMTP, KLEAN démarre et seul ce parcours est désactivé — il répond 503 en disant
    quoi configurer.
 3. **Vers l'hébergeur** — la base entière. Sous-traitant à déclarer.
+
+   **Et vers le stockage des sauvegardes**, qui est une copie de la base entière, arrêts
+   maladie compris. Si ce stockage appartient à un tiers, c'est un sous-traitant de plus.
+   Une sauvegarde a sa propre durée de conservation : gardée cinq ans, elle conserve
+   cinq ans ce que les scripts du §5 ont supprimé de la base. Une restauration ressuscite
+   donc des données purgées, et les scripts sont à rejouer après (`DEPLOIEMENT.md` §4).
 4. ~~**Vers Google**, à chaque chargement de page.~~ **Supprimée** le 3 octobre 2026 :
    les polices sont servies par KLEAN, et les deux politiques de sécurité du contenu ne
    déclarent plus aucune origine externe. Voir §9.1 — c'était l'écart le plus sérieux de
@@ -705,8 +711,9 @@ Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail es
 ## 11. Ce qui reste à faire, et par qui
 
 **Par l'exploitant**, hors logiciel : valider les durées du §5, faire relire ce
-fichier, remettre la note du §7, conclure les contrats de l'article 28 avec l'hébergeur
-et le fournisseur SMTP, tenir l'AIPD du §9.6, désigner un point de contact.
+fichier, remettre la note du §7, conclure les contrats de l'article 28 avec l'hébergeur,
+le fournisseur SMTP et le stockage des sauvegardes, fixer la durée de conservation de
+ces sauvegardes, tenir l'AIPD du §9.6, désigner un point de contact.
 
 **Par le logiciel** — état au 28 octobre 2026, dans l'ordre de gravité où les écarts ont
 été relevés :

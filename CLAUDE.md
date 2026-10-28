@@ -1227,6 +1227,25 @@ export DOTNET_ROOT=/opt/homebrew/opt/dotnet/libexec
 ajoute un BOM que `psql` ne comprend pas. Utiliser `-Encoding ASCII`, et
 éviter les emojis dans les commentaires SQL.
 
+**Trois pièges de l'exploitation, mesurés sur l'instance d'essai de l'étape 18.**
+Détail et procédures dans `DEPLOIEMENT.md`.
+
+- **`POSTGRES_PASSWORD` n'est lu qu'à la création du volume.** Le changer dans `.env`
+  seul rend l'instance inaccessible — 502 partout. `ALTER USER` d'abord, `.env` ensuite.
+- **Tourner `Jwt:Cle` ne déconnecte personne.** Le jeton de rafraîchissement est opaque
+  et en base : l'interface en obtient un nouveau jeton d'accès, signé par la nouvelle
+  clé, sans que l'utilisateur voie rien. Après une compromission, il faut **aussi**
+  révoquer les jetons de rafraîchissement — même leçon que le témoin de déconnexion
+  totale plus haut.
+- **Le retour arrière d'une migration se joue avec la nouvelle image**, puis on revient
+  à l'ancienne : le code `Down` n'existe que dans la version qui a introduit la
+  migration.
+
+Et un faux signal : sans `Gss Encryption Mode=Disable` dans la chaîne de connexion,
+Npgsql cherche `libgssapi_krb5`, absente de l'image .NET, et écrit « Error: … cannot
+open shared object file » au premier démarrage. Sans conséquence, mais c'est la première
+ligne qu'un exploitant lirait.
+
 ---
 
 ## 11. Conventions de code

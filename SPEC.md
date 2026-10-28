@@ -1534,7 +1534,38 @@ devenait invalide après.
 L'intégration continue construit désormais les deux images : un `Dockerfile` qui
 cesse de construire se découvre en poussant, pas chez l'exploitant qui met à jour.
 
+**Lot C fait.** `DEPLOIEMENT.md` à la racine : installation de zéro, mise à jour,
+sauvegarde et restauration, retour arrière, secrets, conservation, journaux. **Chaque
+commande y a été jouée** sur une instance d'essai avant d'être écrite, et trois
+affirmations que j'aurais écrites de mémoire se sont révélées fausses ou incomplètes :
+
+- ⚠️ **Changer `POSTGRES_PASSWORD` dans `.env` casse l'instance**, la variable n'étant
+  lue qu'à la création du volume. Mesuré : 502 partout. La procédure passe par
+  `ALTER USER` d'abord.
+- ⚠️ **Tourner la clé JWT ne déconnecte personne.** Mesuré : ancien jeton d'accès 401,
+  rafraîchissement 200, et la session continue. Après une compromission il faut aussi
+  révoquer les jetons de rafraîchissement, par une requête SQL éprouvée elle aussi.
+- ⚠️ **Le retour arrière d'une migration se joue avec la nouvelle image**, l'ancienne
+  ne connaissant pas le code `Down` de la migration à défaire. Éprouvé dans les deux sens.
+
+Deux défauts trouvés en écrivant, et corrigés :
+
+- **L'écran ne montrait pas l'identifiant de corrélation**, alors que le corps du 500
+  du lot A demande de le communiquer. `api/client.ts` l'ajoute désormais au message
+  d'une erreur 5xx, et seulement 5xx : le serveur le joint aussi aux 400 de validation,
+  où il ne serait que du bruit. Deux tests, et la garde des 5xx est éprouvée par
+  sabotage.
+- **Npgsql écrivait « Error: libgssapi_krb5.so.2 » au démarrage**, cherchant Kerberos
+  dans une image qui ne l'a pas. Inoffensif, mais c'est la première ligne qu'un
+  exploitant aurait lue. `Gss Encryption Mode=Disable` dans la chaîne de connexion.
+
 **Validation** : un inconnu déploie en suivant le fichier, sans aide.
+
+⚠️ **Ce qui est éprouvé, et ce qui ne l'est pas.** Le parcours entier a été joué sur
+Docker Desktop, avec `KLEAN_DOMAINE=localhost` et le certificat de l'autorité interne
+de Caddy. **L'émission d'un certificat Let's Encrypt sur un vrai domaine ne l'a pas
+été**, faute de domaine public, ni le déploiement par un inconnu. C'est le geste qui
+reste avant de déclarer l'étape validée.
 
 ---
 
