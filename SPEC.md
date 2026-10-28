@@ -1609,6 +1609,54 @@ plus collecté. Le seul axe qui est une véritable frontière de sécurité rest
 
 ---
 
+# Étape 20 — Génération des interventions depuis les contrats
+
+Numérotée après l'étape 19 sans en dépendre : celle-ci attend un pilote, celle-là
+est la condition pour qu'il y en ait un. Sans elle, chaque vacation de chaque
+semaine se saisit à la main, et le produit est inutilisable en conditions réelles.
+
+**Arbitrages du 28 octobre 2026**
+
+| Question | Décision | Raison |
+|---|---|---|
+| Où vit la récurrence | sur la **prestation** : jours et heure | les tâches d'un même contrat n'ont pas la même fréquence — sols trois fois par semaine, vitrerie le jeudi |
+| Quel agent | le **titulaire** de la prestation, s'il est éligible ce jour-là | explicite et modifiable ; aucun chemin n'affecte un agent inéligible (`CLAUDE.md` §9) |
+| Qui déclenche | **à la demande**, « Générer jusqu'au … », idempotent, douze semaines au plus | une tâche de fond parcourrait toutes les entreprises sans jeton, donc hors des filtres globaux |
+| Jours fériés | **sautés**, sauf contrat marqué `InclutJoursFeries` | un hôpital travaille le 1er mai, une copropriété non |
+| Contrat modifié | la génération **n'ajoute que** ; elle ne modifie ni ne supprime jamais une vacation | une suppression automatique est l'effet silencieux que ce projet a appris à éviter ; le rapport signale les vacations devenues orphelines |
+
+`Contrat.Frequence` reste un libellé libre : c'est l'étiquette des contrats à l'écran.
+
+**Lot A fait.** Migration `RecurrenceDesPrestations`, additive : `Jours`,
+`HeureDebut` et `AgentTitulaireId` sur `Prestations`, `InclutJoursFeries` sur
+`Contrats`. Les prestations existantes reçoivent `Aucun` et restent planifiées à la
+main. Validation à l'écriture : un jour inconnu est cité dans le refus, des jours sans
+heure sont refusés, un titulaire d'une autre entreprise est inconnu. Quatorze tests
+dans `RecurrenceTests`.
+
+⚠️ **`SetNull` sur le titulaire, à côté du `Restrict` de `Intervention.AgentId`.** Le
+second protège un fait — qui a travaillé où ; le premier n'est qu'une préférence pour
+l'avenir, et `Restrict` rendrait insupprimable un agent qui n'a jamais travaillé.
+
+⚠️ **Deux sabotages ont corrigé le lot en cours de route.** `Enum.TryParse` acceptait
+« 3 », « Aucun » et « Lundi, Mardi » : d'où `JoursDeLaSemaine.TryLire`. Et un défaut de
+colonne retiré laissait le test vert, la conversion d'énumération d'EF relisant la
+chaîne vide comme `Aucun` sans rien lever : le test lit désormais la valeur stockée.
+
+⚠️ **Transitoire jusqu'au lot C** : les écrans de référence n'envoient pas encore les
+nouveaux champs, et un `PUT` remplace la ligne entière. Enregistrer une prestation ou un
+contrat depuis l'écran remet donc à zéro sa récurrence et son drapeau de fériés.
+
+**Ouvert** : le dossier d'un agent (`RGPD.md` §6) ne liste pas encore les prestations
+dont il est titulaire. C'est une donnée le concernant, donc due au titre de
+l'article 15.
+
+**Lot B** — `ServiceGeneration`, calcul des jours fériés, `POST /api/planning/generer`,
+rapport sans nom d'agent. **Lot C** — champs `heure` et `jours` des écrans de
+référence, bouton de génération et rapport sur le planning.
+
+---
+
 # Suite — non planifié
 
 Par ordre de valeur, à cadrer le moment venu.
@@ -1621,9 +1669,8 @@ seul invariant dont une erreur est catastrophique.
 
 **Test d'intrusion externe** avant la première mise en production réelle.
 
-**Génération automatique des interventions** depuis les contrats. Sans elle,
-le produit est inutilisable en conditions réelles. À décider : horizon
-glissant, comportement lors d'une modification de contrat, jours fériés.
+~~**Génération automatique des interventions** depuis les contrats.~~ Cadrée et
+en cours : voir l'étape 20.
 
 **Écran agent mobile (PWA).** Une action par écran, cibles 56 px. Voir son
 intervention → consignes → démarrer → checklist → anomalie avec photo →

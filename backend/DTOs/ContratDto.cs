@@ -11,6 +11,7 @@ public class ContratDto
     public DateTime? DateFin { get; set; }
     public string Frequence { get; set; } = string.Empty;
     public bool Actif { get; set; }
+    public bool InclutJoursFeries { get; set; }
 }
 
 public class ContratCreateDto
@@ -29,4 +30,7 @@ public class ContratCreateDto
     public string Frequence { get; set; } = string.Empty;
 
     public bool Actif { get; set; } = true;
+
+    /// <summary>La génération crée-t-elle des vacations les jours fériés ? Non par défaut.</summary>
+    public bool InclutJoursFeries { get; set; }
 }

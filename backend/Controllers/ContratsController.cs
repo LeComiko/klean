@@ -55,7 +55,8 @@ public class ContratsController : ControllerBase
                 DateDebut = c.DateDebut,
                 DateFin = c.DateFin,
                 Frequence = c.Frequence,
-                Actif = c.Actif
+                Actif = c.Actif,
+                InclutJoursFeries = c.InclutJoursFeries
             })
             .ToListAsync();
 
@@ -83,7 +84,8 @@ public class ContratsController : ControllerBase
                 DateDebut = c.DateDebut,
                 DateFin = c.DateFin,
                 Frequence = c.Frequence,
-                Actif = c.Actif
+                Actif = c.Actif,
+                InclutJoursFeries = c.InclutJoursFeries
             })
             .FirstOrDefaultAsync();
 
@@ -110,7 +112,8 @@ public class ContratsController : ControllerBase
             DateDebut = Utc(dto.DateDebut),
             DateFin = Utc(dto.DateFin),
             Frequence = dto.Frequence,
-            Actif = dto.Actif
+            Actif = dto.Actif,
+            InclutJoursFeries = dto.InclutJoursFeries
         };
 
         _db.Contrats.Add(contrat);
@@ -141,6 +144,7 @@ public class ContratsController : ControllerBase
         contrat.DateFin = Utc(dto.DateFin);
         contrat.Frequence = dto.Frequence;
         contrat.Actif = dto.Actif;
+        contrat.InclutJoursFeries = dto.InclutJoursFeries;
 
         await _db.SaveChangesAsync();
         return NoContent();
@@ -187,6 +191,7 @@ public class ContratsController : ControllerBase
         DateDebut = c.DateDebut,
         DateFin = c.DateFin,
         Frequence = c.Frequence,
-        Actif = c.Actif
+        Actif = c.Actif,
+        InclutJoursFeries = c.InclutJoursFeries
     };
 }

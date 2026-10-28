@@ -84,7 +84,7 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
             }
         }
 
-        // Les cinq énumérations sont stockées en texte (CLAUDE.md §5).
+        // Les six énumérations sont stockées en texte (CLAUDE.md §5).
         // Pas de HasMaxLength ici : ce serait varchar(n), on veut text.
         modelBuilder.Entity<Client>().Property(e => e.Type).HasConversion<string>();
         modelBuilder.Entity<Intervention>().Property(e => e.Statut).HasConversion<string>();
@@ -93,6 +93,26 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Stock>().Property(e => e.TypeEmplacement).HasConversion<string>();
         modelBuilder.Entity<AccesJournalise>().Property(e => e.Ressource).HasConversion<string>();
         modelBuilder.Entity<AccesJournalise>().Property(e => e.Nature).HasConversion<string>();
+
+        // Énumération à drapeaux : « Lundi, Mercredi » en base, relu tel quel.
+        //
+        // ⚠️ Le défaut en base est pour les prestations antérieures à la colonne.
+        // Sans lui, la migration leur donne la chaîne vide — une valeur qu'aucun
+        // code n'écrit, et que seule une indulgence d'EF rend lisible : sa
+        // conversion d'énumération ne lève pas sur une valeur illisible, elle
+        // rend `Aucun` en silence. Mesuré : un sabotage du défaut laissait la
+        // lecture verte. « Aucun » écrit en base les laisse planifiées à la main,
+        // comme avant, et lisibles telles quelles par un script SQL.
+        //
+        // La sentinelle -1 n'est jamais portée par une ligne : EF envoie donc
+        // toujours la valeur de l'entité, et le défaut ne sert qu'aux lignes que la
+        // migration trouve en place. Sans elle, « Aucun » étant aussi le défaut de
+        // l'énumération, EF écrit un avertissement à chaque démarrage — dans le
+        // journal de production, où un exploitant chercherait une panne.
+        modelBuilder.Entity<Prestation>().Property(e => e.Jours)
+            .HasConversion<string>()
+            .HasDefaultValueSql("'Aucun'")
+            .HasSentinel((JoursSemaine)(-1));
 
         modelBuilder.Entity<Produit>().Property(e => e.SeuilAlerte).HasPrecision(10, 2);
         modelBuilder.Entity<Stock>().Property(e => e.Quantite).HasPrecision(10, 2);
@@ -206,6 +226,17 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Remplacement>()
             .HasOne(e => e.AgentRemplacant).WithMany()
             .HasForeignKey(e => e.AgentRemplacantId).OnDelete(DeleteBehavior.Restrict);
+
+        // Titulaire d'une prestation : **SetNull**, et ce n'est pas une entorse au
+        // Restrict de `Intervention.AgentId` juste au-dessus. Celui-là protège un
+        // fait — qui a travaillé où —, que rien ne doit effacer. Celui-ci n'est
+        // qu'une préférence pour les vacations à venir : l'agent supprimé, la
+        // préférence n'a plus d'objet, et aucune ligne ne disparaît. Restrict ici
+        // rendrait insupprimable un agent qui n'a jamais travaillé, pour un simple
+        // rattachement.
+        modelBuilder.Entity<Prestation>()
+            .HasOne(e => e.AgentTitulaire).WithMany()
+            .HasForeignKey(e => e.AgentTitulaireId).OnDelete(DeleteBehavior.SetNull);
 
         // ---- Filtres globaux multi-tenant ----
         //

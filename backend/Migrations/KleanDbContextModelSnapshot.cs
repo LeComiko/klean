@@ -215,6 +215,9 @@ namespace Klean.Api.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<bool>("InclutJoursFeries")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("SiteId")
                         .HasColumnType("uuid");
 
@@ -336,6 +339,9 @@ namespace Klean.Api.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("AgentTitulaireId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("ContratId")
                         .HasColumnType("uuid");
 
@@ -345,12 +351,23 @@ namespace Klean.Api.Migrations
                     b.Property<Guid>("EntrepriseId")
                         .HasColumnType("uuid");
 
+                    b.Property<TimeSpan?>("HeureDebut")
+                        .HasColumnType("interval");
+
+                    b.Property<string>("Jours")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValueSql("'Aucun'");
+
                     b.Property<string>("Libelle")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AgentTitulaireId");
 
                     b.HasIndex("ContratId");
 
@@ -813,11 +830,18 @@ namespace Klean.Api.Migrations
 
             modelBuilder.Entity("Klean.Api.Models.Prestation", b =>
                 {
+                    b.HasOne("Klean.Api.Models.Agent", "AgentTitulaire")
+                        .WithMany()
+                        .HasForeignKey("AgentTitulaireId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Klean.Api.Models.Contrat", "Contrat")
                         .WithMany("Prestations")
                         .HasForeignKey("ContratId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("AgentTitulaire");
 
                     b.Navigation("Contrat");
                 });

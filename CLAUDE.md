@@ -162,8 +162,8 @@ Entreprise ─┬─ Client ─── Site ─── Contrat ─── Prestatio
 | Entreprise | RaisonSociale, Siret, DateCreation |
 | Client | Type (enum `TypeClient`), coordonnées, DateCreation |
 | Site | Latitude, Longitude, Consignes, DateCreation |
-| Contrat | DateDebut, DateFin (nullable), Frequence, Actif |
-| Prestation | DureeEstimeeMinutes |
+| Contrat | DateDebut, DateFin (nullable), Frequence (libellé libre), Actif, InclutJoursFeries |
+| Prestation | DureeEstimeeMinutes, Jours (enum à drapeaux), HeureDebut (nullable), AgentTitulaireId (nullable, `SetNull`) |
 | Agent | Latitude, Longitude (nullable), DateEmbauche, Actif |
 | Intervention | DatePrevue, HeurePrevue (TimeSpan), AgentId (nullable), Statut (enum) |
 | Absence | Type (enum), DateDebut, DateFin, Motif |
@@ -178,10 +178,26 @@ Enums :
 - `TypeAbsence` : Maladie, Conge, Indisponibilite, Retard, Autre
 - `StatutRemplacement` : Recherche, Propose, Accepte, Refuse, Annule
 - `TypeEmplacement` : Depot, Vehicule, Site
+- `JoursSemaine`, **à drapeaux** : Aucun, Lundi … Dimanche
 
 Tous les enums sont stockés **en texte** via `HasConversion<string>()`.
 Les DTOs les exposent en `string` et utilisent `Enum.TryParse` avec un
 `BadRequest` explicite si la valeur est invalide.
+
+⚠️ **`JoursSemaine` fait exception sur deux points.** Le DTO l'expose en **tableau**
+de noms — `["Lundi", "Jeudi"]`, ce que cochent des cases —, et il est lu par
+`JoursDeLaSemaine.TryLire`, **jamais** par `Enum.TryParse`, qui accepterait « 3 »,
+« Aucun » et « Lundi, Mardi » en une seule chaîne : trois récurrences que personne
+n'a cochées. Trois sabotages l'ont montré.
+
+⚠️ **La conversion d'énumération d'EF ne lève pas sur une valeur illisible** : une
+chaîne vide en base est relue comme la valeur par défaut, en silence. Un test qui
+vérifie un défaut de colonne par la lecture via l'API reste donc vert sans ce défaut.
+Il faut lire la valeur **stockée**.
+
+`Contrat.Frequence` reste un **libellé libre** : c'est l'étiquette des contrats dans
+les écrans de référence (§11), et ce que lit un humain. Ce que la génération lit est
+`Prestation.Jours`.
 
 ---
 

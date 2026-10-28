@@ -184,7 +184,8 @@ Les douze tables du modèle, plus les tables d'Identity. « DP » = donnée pers
 | `Remplacements` | `AgentRemplacantId`, `Score` | **évaluation** d'une personne | `/api/remplacements` |
 | `Clients` | `Nom`, `Email`, `Telephone`, `Adresse` | contact professionnel — voir §8.3 | `/api/clients` |
 | `Sites` | `Adresse`, coordonnées, **`Consignes`** | lieu, et DP par accident dans les consignes | `/api/sites` |
-| `Contrats`, `Prestations` | aucune — `Prestation.Libelle` est un intitulé de prestation | — | `/api/contrats`, `/api/prestations` |
+| `Contrats` | aucune | — | `/api/contrats` |
+| `Prestations` | `AgentTitulaireId` — `Libelle` est un intitulé de prestation | affectation habituelle d'un salarié à un site, à une heure | `/api/prestations` |
 | `Produits`, `Stocks` | aucune | — | — |
 | `AccesJournalises` | `UtilisateurId`, `CibleId`, `Horodatage` | trace d'activité d'un utilisateur | `/api/journal-acces` |
 | `AspNetUsers` | `Email`, `UserName`, `PhoneNumber`, `Nom`, `Prenom`, `PasswordHash`, verrouillage, `DateAnonymisation` | identité et **secret d'authentification** | `/api/auth/moi` seulement |

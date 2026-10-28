@@ -53,7 +53,10 @@ public class PrestationsController : ControllerBase
                 EntrepriseId = p.EntrepriseId,
                 ContratId = p.ContratId,
                 Libelle = p.Libelle,
-                DureeEstimeeMinutes = p.DureeEstimeeMinutes
+                DureeEstimeeMinutes = p.DureeEstimeeMinutes,
+                Jours = JoursDeLaSemaine.EnListe(p.Jours),
+                HeureDebut = p.HeureDebut,
+                AgentTitulaireId = p.AgentTitulaireId
             })
             .ToListAsync();
 
@@ -79,7 +82,10 @@ public class PrestationsController : ControllerBase
                 EntrepriseId = p.EntrepriseId,
                 ContratId = p.ContratId,
                 Libelle = p.Libelle,
-                DureeEstimeeMinutes = p.DureeEstimeeMinutes
+                DureeEstimeeMinutes = p.DureeEstimeeMinutes,
+                Jours = JoursDeLaSemaine.EnListe(p.Jours),
+                HeureDebut = p.HeureDebut,
+                AgentTitulaireId = p.AgentTitulaireId
             })
             .FirstOrDefaultAsync();
 
@@ -95,11 +101,17 @@ public class PrestationsController : ControllerBase
             return BadRequest($"Contrat {dto.ContratId} inconnu.");
         }
 
+        var (refus, jours) = await ValiderRecurrenceAsync(dto);
+        if (refus is not null) return BadRequest(refus);
+
         var prestation = new Prestation
         {
             ContratId = dto.ContratId,
             Libelle = dto.Libelle,
-            DureeEstimeeMinutes = dto.DureeEstimeeMinutes
+            DureeEstimeeMinutes = dto.DureeEstimeeMinutes,
+            Jours = jours,
+            HeureDebut = dto.HeureDebut,
+            AgentTitulaireId = dto.AgentTitulaireId
         };
 
         _db.Prestations.Add(prestation);
@@ -120,9 +132,15 @@ public class PrestationsController : ControllerBase
             return BadRequest($"Contrat {dto.ContratId} inconnu.");
         }
 
+        var (refus, jours) = await ValiderRecurrenceAsync(dto);
+        if (refus is not null) return BadRequest(refus);
+
         prestation.ContratId = dto.ContratId;
         prestation.Libelle = dto.Libelle;
         prestation.DureeEstimeeMinutes = dto.DureeEstimeeMinutes;
+        prestation.Jours = jours;
+        prestation.HeureDebut = dto.HeureDebut;
+        prestation.AgentTitulaireId = dto.AgentTitulaireId;
 
         await _db.SaveChangesAsync();
         return NoContent();
@@ -156,12 +174,48 @@ public class PrestationsController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Ce que la génération lira, vérifié à l'écriture plutôt qu'à la génération :
+    /// une récurrence incomplète refusée ici dit quoi corriger, sur l'écran où on la
+    /// corrige ; découverte en générant, elle ne serait qu'une ligne de rapport.
+    /// </summary>
+    private async Task<(string? Refus, JoursSemaine Jours)> ValiderRecurrenceAsync(PrestationCreateDto dto)
+    {
+        if (!JoursDeLaSemaine.TryLire(dto.Jours, out var jours, out var inconnu))
+        {
+            return ($"Jour « {inconnu} » invalide. Valeurs acceptées : "
+                    + $"{string.Join(", ", JoursDeLaSemaine.Ordre)}.", jours);
+        }
+
+        if (jours != JoursSemaine.Aucun && dto.HeureDebut is null)
+        {
+            return ("Une prestation qui a des jours de passage doit avoir une heure de début.", jours);
+        }
+
+        if (dto.HeureDebut is { } heure && (heure < TimeSpan.Zero || heure >= TimeSpan.FromDays(1)))
+        {
+            return ("L'heure de début doit être comprise entre 00:00 et 23:59.", jours);
+        }
+
+        // Cherché à travers les filtres globaux : un agent d'une autre entreprise est
+        // inconnu ici, exactement comme un identifiant inventé.
+        if (dto.AgentTitulaireId is { } titulaire && !await _db.Agents.AnyAsync(a => a.Id == titulaire))
+        {
+            return ($"Agent {titulaire} inconnu.", jours);
+        }
+
+        return (null, jours);
+    }
+
     private static PrestationDto Vers(Prestation p) => new()
     {
         Id = p.Id,
         EntrepriseId = p.EntrepriseId,
         ContratId = p.ContratId,
         Libelle = p.Libelle,
-        DureeEstimeeMinutes = p.DureeEstimeeMinutes
+        DureeEstimeeMinutes = p.DureeEstimeeMinutes,
+        Jours = JoursDeLaSemaine.EnListe(p.Jours),
+        HeureDebut = p.HeureDebut,
+        AgentTitulaireId = p.AgentTitulaireId
     };
 }

@@ -33,5 +33,11 @@ public class Contrat
 
     public bool Actif { get; set; } = true;
 
+    /// <summary>
+    /// La génération crée-t-elle des vacations les jours fériés ? Non par défaut ;
+    /// oui pour un site ouvert en continu — hôpital, résidence services.
+    /// </summary>
+    public bool InclutJoursFeries { get; set; }
+
     public ICollection<Prestation> Prestations { get; set; } = new List<Prestation>();
 }
