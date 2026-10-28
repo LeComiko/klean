@@ -1,0 +1,152 @@
+# KLEAN en production : PostgreSQL, l'API, et Caddy devant (SPEC.md étape 18).
+#
+# En AGPL, les clients auto-hébergent : ce fichier est une fonctionnalité du
+# produit, pas un confort d'exploitation. La marche à suivre complète, de zéro,
+# est dans DEPLOIEMENT.md.
+#
+#     cp .env.example .env          # puis renseigner .env
+#     docker compose build
+#     docker compose up -d postgres
+#     docker compose run --rm migrer
+#     docker compose up -d
+#
+# ⚠️ Les migrations ne s'appliquent JAMAIS au démarrage de l'API. Une mise à jour
+# d'image ne change pas le schéma sans geste humain : `docker compose run --rm
+# migrer`, après avoir lu les notes de version et fait une sauvegarde.
+
+name: klean
+
+# Journaux des conteneurs : plafonnés. Le pilote par défaut garde tout, sans
+# limite, et le journal de l'API porte les chemins des requêtes, donc parfois
+# l'identifiant d'un agent (RGPD.md §3). Cinq fichiers de 10 Mo : quelques
+# semaines sur une instance ordinaire, puis rotation.
+x-journaux: &journaux
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+# Configuration lue par Program.cs. Partagée par l'API et par le bundle de
+# migration, qui exécute Program.cs jusqu'à Build() et a donc besoin des mêmes
+# valeurs. Aucun secret n'est écrit ici : ils viennent de .env.
+x-configuration-api: &configuration-api
+  ConnectionStrings__Klean: "Host=postgres;Port=5432;Database=klean;Username=klean;Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manque dans .env}"
+  Jwt__Cle: "${KLEAN_JWT_CLE:?KLEAN_JWT_CLE manque dans .env}"
+  Jwt__Emetteur: klean
+  Jwt__Audience: klean
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: klean
+      POSTGRES_DB: klean
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manque dans .env}"
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    # Aucun port publié : la base n'est joignable que depuis le réseau interne.
+    # Les sauvegardes passent par `docker compose exec postgres pg_dump`.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U klean -d klean"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [klean]
+    logging: *journaux
+
+  api:
+    build: ./backend
+    image: klean-api:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *configuration-api
+
+      # Lues seulement si la base n'a encore aucun compte. Après la première
+      # connexion, les retirer de .env : voir DEPLOIEMENT.md.
+      Amorcage__EmailAdmin: "${KLEAN_ADMIN_EMAIL:-}"
+      Amorcage__MotDePasseAdmin: "${KLEAN_ADMIN_MOT_DE_PASSE:-}"
+      Amorcage__RaisonSocialeEntreprise: "${KLEAN_RAISON_SOCIALE:-}"
+      Amorcage__SiretEntreprise: "${KLEAN_SIRET:-00000000000000}"
+
+      # Base des liens envoyés par courriel.
+      Frontend__Url: "https://${KLEAN_DOMAINE:?KLEAN_DOMAINE manque dans .env}"
+
+      # Optionnel. Hôte vide : la réinitialisation de mot de passe répond 503.
+      Courriel__Hote: "${KLEAN_SMTP_HOTE:-}"
+      Courriel__Port: "${KLEAN_SMTP_PORT:-587}"
+      Courriel__Expediteur: "${KLEAN_SMTP_EXPEDITEUR:-}"
+      Courriel__Utilisateur: "${KLEAN_SMTP_UTILISATEUR:-}"
+      Courriel__MotDePasse: "${KLEAN_SMTP_MOT_DE_PASSE:-}"
+
+      # ⚠️ L'adresse de Caddy, et rien d'autre. Sans elle l'API voit Caddy pour
+      # tout le monde : plafond de débit commun à toute l'instance, et redirection
+      # HTTPS en boucle. Plus large, elle laisserait un autre conteneur choisir
+      # l'adresse sous laquelle il est compté (CLAUDE.md §6 bis).
+      Proxy__Reseaux__0: 172.28.0.10/32
+    volumes:
+      # Clés qui signent les jetons de réinitialisation de mot de passe. Sans
+      # volume, perdues à chaque recréation du conteneur.
+      - cles-api:/home/app/.aspnet/DataProtection-Keys
+    networks: [klean]
+    logging: *journaux
+
+  # Bundle de migration : même image que l'API, autre point d'entrée. Profil
+  # `outils` : `docker compose up` ne le lance pas, seul `docker compose run` le
+  # fait. La chaîne de connexion passe par l'environnement et non par
+  # --connection, qui l'exposerait dans la liste des processus.
+  #
+  #     docker compose run --rm migrer                      # tout appliquer
+  #     docker compose run --rm migrer NomDeLaMigration     # revenir à celle-ci
+  migrer:
+    image: klean-api:local
+    profiles: [outils]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["./efbundle"]
+    environment:
+      <<: *configuration-api
+      # Une commande lancée à la main se lit à l'écran : du texte, pas du JSON.
+      Logging__Console__FormatterName: simple
+    networks: [klean]
+    logging: *journaux
+
+  caddy:
+    build: ./frontend
+    image: klean-caddy:local
+    restart: unless-stopped
+    depends_on: [api]
+    environment:
+      KLEAN_DOMAINE: "${KLEAN_DOMAINE:?KLEAN_DOMAINE manque dans .env}"
+    ports:
+      - "${KLEAN_PORT_HTTP:-80}:80"
+      - "${KLEAN_PORT_HTTPS:-443}:443"
+      - "${KLEAN_PORT_HTTPS:-443}:443/udp"
+    volumes:
+      # Certificats : à conserver. Les perdre force une nouvelle émission à chaque
+      # redémarrage, et Let's Encrypt plafonne les émissions par domaine.
+      - caddy-donnees:/data
+      - caddy-config:/config
+    networks:
+      klean:
+        ipv4_address: 172.28.0.10
+    logging: *journaux
+
+networks:
+  klean:
+    ipam:
+      config:
+        # Fixé pour que l'adresse de Caddy le soit, et avec elle la seule source
+        # que l'API croit. À changer — ici ET dans Proxy__Reseaux__0 et
+        # ipv4_address — si ce réseau chevauche un réseau existant de la machine.
+        - subnet: 172.28.0.0/24
+
+volumes:
+  postgres:
+  cles-api:
+  caddy-donnees:
+  caddy-config:

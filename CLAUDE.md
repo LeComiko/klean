@@ -89,8 +89,11 @@ installation.
 
 ```
 KLEAN/
-├── CLAUDE.md, SPEC.md, README.md, RGPD.md, LICENSE
+├── CLAUDE.md, SPEC.md, README.md, RGPD.md, DEPLOIEMENT.md, LICENSE
+├── docker-compose.yml   postgres, api, migrer (profil outils), caddy
+├── .env.example         le seul endroit où un exploitant écrit un secret
 ├── backend/
+│   ├── Dockerfile       l'API ET son bundle de migration, une seule image
 │   ├── Models/          11 entités métier + AccesJournalise + Utilisateur
 │   │                    + RolesKlean
 │   ├── Data/            KleanDbContext (filtres multi-tenant)
@@ -100,7 +103,8 @@ KLEAN/
 │   │                    PlanningService, JwtService, ServiceSession,
 │   │                    AmorcageService, TenantContext, LimiteurDebit,
 │   │                    ServiceCourrielSmtp, DescripteurErreursFrancais
-│   ├── Middleware/      VerificationCsrf, EnTetesSecurite, LimiteCorpsRequete
+│   ├── Middleware/      VerificationCsrf, EnTetesSecurite, LimiteCorpsRequete,
+│   │                    IdentifiantCorrelation
 │   ├── Filtres/         JournaliserAcces — filtre d'action MVC, pas un middleware
 │   ├── Migrations/
 │   └── Scripts/         jeu de démonstration, contrat-ecrans-reference.py,
@@ -108,10 +112,13 @@ KLEAN/
 │                        purge-jetons-rafraichissement, conservation-donnees-metier,
 │                        degradation-absences-maladie (RGPD.md §5)
 └── frontend/
+    ├── Dockerfile       construit dist/, puis l'image Caddy qui le sert
+    ├── Caddyfile        HTTPS, document, relais /api — sans journal d'accès
     ├── csp.ts           les deux politiques de sécurité du contenu
     ├── public/polices/  Figtree et IBM Plex Mono, servies en propre (RGPD.md §9.1)
     ├── vite.config.ts   serveur https, proxy /api, en-têtes
-    ├── scripts/         verifier-interface.mjs, tests.mjs
+    ├── scripts/         verifier-interface.mjs, tests.mjs, et entetes-caddy.mjs,
+    │                    qui lit csp.ts pour Caddy au lieu de la recopier
     └── src/
         ├── api/         wrappers fetch typés, client.ts, ressources.ts, + leurs séries
         ├── auth/        AuthContext, RouteProtegee, motDePasse.ts
@@ -1429,7 +1436,21 @@ cd frontend && npm run preview        # https://localhost:4173, CSP de productio
 cd backend
 dotnet ef migrations add NomDeLaMigration
 dotnet ef database update
+
+# Production, depuis la racine — marche complète dans DEPLOIEMENT.md
+docker compose build
+docker compose run --rm migrer        # jamais au démarrage de l'API
+docker compose up -d
 ```
+
+⚠️ **Le bundle de migration exécute `Program.cs` jusqu'à `Build()`**, à la
+construction comme à l'exécution : il lui faut une chaîne de connexion et une clé
+JWT, faute de quoi il échoue sur « Chaîne de connexion absente » avant de regarder
+une seule migration. Le `Dockerfile` lui passe des valeurs factices à la
+construction ; `docker-compose.yml` lui passe les vraies à l'exécution, par
+l'environnement et non par `--connection`, qui exposerait le mot de passe dans la
+liste des processus. Et `dotnet ef … -c` veut dire `--context`, pas
+`--configuration`.
 
 Le proxy Vite redirige `/api` vers `http://localhost:5137`. Le frontend
 n'appelle donc jamais l'URL absolue du backend.

@@ -84,3 +84,20 @@ jobs:
       - name: Construire
         run: npm run build
         working-directory: frontend
+
+  # Les deux images de docker-compose.yml. Sans ce travail, un Dockerfile cesse de
+  # construire le jour où le projet change — une version du SDK, un fichier
+  # déplacé — et l'exploitant le découvre en mettant à jour, pas nous en
+  # poussant.
+  images:
+    name: Images — construction
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: API et bundle de migration
+        run: docker build -t klean-api:ci ./backend
+
+      - name: Caddy, document et en-têtes
+        run: docker build -t klean-caddy:ci ./frontend

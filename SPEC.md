@@ -1503,6 +1503,37 @@ Six tests dans `ExploitationTests`, et cinq sabotages tous rougis : sans
 `UseForwardedHeaders`, confiance à toute source, en-têtes de sécurité à l'aller,
 corrélation à l'aller, message d'erreur par défaut.
 
+**Lot B fait.** `docker-compose.yml` à la racine : `postgres`, `api`, `caddy`, et
+`migrer` sous le profil `outils`. `.env.example` est le seul fichier où un exploitant
+écrit un secret. Éprouvé de bout en bout sur Docker Desktop : construction, migration
+par le bundle, connexion à travers Caddy, cookies `Secure` renvoyés.
+
+Quatre choix, et chacun ferme quelque chose :
+
+- **Une seule image pour l'API et son bundle de migration.** Deux images pourraient
+  diverger d'une version de schéma ; le service `migrer` reprend la même avec un autre
+  point d'entrée.
+- **La CSP du document est lue, jamais recopiée** : `frontend/scripts/entetes-caddy.mjs`
+  charge `csp.ts` à la construction de l'image et écrit le bloc `header` de Caddy.
+- **Caddy n'a pas de journal d'accès**, et le `Caddyfile` dit pourquoi : il
+  consignerait l'adresse IP de chaque visiteur. Les journaux de conteneur sont
+  plafonnés à cinq fichiers de 10 Mo, le pilote par défaut gardant tout sans limite.
+- **L'API ne croit que Caddy** : adresse fixe `172.28.0.10` sur un sous-réseau fixé,
+  et `Proxy__Reseaux__0` réduit à ce `/32`. Mesuré dans le conteneur : la session
+  consigne l'adresse du client, pas celle de Caddy, et un `X-Forwarded-For: 6.6.6.6`
+  forgé par le client est écrasé.
+
+⚠️ **Deux pièges rencontrés, consignés en `CLAUDE.md` §13** : construire le bundle
+exécute `Program.cs`, donc exige une chaîne de connexion et une clé JWT même sans
+base ; et `dotnet ef -c` veut dire `--context`.
+
+⚠️ Les clés de Data Protection, qui signent les jetons de réinitialisation de mot de
+passe, vivent dans un volume : sans lui, un lien envoyé une minute avant une mise à jour
+devenait invalide après.
+
+L'intégration continue construit désormais les deux images : un `Dockerfile` qui
+cesse de construire se découvre en poussant, pas chez l'exploitant qui met à jour.
+
 **Validation** : un inconnu déploie en suivant le fichier, sans aide.
 
 ---

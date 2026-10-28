@@ -307,9 +307,16 @@ Le détail des conventions est dans `CLAUDE.md`, la feuille de route dans
 
 ## Déploiement
 
-Trois réglages à connaître avant d'exposer une instance. Tous ont un défaut sûr,
-et aucun ne contient de secret : ils vivent dans la configuration ordinaire, pas
-dans les *user secrets*. Le modèle complet est `backend/appsettings.example.json`.
+**La marche à suivre, de zéro jusqu'à la première connexion, est dans
+[`DEPLOIEMENT.md`](DEPLOIEMENT.md)** : `docker-compose.yml` démarre PostgreSQL,
+l'API et Caddy, qui obtient le certificat HTTPS et sert l'interface. Elle couvre
+aussi les secrets, la sauvegarde, la restauration et le retour arrière d'une
+migration.
+
+Ce qui suit décrit les réglages de l'API elle-même, utiles à qui ne passe pas par
+`docker-compose.yml`. Tous ont un défaut sûr, et aucun ne contient de secret : ils
+vivent dans la configuration ordinaire, pas dans les *user secrets*. Le modèle
+complet est `backend/appsettings.example.json`.
 
 **Le plus simple est de servir le frontend et l'API sous la même origine.** La
 construction de `frontend/dist/` est un ensemble de fichiers statiques ; les
@@ -344,7 +351,9 @@ deux sens :
   appliquée par `npm run preview`, et c'est cette chaîne-là que le serveur web de
   production doit renvoyer en en-tête `Content-Security-Policy`. **La lire, ne
   jamais la recopier** : recopiée dans un `nginx.conf`, elle divergera du jour où
-  `index.html` changera.
+  `index.html` changera. L'image Caddy le fait déjà : `scripts/entetes-caddy.mjs`
+  lit `csp.ts` à la construction et en tire le bloc d'en-têtes. Un autre serveur
+  web peut s'en servir de la même façon.
 
 ⚠️ Ne pas recopier la politique de l'API sur le document : la feuille de style, le
 script et les polices seraient bloqués, et le défaut ne se verrait pas au

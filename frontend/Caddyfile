@@ -1,0 +1,50 @@
+# Caddy devant KLEAN (SPEC.md étape 18) : il termine HTTPS, sert le document, et
+# relaie /api vers l'API en clair sur le réseau interne. Frontend et API partagent
+# donc une seule origine : ni CORS, ni seconde politique de connexion à écrire.
+#
+# ⚠️ AUCUN JOURNAL D'ACCÈS, et il ne faut pas en ajouter sans y penser. Caddy n'en
+# écrit pas sans directive `log` ; un journal d'accès consignerait l'adresse IP de
+# chaque visiteur, donnée personnelle que RGPD.md §3 ne prévoit pas et dont la
+# conservation demanderait sa propre justification. L'API journalise déjà chaque
+# requête, sans adresse.
+#
+# Le certificat est obtenu et renouvelé seul auprès de Let's Encrypt, ce qui exige
+# que KLEAN_DOMAINE pointe sur cette machine et que les ports 80 et 443 lui
+# parviennent. Pour un réseau interne sans accès sortant, voir README.md,
+# section Déploiement.
+
+{$KLEAN_DOMAINE} {
+	# L'API. Caddy pose lui-même X-Forwarded-For et X-Forwarded-Proto, et ignore
+	# ceux qu'envoie le client : l'API ne croit que lui (Proxy:Reseaux).
+	#
+	# Pas de compression ici, délibérément : comprimer une réponse qui mêle des
+	# données sensibles et une saisie de l'utilisateur ouvre les attaques de la
+	# famille BREACH, et des réponses JSON de quelques kilo-octets n'y gagnent rien.
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+
+	# Le document.
+	handle {
+		root * /srv
+		encode zstd gzip
+
+		# CSP et compagnie, lues dans frontend/csp.ts à la construction de l'image.
+		import /etc/caddy/entetes-document.caddy
+
+		# Même valeur que l'API : un an, et sans includeSubDomains — une instance de
+		# KLEAN ne possède pas les autres sous-domaines de son hôte, et une politique
+		# HSTS ne se retire pas avant son échéance (CLAUDE.md §6 bis).
+		header Strict-Transport-Security "max-age=31536000"
+
+		# Les fichiers de Vite portent une empreinte dans leur nom : un contenu
+		# nouveau a un nom nouveau, ils peuvent donc être gardés un an.
+		@empreintes path /assets/*
+		header @empreintes Cache-Control "public, max-age=31536000, immutable"
+
+		# Application à page unique : toute route inconnue rend index.html, et c'est
+		# le routeur de React qui décide.
+		try_files {path} /index.html
+		file_server
+	}
+}
