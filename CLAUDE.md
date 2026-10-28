@@ -619,12 +619,6 @@ les dates et toute la chaîne — ce dont l'historique a besoin est **qu'il y av
 trou**, pas pourquoi. Vérifié en base, dans une transaction annulée : l'`UPDATE`
 préserve le remplacement que le `DELETE` équivalent détruit.
 
-⚠️ **Dix attributs pour neuf lectures** : la dixième action est `Anonymiser`, qui n'est
-pas une lecture mais une **écriture irréversible** — nature `Anonymisation`. Et
-`Dossier` porte la nature `Export` plutôt que `Lecture`, parce que sortir le dossier
-complet d'un salarié n'est pas le même geste que consulter sa fiche : les confondre
-ferait disparaître l'export dans le bruit des consultations.
-
 ### Pseudonymisation d'un agent
 
 `POST /api/agents/{id}/anonymiser`, administrateur seul, irréversible, journalisée en
