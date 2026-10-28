@@ -373,6 +373,32 @@ annonce HSTS pour un an. `IncludeSubDomains` est délibérément **absent** : un
 politique HSTS ne se retire pas avant son échéance, et une instance de KLEAN ne
 possède pas les autres sous-domaines de son hôte.
 
+### Proxy inverse
+
+```json
+"Proxy": { "Reseaux": ["172.28.0.0/16"] }
+```
+
+**Obligatoire dès que l'API est derrière un proxy**, et il ne doit contenir que le
+réseau de ce proxy. Sans lui, l'API voit l'adresse du proxy pour tous les clients :
+la limitation de débit devient un plafond commun à toute l'instance, et la
+redirection HTTPS boucle. Ne jamais y mettre `0.0.0.0/0`, ni utiliser
+`ASPNETCORE_FORWARDEDHEADERS_ENABLED` : chaque client pourrait alors choisir l'adresse
+sous laquelle il est compté. Vide par défaut, ce qui est juste pour une API exposée
+directement.
+
+### Journaux et erreurs
+
+Hors développement, l'API écrit une ligne JSON par événement sur la sortie standard :
+une par requête, et chaque exception non rattrapée avec sa pile. Toute réponse porte
+un en-tête `X-Correlation-Id`, qui est le `TraceId` de ces lignes. Une erreur serveur
+rend un corps `application/problem+json` en français, sans rien de l'exception, avec
+ce même identifiant dans le champ `correlation` : c'est ce qu'un utilisateur vous
+transmettra, et ce qu'il faut chercher dans le journal.
+
+Le journal ne contient ni adresse IP, ni identité de l'appelant, ni corps de requête
+(`RGPD.md` §3).
+
 ## Contribuer
 
 Le dépôt suit les étapes de `SPEC.md`, dans l'ordre, chacune close par un

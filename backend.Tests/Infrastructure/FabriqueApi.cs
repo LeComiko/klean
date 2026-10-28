@@ -61,7 +61,14 @@ public class FabriqueApi : WebApplicationFactory<Program>
         // UseHttpsRedirection laisse passer en clair avec un simple
         // avertissement, et le test de redirection passerait au vert à l'envers.
         Poser("Http__PortHttps", "443");
+
+        // Proxy inverse (étape 18). Un réseau déclaré, pour prouver que ce qui en
+        // vient est cru et que ce qui n'en vient pas ne l'est pas.
+        Poser("Proxy__Reseaux__0", ReseauProxy);
     }
+
+    /// <summary>Seul réseau dont la série croit les en-têtes X-Forwarded-*.</summary>
+    public const string ReseauProxy = "10.0.0.0/8";
 
     /// <summary>Seule origine que la politique CORS de la série autorise.</summary>
     public const string OrigineDeclaree = "https://klean-declare.test";

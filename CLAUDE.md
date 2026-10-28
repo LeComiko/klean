@@ -290,6 +290,9 @@ fonctionnalité** : chaque ligne déplacée change ce qui est protégé sans rie
 casser de visible.
 
 ```
+UseForwardedHeaders             si Proxy:Reseaux est renseigné, et EN PREMIER
+IdentifiantCorrelation          avant le gestionnaire : l'identifiant part sur le 500
+UseExceptionHandler             500 en problem+json, rien de l'exception
 UseHsts + UseHttpsRedirection   hors développement seulement
 UseRequestTimeouts
 LimiteCorpsRequete              avant toute lecture de corps
@@ -299,6 +302,22 @@ EnTetesSecurite                 APRÈS Swagger, délibérément
 VerificationCsrf
 UseAuthentication / UseAuthorization
 ```
+
+**Derrière un proxy inverse, `Proxy:Reseaux` est obligatoire, et il ne doit contenir
+que le proxy.** Sans lui, l'API voit l'adresse du proxy pour tout le monde : la
+limitation de débit par adresse devient un plafond **global** — un attaquant qui
+épuise celui de la connexion bloque toute l'instance —, `AdresseIp` des sessions ne
+consigne plus que le proxy, et `UseHttpsRedirection` boucle, le proxy ayant terminé
+TLS. L'excès inverse est pire : croire `X-Forwarded-For` de toute source laisse chaque
+client choisir son adresse, donc sortir du plafond à volonté. D'où une liste de
+réseaux, vide par défaut, qui **remplace** la confiance par défaut en la boucle locale,
+et un seul saut retenu. Jamais `ASPNETCORE_FORWARDEDHEADERS_ENABLED`, qui croit tout
+le monde. Éprouvé par `ExploitationTests`, dans les deux sens.
+
+⚠️ **Tout en-tête de réponse se pose dans `OnStarting`, pas à l'aller.**
+`UseExceptionHandler` vide les en-têtes avant d'écrire son 500 : `EnTetesSecurite`
+et `IdentifiantCorrelation` posés à l'aller manqueraient précisément sur la réponse
+d'erreur. Deux sabotages l'ont montré.
 
 **`EnTetesSecurite` est enregistré après `UseSwaggerUI`.** L'interface de Swagger
 a besoin de script et de style en ligne, que la politique interdit ; elle
@@ -1219,6 +1238,16 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
 - Toutes les méthodes `async`, `AsNoTracking()` sur les lectures pures.
 - Services : classes concrètes, **pas d'interface**, pas de repository, pas
   d'AutoMapper, pas de logging ajouté.
+
+  **La journalisation est une affaire de configuration, pas de code.** Depuis
+  l'étape 18, `appsettings.json` écrit une ligne JSON par événement, avec le
+  `TraceId` de la requête dans les portées — le même que l'en-tête
+  `X-Correlation-Id` et que le champ `correlation` d'un corps d'erreur. Une ligne
+  par requête, et chaque exception non rattrapée avec sa pile : c'est ce qu'il faut
+  pour diagnostiquer à distance, et rien de cela ne demande un `ILogger` dans un
+  service. Un appel de journal ajouté dans le métier ne doit **jamais** écrire une
+  donnée personnelle — un nom, un courriel, un motif —, sinon le journal devient la
+  base parallèle que le §7 bis interdit au journal d'accès.
 
   Deux exceptions, et deux seulement : `ITenantContext` et `IServiceCourriel`.
   Même justification dans les deux cas — la substitution est **nécessaire**, pas

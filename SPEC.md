@@ -1473,6 +1473,36 @@ requise. **Ce fichier ne remplace pas une relecture juridique.**
   au corps vide hors développement, ce qui ne fuite rien mais ne laisse rien à
   corréler non plus. C'est le pendant du point de journalisation ci-dessus.
 
+**Arbitrages du 28 octobre 2026.** Caddy sert le document et termine HTTPS, l'API
+reste du JSON pur derrière lui ; journalisation intégrée à .NET, sans dépendance ;
+migrations par bundle EF lancé à la main, jamais au démarrage de l'API. Trois lots :
+A — l'API en production ; B — conteneurs ; C — documentation d'exploitation.
+
+**Lot A fait.** Journal JSON, identifiant de corrélation, `UseExceptionHandler`, et
+un défaut que le périmètre ne nommait pas.
+
+⚠️ **Le défaut d'abord, parce qu'il aurait cassé le premier déploiement.** Derrière un
+proxy inverse, l'API voyait l'adresse du proxy pour tout le monde. La limitation de
+débit par adresse devenait donc un plafond **global** : vingt échecs de connexion de
+n'importe qui bloquaient la connexion de toute l'instance. `JetonsRafraichissement.AdresseIp`
+ne consignait plus que le proxy — une donnée personnelle sans plus aucun usage. Et
+`UseHttpsRedirection` bouclait, le proxy ayant terminé TLS. Corrigé par
+`UseForwardedHeaders`, borné aux réseaux de `Proxy:Reseaux` : croire `X-Forwarded-For`
+de toute source aurait laissé chaque client choisir son adresse.
+
+**La corrélation n'invente pas d'identifiant.** C'est le `TraceId` qu'ASP.NET ouvre pour
+chaque requête et que le formateur JSON écrit déjà dans les portées : renvoyé en
+`X-Correlation-Id` sur toute réponse, et dans le champ `correlation` d'un corps
+d'erreur — ce qu'un utilisateur recopie, l'exploitant le cherche dans le journal.
+
+⚠️ **Les en-têtes de sécurité manquaient sur le 500.** `UseExceptionHandler` vide les
+en-têtes avant d'écrire : `EnTetesSecurite`, qui posait les siens à l'aller, les
+perdait précisément sur la réponse d'erreur. Ils passent désormais par `OnStarting`.
+
+Six tests dans `ExploitationTests`, et cinq sabotages tous rougis : sans
+`UseForwardedHeaders`, confiance à toute source, en-têtes de sécurité à l'aller,
+corrélation à l'aller, message d'erreur par défaut.
+
 **Validation** : un inconnu déploie en suivant le fichier, sans aide.
 
 ---

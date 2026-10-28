@@ -204,6 +204,14 @@ pointage, aucune position historisée, aucun accusé de lecture de consigne, auc
 cookie de mesure d'audience, aucune télémétrie, aucun appel sortant hors SMTP — à une
 exception près, §9.1.
 
+**Le journal technique de l'API**, depuis l'étape 18 : une ligne par requête, sur la
+sortie standard. Elle porte la méthode, le chemin, le statut, la durée et un
+identifiant de corrélation — **ni adresse IP, ni identité de l'appelant, ni corps de
+requête**. Le chemin contient parfois l'identifiant technique d'un agent
+(`/api/agents/{id}`) : une donnée pseudonyme, donc personnelle au sens strict, mais
+qui ne dit pas qui a lu — c'est le rôle du journal d'accès de T5. Sa conservation est
+celle que l'exploitant donne à ses journaux de conteneur ; voir `docker-compose.yml`.
+
 ---
 
 ## 4. Où les données sortent de l'instance

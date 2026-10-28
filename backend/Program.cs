@@ -4,6 +4,7 @@ using Klean.Api.Middleware;
 using Klean.Api.Models;
 using Klean.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
@@ -60,6 +61,30 @@ var delaiRequete = TimeSpan.FromSeconds(
 // avertissement dans le journal, rien de plus.
 var portHttps = builder.Configuration.GetValue<int?>("Http:PortHttps") ?? 443;
 
+// Réseaux des proxys inverses dont on croit les en-têtes X-Forwarded-For et
+// X-Forwarded-Proto (SPEC.md étape 18).
+//
+// ⚠️ Derrière un proxy, sans ce réglage, l'adresse vue par l'API est celle du
+// proxy pour *tout le monde*. Trois choses cassent alors sans rien signaler : la
+// limitation de débit par adresse devient un plafond global — un attaquant qui
+// l'épuise sur la connexion bloque tous les utilisateurs de l'instance —,
+// `JetonsRafraichissement.AdresseIp` ne consigne plus que le proxy, et
+// UseHttpsRedirection, voyant de l'HTTP là où le proxy a terminé TLS, redirige en
+// boucle.
+//
+// ⚠️ Et l'inverse est pire : croire X-Forwarded-For de n'importe qui laisse chaque
+// client choisir son adresse, donc sortir de la limitation de débit à volonté.
+// D'où une liste de réseaux, vide par défaut — une API exposée directement n'a
+// rien à croire —, et jamais ASPNETCORE_FORWARDEDHEADERS_ENABLED, qui fait
+// confiance à toute source.
+var reseauxProxy = (builder.Configuration.GetSection("Proxy:Reseaux").Get<string[]>() ?? [])
+    .Select(reseau => System.Net.IPNetwork.TryParse(reseau, out var lu)
+        ? lu
+        : throw new InvalidOperationException(
+            $"Proxy:Reseaux : « {reseau} » n'est pas un réseau en notation CIDR, "
+            + "par exemple 172.28.0.0/16."))
+    .ToArray();
+
 builder.Services.AddCors(options => options.AddPolicy(PolitiqueCors, politique =>
 {
     if (originesAutorisees.Length == 0) return;
@@ -95,6 +120,45 @@ builder.Services.AddHttpsRedirection(options => options.HttpsPort = portHttps);
 builder.Services.AddHsts(options => options.MaxAge = TimeSpan.FromDays(365));
 
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = tailleMaxCorps);
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    // Les défauts font confiance à la boucle locale. Une liste déclarée remplace
+    // les défauts, elle ne s'y ajoute pas : ce qui est cru est ce qui est écrit.
+    options.KnownProxies.Clear();
+    options.KnownIPNetworks.Clear();
+    foreach (var reseau in reseauxProxy) options.KnownIPNetworks.Add(reseau);
+
+    // Un seul saut : la dernière adresse de X-Forwarded-For, celle que le proxy a
+    // lui-même ajoutée. Les précédentes viennent du client, qui les écrit comme il
+    // veut.
+    options.ForwardLimit = 1;
+});
+
+// Corps des erreurs : le format standard d'ASP.NET, en français, et relié au
+// journal par l'identifiant de corrélation plutôt que par le « traceId » par
+// défaut, qui porte l'identifiant de l'activité sous une autre forme.
+builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = contexte =>
+{
+    var probleme = contexte.ProblemDetails;
+
+    probleme.Extensions.Remove("traceId");
+    probleme.Extensions["correlation"] = IdentifiantCorrelation.Valeur(contexte.HttpContext);
+
+    // ⚠️ Rien de l'exception ne sort : ni son type, ni son message, ni sa pile.
+    // Un message d'exception parle de tables, de colonnes et de chemins ; il est
+    // dans le journal, sous le même identifiant, et c'est sa seule place.
+    if (contexte.Exception is not null)
+    {
+        probleme.Title = "Erreur interne";
+        probleme.Detail =
+            "Une erreur inattendue a interrompu la requête. Elle est consignée dans le "
+            + "journal du serveur : communiquez l'identifiant de corrélation à "
+            + "l'exploitant de cette instance.";
+    }
+});
 
 // Le tenant est lu dans la revendication du jeton, via le contexte HTTP.
 builder.Services.AddHttpContextAccessor();
@@ -298,6 +362,22 @@ using (var portee = app.Services.CreateScope())
 // Pipeline. L'ordre est la fonctionnalité : chaque déplacement de ligne
 // ci-dessous change ce qui est protégé, sans rien casser de visible.
 // ---------------------------------------------------------------------------
+
+// En tout premier : tout ce qui suit lit l'adresse ou le schéma de la requête —
+// HSTS et la redirection le schéma, la limitation de débit et les sessions
+// l'adresse. Placé plus bas, il laisserait ceux d'avant raisonner sur le proxy.
+if (reseauxProxy.Length > 0)
+{
+    app.UseForwardedHeaders();
+}
+
+// Avant le gestionnaire d'exceptions : l'identifiant doit partir sur le 500 aussi.
+app.UseMiddleware<IdentifiantCorrelation>();
+
+// Toute exception non rattrapée devient un 500 en problem+json, en français, sans
+// rien de l'exception, et consignée au journal avec sa pile. Sans lui, un 500 hors
+// développement part au corps vide : il ne fuite rien, mais ne se relie à rien.
+app.UseExceptionHandler();
 
 // HSTS et redirection : hors développement seulement. En local le backend
 // n'écoute qu'en clair derrière le proxy Vite, et rediriger romprait ce chemin
