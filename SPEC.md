@@ -1697,6 +1697,37 @@ Reste au lot C : la colonne « Chef d'équipe » dans la liste, et le **dossier 
 qui porte aujourd'hui le rattachement en identifiant brut, ce que l'article 15 ne tient pas
 pour intelligible.
 
+**Lots B et C — faits ensemble le 28 octobre 2026**
+
+- **La frontière.** `ITenantContext.ChefEquipeId`, lu sur le rôle, et quatre filtres
+  globaux — agents, absences, interventions, remplacements — exactement selon le tableau
+  « Ce que voit un chef d'équipe ». Clients, sites, contrats et prestations restent
+  inchangés, comme le tableau le proposait : aucune personne n'y est nommée.
+- **Une vacation affectée appartient à l'équipe de son agent**, même si le titulaire de
+  sa prestation est d'une autre équipe. Le titulaire ne départage que les vacations sans
+  agent. Écrit ici parce que la réponse du 28 octobre ne tranchait pas ce cas croisé.
+- **Le cycle de remplacement est ouvert au chef** — ouvrir, proposer, accepter, refuser —,
+  arbitré le 28 octobre : c'est ce que dit « il choisit parmi son équipe ». Créer,
+  modifier et supprimer un remplacement à la main restent à `Exploitation`.
+- **Mesuré**, comme le demandait le premier risque : sur 109 200 vacations, la requête de
+  la semaine passe de 0,30 ms à 0,34–0,45 ms pour le patron et 0,49–0,56 ms pour un chef.
+- **Le dossier nomme le chef d'équipe** en clair, cherché à la main dans l'entreprise de
+  l'agent — éprouvé par un rattachement intrus posé directement en base.
+- **L'écran.** Le planning d'un chef annonce « Votre équipe », et un chef sans équipe lit
+  pourquoi son planning est vide et qui y remédie. Dans les listes, un identifiant que le
+  serveur ne montre pas à l'utilisateur — le titulaire d'une prestation dans une autre
+  équipe — s'affiche « Hors de votre périmètre » au lieu d'un UUID.
+- **Tests.** `FrontiereChefEquipeTests` : deux chefs, deux équipes, un agent sans équipe,
+  dix-neuf tests sur chaque donnée du tableau, et sept sabotages — un par condition de la
+  frontière, plus la lecture du rôle —, tous rouges. Quatre tests existants supposaient
+  un chef voyant toute l'entreprise ou privé du cycle ; ils gardent désormais la
+  frontière.
+
+**Non fait, délibérément** : la colonne « Chef d'équipe » de la liste des agents. Pour le
+chef, elle vaudrait toujours lui-même ; pour un responsable, elle demanderait d'ouvrir la
+liste des chefs, réservée à l'administrateur au lot A. L'administrateur voit le
+rattachement dans le formulaire. À rouvrir si un responsable en exprime le besoin.
+
 **Périmètre initial** — écrit avant la réponse, conservé pour mémoire
 
 - le modèle retenu, sa migration présentée pour relecture

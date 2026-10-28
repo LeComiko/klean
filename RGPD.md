@@ -58,10 +58,10 @@ qui le porte est nommé.
 | **Personnes** | agents |
 | **Données** | identité, affectation, dates et heures de passage, statut du passage |
 | **Tables** | `Interventions`, `Prestations`, `Contrats`, `Sites` |
-| **Accès** | rôles internes (`Administrateur`, `Responsable`, `ChefEquipe`) ; l'agent voit ses propres interventions, cadré par l'axe `AgentId` |
+| **Accès** | `Administrateur` et `Responsable` sur toute l'entreprise ; `ChefEquipe` sur **son équipe** seulement — les agents rattachés à son compte, et les vacations sans agent dont ils sont titulaires (étape 19) ; l'agent voit ses propres interventions, cadré par l'axe `AgentId` |
 | **Destinataires** | aucun hors de l'entreprise |
 | **Durée** | voir §5 |
-| **Journalisé** | `GET /api/planning` — oui, parce qu'il nomme **tous** les agents de l'entreprise |
+| **Journalisé** | `GET /api/planning` — oui, parce qu'il nomme **tous** les agents de l'entreprise. Lu par un chef d'équipe, il ne nomme que son équipe, et le journal consigne d'autant moins de lignes : la frontière réduit ce qu'il lit, pas ce qui est tracé |
 
 ### T2 — Recherche d'un remplaçant
 
@@ -72,7 +72,7 @@ qui le porte est nommé.
 | **Personnes** | agents |
 | **Données** | identité, **coordonnées GPS du domicile** (via la distance au site), nombre de passages antérieurs sur le site, heures de la semaine |
 | **Services** | `AffectationService`, `RemplacementService` |
-| **Accès** | rôles internes ; les propositions et acceptations sont réservées à `Exploitation` |
+| **Accès** | rôles internes ; un chef d'équipe ne voit et ne propose que les agents de son équipe, sur les vacations de son équipe — ouvrir, proposer, accepter et refuser lui sont ouverts depuis l'étape 19 |
 | **Durée** | voir §5 |
 | **Journalisé** | oui, par **deux** routes — `/api/interventions/{id}/candidats` et `/api/remplacements/{id}/candidats` |
 
@@ -104,7 +104,7 @@ devient fausse et l'article 22 s'applique.
 | **Personnes** | agents |
 | **Données** | type, dates, et un motif en texte libre **sauf sur un arrêt maladie** |
 | **Tables** | `Absences` |
-| **Accès** | lecture par les rôles internes, écriture par `Exploitation` |
+| **Accès** | lecture par les rôles internes — un chef d'équipe, celles de son équipe seulement —, écriture par `Exploitation` |
 | **Durée** | voir §5 — et §8.2 pour le résidu |
 | **Journalisé** | oui, en liste et en lecture unitaire |
 
@@ -320,7 +320,8 @@ figurent pas, et les trois sont des choix, inscrits dans la réponse elle-même 
 ⚠️ Et trois choses y figurent **exprès**, parce que les retenir serait le vrai
 manquement : le **motif** d'une absence quand il existe, les **prestations dont l'agent
 est titulaire** — jours, heure, site et ville : ce qu'on prévoit de lui confier, et que
-la génération des vacations lui affecte (étape 20 de `SPEC.md`) —, et le **score**
+la génération des vacations lui affecte (étape 20 de `SPEC.md`) —, le **nom de son
+chef d'équipe**, en clair et non en identifiant (étape 19), et le **score**
 attribué à l'agent comme candidat au remplacement. Ce score est une évaluation de la personne — un
 des trois critères qui rendent l'AIPD probable — et la lui cacher dans sa propre réponse
 d'accès serait précisément ce que l'article 15 interdit.

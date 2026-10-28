@@ -76,6 +76,11 @@ export function Planning() {
 
   const { profil } = useAuth()
   const peutGenerer = profil !== null && aUnRole(profil, RolesGeneration)
+
+  // Le serveur ne rend au chef d'équipe que son équipe (SPEC.md, étape 19) : l'écran
+  // n'a rien à filtrer, seulement à le dire — sans quoi un planning vide se lirait comme
+  // une semaine sans travail.
+  const estChef = profil !== null && aUnRole(profil, [Roles.ChefEquipe])
   const [generationEnCours, setGenerationEnCours] = useState(false)
   const [erreurGeneration, setErreurGeneration] = useState<string | null>(null)
   const [rapport, setRapport] = useState<RapportGeneration | null>(null)
@@ -228,7 +233,9 @@ export function Planning() {
     <>
       <EnTetePage
         titre="Planning"
-        sousTitre="Les agents en lignes, la semaine en colonnes"
+        sousTitre={estChef
+          ? 'Votre équipe en lignes, la semaine en colonnes'
+          : 'Les agents en lignes, la semaine en colonnes'}
         actions={
           <>
             {chargement && obtenue !== null && (
@@ -275,6 +282,14 @@ export function Planning() {
                   setRapport(null)
                 }}
               />
+            )}
+
+            {estChef && obtenue.semaine.agents.length === 0 && (
+              <p className="planning__equipe-vide">
+                <strong>Aucun agent n’est rattaché à votre compte.</strong> Ce planning ne
+                montre que votre équipe : l’administrateur rattache chaque agent à son chef
+                d’équipe, sur la fiche de l’agent.
+              </p>
             )}
 
             <GrillePlanning semaine={obtenue.semaine} />

@@ -26,6 +26,18 @@ public interface ITenantContext
     /// </summary>
     Guid? AgentId { get; }
 
+    /// <summary>
+    /// Compte du jeton quand il porte le rôle ChefEquipe, nul sinon. Quatrième axe
+    /// (SPEC.md, étape 19) : le chef ne voit que les agents rattachés à son compte,
+    /// leurs absences, leurs interventions — plus celles sans agent dont le titulaire
+    /// est l'un d'eux — et les remplacements de ces interventions.
+    ///
+    /// ⚠️ Lu sur le <b>rôle</b>, pas sur une revendication dédiée : un jeton émis avant
+    /// le rattachement d'un agent n'a pas à être renouvelé, puisque l'équipe est lue en
+    /// base à chaque requête par les filtres globaux.
+    /// </summary>
+    Guid? ChefEquipeId { get; }
+
     bool FiltrageActif { get; }
 
     /// <summary>

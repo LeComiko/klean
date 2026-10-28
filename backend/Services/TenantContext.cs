@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Klean.Api.Models;
 
 namespace Klean.Api.Services;
 
@@ -20,6 +21,27 @@ public class TenantContext : ITenantContext
     public Guid? ClientId => Revendication(JwtService.RevendicationClientId);
 
     public Guid? AgentId => Revendication(JwtService.RevendicationAgentId);
+
+    /// <summary>
+    /// ⚠️ Le rôle suffit à restreindre, même cumulé avec un autre : sur une frontière,
+    /// le doute se résout vers moins de données. Aucune route ne crée un compte à deux
+    /// rôles aujourd'hui.
+    /// </summary>
+    public Guid? ChefEquipeId
+    {
+        get
+        {
+            var utilisateur = _accesseur.HttpContext?.User;
+
+            if (utilisateur?.IsInRole(RolesKlean.ChefEquipe) != true) return null;
+
+            return Guid.TryParse(utilisateur.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id)
+                ? id
+                : throw new InvalidOperationException(
+                    "Jeton de chef d'équipe sans identifiant exploitable. Refus de poursuivre : "
+                    + "le cadrage de son équipe serait inopérant.");
+        }
+    }
 
     private Guid? Revendication(string nom)
     {

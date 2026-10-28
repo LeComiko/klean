@@ -275,11 +275,21 @@ function EcranReference({
     setErreurFormulaire(null)
   }, [])
 
-  /** Résout l'identifiant d'une ressource parente en son libellé. */
+  /**
+   * Résout l'identifiant d'une ressource parente en son libellé.
+   *
+   * ⚠️ Un identifiant absent d'une liste **complète** désigne une ligne que le serveur
+   * ne montre pas à cet utilisateur : le titulaire d'une prestation dans l'équipe d'un
+   * autre chef (SPEC.md, étape 19). L'afficher en UUID ne dirait rien. Sur une liste
+   * tronquée, en revanche, l'absence ne prouve rien, et l'identifiant reste.
+   */
   function libelleParent(parente: string, identifiant: string): string {
-    const option = choix[parente]?.options.find((candidate) => candidate.valeur === identifiant)
+    const liste = choix[parente]
+    const option = liste?.options.find((candidate) => candidate.valeur === identifiant)
 
-    return option?.libelle ?? identifiant
+    if (option !== undefined) return option.libelle
+
+    return liste !== undefined && !liste.tronquee ? 'Hors de votre périmètre' : identifiant
   }
 
   function celluleDe(ligne: Ressource, colonne: ColonneRessource): string {

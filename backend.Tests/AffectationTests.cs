@@ -448,8 +448,11 @@ public class AffectationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Le_chef_d_equipe_peut_consulter_les_candidats()
+    public async Task Le_chef_d_equipe_ne_consulte_pas_les_candidats_hors_de_son_equipe()
     {
+        // Le rôle y a droit ; sa frontière le cadre depuis l'étape 19. Ce chef n'a pas
+        // d'équipe, donc la vacation lui est inconnue. Le cas positif — ses agents, et
+        // eux seuls — est dans FrontiereChefEquipeTests.
         await CreerAgent("Aubert", ProcheLatitude, ProcheLongitude);
 
         var chef = await _fixture.ClientDeRoleAsync(
@@ -457,7 +460,7 @@ public class AffectationTests : IAsyncLifetime
 
         var reponse = await chef.GetAsync($"/api/interventions/{_cible.Id}/candidats");
 
-        Assert.Equal(HttpStatusCode.OK, reponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, reponse.StatusCode);
     }
 
     [Fact]

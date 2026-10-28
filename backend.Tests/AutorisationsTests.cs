@@ -114,6 +114,18 @@ public class AutorisationsTests : IAsyncLifetime
     [Fact]
     public async Task ChefEquipe_modifie_une_intervention_mais_n_en_cree_pas()
     {
+        // Depuis l'étape 19, le chef ne voit que son équipe : sans ce rattachement,
+        // l'intervention lui serait introuvable et le PUT rendrait 404.
+        var chef = (await _chefEquipe.GetFromJsonAsync<ProfilDto>("/api/auth/moi"))!.Id;
+        var rattachement = await _admin.PutAsJsonAsync($"/api/agents/{_agentUn.Id}", new AgentCreateDto
+        {
+            Nom = _agentUn.Nom,
+            Prenom = _agentUn.Prenom,
+            DateEmbauche = _agentUn.DateEmbauche,
+            ChefEquipeId = chef
+        });
+        Assert.Equal(HttpStatusCode.NoContent, rattachement.StatusCode);
+
         var intervention = await CreerIntervention(_agentUn.Id, new DateTime(2026, 9, 7));
 
         var modification = await _chefEquipe.PutAsJsonAsync(

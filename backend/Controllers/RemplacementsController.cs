@@ -189,7 +189,11 @@ public class RemplacementsController : ControllerBase
         return candidats is null ? NotFound() : Ok(candidats);
     }
 
-    [Authorize(Roles = RolesKlean.Exploitation)]
+    // Proposer, accepter, refuser : ouverts au chef d'équipe à l'étape 19, avec
+    // l'ouverture du remplacement. Il ne voit que les remplacements des vacations de
+    // son équipe, et ne propose que ses agents — le moteur lit les agents filtrés.
+    // Créer, modifier et supprimer à la main restent à l'exploitation.
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpPost("{id:guid}/proposer")]
     public async Task<ActionResult<RemplacementDto>> Proposer(Guid id, ProposerDto dto)
         => Traduire(await _cycle.ProposerAsync(id, dto.AgentId));
@@ -198,12 +202,12 @@ public class RemplacementsController : ControllerBase
     /// Accepte la proposition : c'est ici, et nulle part ailleurs dans le cycle,
     /// que l'intervention change d'agent (CLAUDE.md §9).
     /// </summary>
-    [Authorize(Roles = RolesKlean.Exploitation)]
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpPost("{id:guid}/accepter")]
     public async Task<ActionResult<RemplacementDto>> Accepter(Guid id)
         => Traduire(await _cycle.AccepterAsync(id));
 
-    [Authorize(Roles = RolesKlean.Exploitation)]
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpPost("{id:guid}/refuser")]
     public async Task<ActionResult<RemplacementDto>> Refuser(Guid id)
         => Traduire(await _cycle.RefuserAsync(id));

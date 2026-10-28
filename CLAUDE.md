@@ -485,6 +485,43 @@ naturellement (Site, Contrat, Prestation, Intervention, Absence,
 Remplacement, Stock). Choix assumé : évite trois jointures par ligne sur la
 vue planning. La cohérence est garantie applicativement, sans clé étrangère.
 
+### L'équipe d'un chef — quatrième axe
+
+Depuis l'étape 19, `ITenantContext.ChefEquipeId` vaut l'identifiant du compte quand il
+porte le rôle `ChefEquipe`. Quatre filtres globaux s'en servent, et c'est une
+**frontière**, du même ordre que celle du syndic : avec plusieurs chefs, une fuite
+montrerait à chacun les équipes des autres.
+
+| Entité | Le chef voit |
+|---|---|
+| `Agent` | ceux dont `ChefEquipeId` est son compte |
+| `Absence` | celles de ces agents |
+| `Intervention` | celles de ces agents ; et, **sans agent**, celles dont le titulaire de la prestation est l'un d'eux |
+| `Remplacement` | ceux des interventions qu'il voit — la règle n'est pas recopiée, le filtre des interventions s'applique à la sous-requête |
+
+Clients, sites, contrats et prestations restent ceux de l'entreprise : aucune personne
+n'y est nommée, seulement l'identifiant d'un titulaire, que l'écran affiche « Hors de
+votre périmètre » quand il n'est pas dans l'équipe.
+
+Quatre choses à savoir avant d'y toucher :
+
+- ⚠️ **Une vacation affectée appartient à l'équipe de son agent, pas du titulaire.** Le
+  titulaire ne départage que les vacations sans agent. Dans l'autre sens, un chef verrait
+  le travail d'un agent qu'il n'encadre pas.
+- **Le moteur d'affectation, le planning et le cycle de remplacement n'en savent rien.**
+  Ils lisent les ensembles filtrés : les candidats d'un chef sont son équipe par
+  construction, et un agent d'une autre équipe est « inconnu » à la proposition comme au
+  `PUT`. Les filtres durs n'y perdent rien : toutes les vacations et les absences d'un
+  agent de l'équipe restent visibles à son chef.
+- **Lu sur le rôle, pas sur une revendication** : l'équipe est lue en base à chaque
+  requête, donc un rattachement prend effet sans renouveler le jeton.
+- **Les conditions sont des sous-requêtes `Any`, jamais des navigations**, et le coût en
+  est mesuré dans le `DbContext`. Voir aussi le piège de §10 sur les paramètres nuls.
+
+Le rattachement lui-même — `Agent.ChefEquipeId` vers `AspNetUsers` — est vérifié à la
+main à chaque écriture, même entreprise **et** rôle `ChefEquipe`, `AspNetUsers` n'étant
+pas filtrée.
+
 ---
 
 ## 7 bis. Données personnelles : journal d'accès et pseudonymisation
@@ -902,6 +939,12 @@ Recherche ──proposer──► Propose ──accepter──► Accepte
 Refuse ──proposer──► Propose
 ```
 
+**Qui le conduit.** Ouvrir, proposer, accepter et refuser sont ouverts aux trois rôles
+internes depuis l'étape 19. Le chef d'équipe pourvoit les vacations de **son équipe**,
+parmi **ses agents**, et c'est la frontière de §7 qui le cadre, pas une vérification
+écrite dans le service. Créer, modifier et supprimer un remplacement à la main restent à
+`Exploitation`.
+
 - `DetecterImpactsAsync(absenceId)` crée un `Remplacement` en statut
   `Recherche` pour chaque intervention `Planifiee` de l'agent absent dont le
   **jour** tombe dans l'absence. Comparaison au jour, comme les filtres durs du
@@ -1230,6 +1273,15 @@ lancées ensemble ne se chevauchent pas forcément : si la première écrit tout
 aller-retour, elle finit avant que la seconde ait lu. Le test de double génération est
 resté vert, verrou retiré, jusqu'à ce qu'on élargisse la fenêtre. Un tel test ne vaut
 qu'après un sabotage qui le fait rougir, **rejoué plusieurs fois**.
+
+**EF ne retire pas d'un filtre global la branche d'un paramètre nul.** Un filtre écrit
+`Axe == null || EXISTS (…)` ne devient pas `TRUE` quand l'axe est nul : EF émet
+`(@p OR EXISTS …)` pour tout le monde, et la sous-requête reste dans le SQL. J'avais
+affirmé l'inverse dans un commentaire de l'étape 19, sans regarder le SQL. Le coût reste
+négligeable, mais pour une autre raison, et c'est une mesure, pas une garantie écrite :
+PostgreSQL ne paie pas la sous-requête quand le premier membre du OR est vrai. Avant de raisonner sur le coût d'un filtre, lire `ToQueryString()`, puis mesurer
+avec `plan_cache_mode = force_generic_plan` : Npgsql prépare les requêtes, et un plan
+générique ne connaît pas la valeur du paramètre.
 
 **Deux `dotnet test` en parallèle détruisent `klean_test`, et l'erreur n'accuse pas sa
 cause.** Les deux séries partagent la base, et leurs fixtures s'y amorcent : l'une crée

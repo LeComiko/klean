@@ -107,9 +107,11 @@ public class InterventionsController : ControllerBase
     /// appels, avec une fenêtre de course entre les deux — et
     /// <c>GET /api/remplacements</c> n'a aucun filtre, il faudrait balayer.
     ///
-    /// Réservé à <c>Exploitation</c> : l'opération écrit.
+    /// Ouvert aux trois rôles internes depuis l'étape 19 : le chef d'équipe pourvoit
+    /// les vacations de son équipe. Les filtres globaux le cadrent — une vacation hors
+    /// de son équipe rend 404, et ses candidats sont ses agents.
     /// </summary>
-    [Authorize(Roles = RolesKlean.Exploitation)]
+    [Authorize(Roles = RolesKlean.Interne)]
     [HttpPost("{id:guid}/remplacement")]
     public async Task<ActionResult<RemplacementDto>> OuvrirRemplacement(Guid id)
     {

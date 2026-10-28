@@ -404,20 +404,23 @@ public class RemplacementTests : IAsyncLifetime
     // ------------------------------------------------------------ autorisations
 
     [Fact]
-    public async Task Le_chef_d_equipe_lit_les_candidats_mais_ne_propose_pas()
+    public async Task Le_chef_d_equipe_n_agit_pas_hors_de_son_equipe()
     {
+        // Le cycle est ouvert au chef depuis l'étape 19, sur son équipe seulement. Ce
+        // chef n'en a pas : le remplacement lui est inconnu, en lecture comme en
+        // écriture. Le cas positif est dans FrontiereChefEquipeTests.
         var remplacement = await RemplacementEnRecherche();
 
         var chef = await _fixture.ClientDeRoleAsync(
             _client, "ChefEquipe", "chef.remplacement@test.local");
 
         var lecture = await chef.GetAsync($"/api/remplacements/{remplacement.Id}/candidats");
-        Assert.Equal(HttpStatusCode.OK, lecture.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, lecture.StatusCode);
 
         var action = await chef.PostAsJsonAsync(
             $"/api/remplacements/{remplacement.Id}/proposer",
             new ProposerDto { AgentId = _remplacant.Id });
-        Assert.Equal(HttpStatusCode.Forbidden, action.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, action.StatusCode);
     }
 
     [Fact]
@@ -576,16 +579,17 @@ public class RemplacementTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Ouvrir_est_interdit_au_chef_d_equipe()
+    public async Task Ouvrir_hors_de_l_equipe_du_chef_renvoie_404()
     {
-        // L'opération écrit : Exploitation seulement, comme proposer et accepter.
+        // L'opération écrit, et elle est ouverte au chef depuis l'étape 19 : c'est la
+        // frontière de son équipe qui la cadre. Ce chef n'en a pas — rien n'est ouvert.
         var chef = await _fixture.ClientDeRoleAsync(
             _client, RolesKlean.ChefEquipe, "chef.ouvrir@test.local");
 
         var reponse = await chef.PostAsync(
             $"/api/interventions/{_intervention.Id}/remplacement", null);
 
-        Assert.Equal(HttpStatusCode.Forbidden, reponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, reponse.StatusCode);
         Assert.Empty(await Remplacements());
     }
 

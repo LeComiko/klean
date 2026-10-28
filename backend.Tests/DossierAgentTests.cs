@@ -288,6 +288,49 @@ public class DossierAgentTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Le_dossier_nomme_le_chef_d_equipe_plutot_qu_un_identifiant()
+    {
+        var chef = await _fixture.ClientDeRoleAsync(_client, RolesKlean.ChefEquipe, "chef.dossier@test.local");
+        var chefId = (await chef.GetFromJsonAsync<ProfilDto>("/api/auth/moi"))!.Id;
+
+        var agent = await Creer<AgentDto>("/api/agents", new AgentCreateDto
+        {
+            Nom = "Diallo", Prenom = "Aminata", DateEmbauche = new DateTime(2024, 3, 15), ChefEquipeId = chefId
+        });
+
+        var dossier = await Dossier(agent.Id);
+
+        // `ClientDeRoleAsync` pose le rôle comme nom et laisse le prénom vide.
+        Assert.Equal(RolesKlean.ChefEquipe, dossier.ChefEquipe);
+    }
+
+    [Fact]
+    public async Task Le_chef_d_une_autre_entreprise_n_est_pas_nomme_dans_le_dossier()
+    {
+        var agent = await CreerAgentRenseigne();
+
+        // ⚠️ Rattachement posé directement en base, sous la validation : l'API refuse un
+        // chef d'une autre entreprise. La recherche du nom, sur AspNetUsers non filtrée,
+        // est une défense en profondeur, et ce test est le seul qui l'exerce.
+        await _fixture.AvecServicesAsync(async services =>
+        {
+            var utilisateurs = services
+                .GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<Utilisateur>>();
+            var beta = await utilisateurs.FindByEmailAsync(FixtureApi.AdminBeta);
+
+            var db = services.GetRequiredService<Klean.Api.Data.KleanDbContext>();
+            var ligne = await db.Agents.FindAsync(agent);
+            ligne!.ChefEquipeId = beta!.Id;
+            await db.SaveChangesAsync();
+        });
+
+        var dossier = await Dossier(agent);
+
+        Assert.Null(dossier.ChefEquipe);
+        Assert.DoesNotContain("Beta Nettoyage", await _client.GetStringAsync($"/api/agents/{agent}/dossier"));
+    }
+
+    [Fact]
     public async Task Le_dossier_annonce_ce_qu_il_ne_contient_pas()
     {
         var dossier = await Dossier(await CreerAgentRenseigne());

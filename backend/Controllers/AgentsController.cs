@@ -332,6 +332,7 @@ public class AgentsController : ControllerBase
             Genere = DateTime.UtcNow,
             Agent = Vers(agent),
             Compte = await CompteDuDossierAsync(agent),
+            ChefEquipe = await ChefEquipeDuDossierAsync(agent),
             Absences = absences,
             Interventions = interventions,
             PrestationsTitulaire = prestations,
@@ -407,6 +408,24 @@ public class AgentsController : ControllerBase
             Actif = compte.Actif,
             Roles = roles
         };
+    }
+
+    /// <summary>
+    /// Prénom et nom du chef d'équipe, cherché à la main dans l'entreprise de l'agent.
+    ///
+    /// ⚠️ Le filtre sur <c>EntrepriseId</c> est une défense en profondeur : l'écriture
+    /// refuse déjà un chef d'une autre entreprise. Il est éprouvé par un rattachement
+    /// posé directement en base, sous cette validation — sans lui, le dossier nommerait
+    /// une personne d'une autre entreprise.
+    /// </summary>
+    private async Task<string?> ChefEquipeDuDossierAsync(Agent agent)
+    {
+        if (agent.ChefEquipeId is not { } chef) return null;
+
+        return await _db.Users.AsNoTracking()
+            .Where(u => u.Id == chef && u.EntrepriseId == agent.EntrepriseId)
+            .Select(u => (u.Prenom + " " + u.Nom).Trim())
+            .FirstOrDefaultAsync();
     }
 
     private static AgentDto Vers(Agent a) => new()

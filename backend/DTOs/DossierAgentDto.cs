@@ -31,6 +31,16 @@ public class DossierAgentDto
     /// </summary>
     public CompteDuDossierDto? Compte { get; set; }
 
+    /// <summary>
+    /// Prénom et nom du chef d'équipe, nul si l'agent n'est rattaché à personne.
+    ///
+    /// ⚠️ Un nom, pas l'identifiant que porte <see cref="AgentDto.ChefEquipeId"/> :
+    /// l'article 15 exige une forme intelligible. Le nommer ne heurte pas l'article
+    /// 15(4) : qui encadre le salarié fait partie de sa relation de travail, et il le
+    /// sait déjà — ce que n'est pas l'identité des collègues qui ont consulté sa fiche.
+    /// </summary>
+    public string? ChefEquipe { get; set; }
+
     public List<AbsenceDto> Absences { get; set; } = [];
 
     public List<InterventionDuDossierDto> Interventions { get; set; } = [];

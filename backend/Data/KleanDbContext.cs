@@ -37,6 +37,10 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
     private Guid? TenantClientId => _tenant?.ClientId;
     private Guid? TenantAgentId => _tenant?.AgentId;
 
+    // Quatrième axe, l'équipe d'un chef (SPEC.md, étape 19). Nul hors du rôle
+    // ChefEquipe, auquel cas les conditions qui en dépendent valent vrai.
+    private Guid? TenantChefEquipeId => _tenant?.ChefEquipeId;
+
     public DbSet<Entreprise> Entreprises => Set<Entreprise>();
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Site> Sites => Set<Site>();
@@ -266,16 +270,57 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
             !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
         modelBuilder.Entity<Prestation>().HasQueryFilter(e =>
             !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+        // ---- L'équipe d'un chef : agents, absences, interventions, remplacements ----
+        //
+        // Une frontière, du même ordre que celle du syndic, et non un filtre de confort :
+        // avec plusieurs chefs, chacun verrait sinon les équipes des autres.
+        //
+        // ⚠️ Les conditions passent par des sous-requêtes `Any`, jamais par des
+        // navigations. Une navigation devient une jointure dans le FROM, que tout le
+        // monde paierait ; une sous-requête reste dans le WHERE, derrière un paramètre
+        // « pas de chef » en tête d'un OR. EF ne la retire pas du SQL — il émet
+        // `(@p OR EXISTS …)` pour tous —, mais PostgreSQL ne l'évalue pas quand le
+        // paramètre est vrai. Mesuré le 28 octobre 2026 sur 109 200 vacations, plan
+        // générique forcé, requête de la semaine : 0,30 ms avant, 0,34 à 0,45 ms pour le
+        // patron, 0,49 à 0,56 ms pour un chef — ses sous-requêtes sont hachées une fois,
+        // pas rejouées ligne à ligne.
+        //
+        // ⚠️ Le moteur d'affectation, le planning et le cycle de remplacement lisent ces
+        // ensembles filtrés : pour un chef, les candidats sont son équipe par
+        // construction. Les filtres durs n'y perdent rien, toutes les vacations et les
+        // absences d'un agent de l'équipe restant visibles à son chef.
         modelBuilder.Entity<Agent>().HasQueryFilter(e =>
-            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+            !TenantFiltrageActif || TenantEntrepriseId == null
+            || (e.EntrepriseId == TenantEntrepriseId
+                && (TenantChefEquipeId == null || e.ChefEquipeId == TenantChefEquipeId)));
+
+        // Une vacation affectée appartient à l'équipe de son agent, quelle que soit sa
+        // prestation. Une vacation sans agent, à l'équipe du titulaire de sa prestation ;
+        // sans titulaire, à aucune — seuls le patron et les responsables la voient.
         modelBuilder.Entity<Intervention>().HasQueryFilter(e =>
             !TenantFiltrageActif || TenantEntrepriseId == null
             || (e.EntrepriseId == TenantEntrepriseId
-                && (TenantAgentId == null || e.AgentId == TenantAgentId)));
+                && (TenantAgentId == null || e.AgentId == TenantAgentId)
+                && (TenantChefEquipeId == null
+                    || (e.AgentId != null
+                        && Agents.Any(a => a.Id == e.AgentId && a.ChefEquipeId == TenantChefEquipeId))
+                    || (e.AgentId == null
+                        && Prestations.Any(p => p.Id == e.PrestationId
+                            && Agents.Any(a => a.Id == p.AgentTitulaireId
+                                && a.ChefEquipeId == TenantChefEquipeId))))));
         modelBuilder.Entity<Absence>().HasQueryFilter(e =>
-            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+            !TenantFiltrageActif || TenantEntrepriseId == null
+            || (e.EntrepriseId == TenantEntrepriseId
+                && (TenantChefEquipeId == null
+                    || Agents.Any(a => a.Id == e.AgentId && a.ChefEquipeId == TenantChefEquipeId))));
+
+        // Les remplacements des vacations que le chef voit. La règle n'est pas recopiée :
+        // le filtre des interventions s'applique à la sous-requête, et une seule
+        // définition de l'équipe ne peut pas diverger d'elle-même.
         modelBuilder.Entity<Remplacement>().HasQueryFilter(e =>
-            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+            !TenantFiltrageActif || TenantEntrepriseId == null
+            || (e.EntrepriseId == TenantEntrepriseId
+                && (TenantChefEquipeId == null || Interventions.Any(i => i.Id == e.InterventionId))));
         modelBuilder.Entity<Produit>().HasQueryFilter(e =>
             !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
         modelBuilder.Entity<Stock>().HasQueryFilter(e =>
