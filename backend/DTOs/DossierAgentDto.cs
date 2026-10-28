@@ -35,6 +35,13 @@ public class DossierAgentDto
 
     public List<InterventionDuDossierDto> Interventions { get; set; } = [];
 
+    /// <summary>
+    /// Prestations dont l'agent est le titulaire : ce qu'on prévoit de lui confier, et
+    /// que la génération lui affecte quand il est éligible (SPEC.md, étape 20). Une donnée
+    /// le concernant, donc due au titre de l'article 15 au même titre que ses vacations.
+    /// </summary>
+    public List<PrestationDuDossierDto> PrestationsTitulaire { get; set; } = [];
+
     /// <summary>Remplacements où cet agent a été proposé ou retenu comme remplaçant.</summary>
     public List<RemplacementDuDossierDto> Remplacements { get; set; } = [];
 
@@ -86,6 +93,23 @@ public class InterventionDuDossierDto
     public string Prestation { get; set; } = string.Empty;
     public string Site { get; set; } = string.Empty;
     public string? Ville { get; set; }
+}
+
+/// <summary>
+/// Une prestation dont l'agent est titulaire. Nommée par son site et sa ville, pour la
+/// même raison qu'<see cref="InterventionDuDossierDto"/>.
+/// </summary>
+public class PrestationDuDossierDto
+{
+    public Guid Id { get; set; }
+    public string Libelle { get; set; } = string.Empty;
+    public string Site { get; set; } = string.Empty;
+    public string? Ville { get; set; }
+
+    /// <summary>Du lundi au dimanche. Vide : la prestation n'est pas générée.</summary>
+    public string[] Jours { get; set; } = [];
+
+    public TimeSpan? HeureDebut { get; set; }
 }
 
 public class RemplacementDuDossierDto

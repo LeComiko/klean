@@ -82,6 +82,9 @@ public class FabriqueApi : WebApplicationFactory<Program>
     /// </summary>
     public ServiceCourrielDeTest Courriels { get; } = new();
 
+    /// <summary>Horloge de la génération. Libérée par la fixture entre chaque test.</summary>
+    public HorlogeDeTest Horloge { get; } = new();
+
     private readonly string _environnement;
 
     /// <summary>
@@ -106,6 +109,9 @@ public class FabriqueApi : WebApplicationFactory<Program>
         {
             services.RemoveAll<IServiceCourriel>();
             services.AddSingleton<IServiceCourriel>(Courriels);
+
+            services.RemoveAll<TimeProvider>();
+            services.AddSingleton<TimeProvider>(Horloge);
         });
     }
 

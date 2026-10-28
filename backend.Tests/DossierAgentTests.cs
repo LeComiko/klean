@@ -94,6 +94,46 @@ public class DossierAgentTests : IAsyncLifetime
         Assert.Equal(new TimeSpan(8, 30, 0), vacation.HeurePrevue);
     }
 
+    /// <summary>
+    /// Être désigné titulaire d'une prestation est une donnée le concernant : c'est ce
+    /// que la génération lui affectera (SPEC.md, étape 20). Seules les siennes, et
+    /// nommées par leur site comme ses vacations.
+    /// </summary>
+    [Fact]
+    public async Task Le_dossier_porte_les_prestations_dont_l_agent_est_titulaire()
+    {
+        var agent = await CreerAgentRenseigne();
+        var collegue = await CreerAgentRenseigne("Keita", "Awa");
+        var contrat = await ContratDuDossier();
+
+        await Creer<PrestationDto>("/api/prestations", new
+        {
+            ContratId = contrat,
+            Libelle = "Vitrerie",
+            DureeEstimeeMinutes = 60,
+            Jours = new[] { "Jeudi", "Lundi" },
+            HeureDebut = "07:30:00",
+            AgentTitulaireId = agent
+        });
+        await Creer<PrestationDto>("/api/prestations", new
+        {
+            ContratId = contrat,
+            Libelle = "Sols",
+            DureeEstimeeMinutes = 60,
+            Jours = new[] { "Mardi" },
+            HeureDebut = "07:30:00",
+            AgentTitulaireId = collegue
+        });
+
+        var prestation = Assert.Single((await Dossier(agent)).PrestationsTitulaire);
+
+        Assert.Equal("Vitrerie", prestation.Libelle);
+        Assert.Equal("Résidence Dossier", prestation.Site);
+        Assert.Equal("Paris", prestation.Ville);
+        Assert.Equal(["Lundi", "Jeudi"], prestation.Jours);
+        Assert.Equal(new TimeSpan(7, 30, 0), prestation.HeureDebut);
+    }
+
     [Fact]
     public async Task Le_dossier_porte_le_score_attribue_a_l_agent()
     {
@@ -408,6 +448,26 @@ public class DossierAgentTests : IAsyncLifetime
 
     private async Task<Guid> ChaineAvecVacation(Guid? agent = null)
     {
+        var prestation = await Creer<PrestationDto>("/api/prestations", new PrestationCreateDto
+        {
+            ContratId = await ContratDuDossier(),
+            Libelle = "Nettoyage parties communes",
+            DureeEstimeeMinutes = 120
+        });
+        var intervention = await Creer<InterventionDto>("/api/interventions", new InterventionCreateDto
+        {
+            PrestationId = prestation.Id,
+            AgentId = agent,
+            DatePrevue = new DateTime(2026, 9, 7),
+            HeurePrevue = new TimeSpan(8, 30, 0),
+            Statut = "Planifiee"
+        });
+
+        return intervention.Id;
+    }
+
+    private async Task<Guid> ContratDuDossier()
+    {
         var client = await Creer<ClientDto>("/api/clients",
             new ClientCreateDto { Nom = "Syndic Dossier", Type = "Syndic" });
         var site = await Creer<SiteDto>("/api/sites", new SiteCreateDto
@@ -425,22 +485,8 @@ public class DossierAgentTests : IAsyncLifetime
             DateDebut = new DateTime(2026, 1, 1),
             Frequence = "Lundi"
         });
-        var prestation = await Creer<PrestationDto>("/api/prestations", new PrestationCreateDto
-        {
-            ContratId = contrat.Id,
-            Libelle = "Nettoyage parties communes",
-            DureeEstimeeMinutes = 120
-        });
-        var intervention = await Creer<InterventionDto>("/api/interventions", new InterventionCreateDto
-        {
-            PrestationId = prestation.Id,
-            AgentId = agent,
-            DatePrevue = new DateTime(2026, 9, 7),
-            HeurePrevue = new TimeSpan(8, 30, 0),
-            Statut = "Planifiee"
-        });
 
-        return intervention.Id;
+        return contrat.Id;
     }
 
     private async Task<T> Creer<T>(string route, object corps)

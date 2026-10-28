@@ -1647,13 +1647,66 @@ chaîne vide comme `Aucun` sans rien lever : le test lit désormais la valeur st
 nouveaux champs, et un `PUT` remplace la ligne entière. Enregistrer une prestation ou un
 contrat depuis l'écran remet donc à zéro sa récurrence et son drapeau de fériés.
 
-**Ouvert** : le dossier d'un agent (`RGPD.md` §6) ne liste pas encore les prestations
-dont il est titulaire. C'est une donnée le concernant, donc due au titre de
-l'article 15.
+**Lot B fait.** `POST /api/planning/generer { jusquAu }`, rôles `Exploitation`.
 
-**Lot B** — `ServiceGeneration`, calcul des jours fériés, `POST /api/planning/generer`,
-rapport sans nom d'agent. **Lot C** — champs `heure` et `jours` des écrans de
-référence, bouton de génération et rapport sur le planning.
+- **La fenêtre** va d'aujourd'hui à `jusquAu` inclus, et jamais au-delà de douze
+  semaines. Une date passée est refusée.
+- **Ce qui est créé** : une vacation `Planifiee` par jour coché, à l'heure de la
+  prestation, pour tout contrat actif qui couvre ce jour. Le titulaire est affecté
+  seulement si `EstEligibleAsync` l'accepte ; sinon la vacation reste à pourvoir et le
+  rapport en donne la raison.
+- **Ce qui n'est pas créé** : un jour férié, sauf contrat marqué ; et tout créneau
+  où la prestation a déjà une vacation ce jour-là, **quel que soit son statut**. Une
+  annulation est une décision, et la génération suivante ne la défait pas.
+- **Ce qui est signalé et laissé tel quel** : les vacations planifiées de la période
+  qui ne correspondent plus à leur contrat ou à leur prestation — contrat inactif,
+  hors de ses dates, jour retiré, heure changée, férié non inclus. Ce sont les
+  orphelines.
+- **Le rapport ne nomme aucun agent.**
+- **Les jours fériés** : les onze jours nationaux, calculés à partir de Pâques par
+  `JoursFeries`. L'Alsace-Moselle et l'outre-mer sont hors périmètre V1, et c'est
+  écrit dans le code.
+- **Le dossier de l'agent** porte désormais les prestations dont il est titulaire,
+  nommées par leur site. Le point ouvert du lot A est fermé.
+
+Quarante et un tests de plus : `GenerationTests`, `JoursFeriesTests`, et un test
+dans `DossierAgentTests`. Vingt sabotages joués, tous rougis.
+
+⚠️ **Quatre choses que le lot a apprises.**
+
+- **Le verrou consultatif.** Deux générations simultanées créaient tout en double :
+  l'idempotence se lit avant d'écrire, elle ne protège pas d'une course. D'où
+  `pg_advisory_xact_lock` sur l'entreprise. Une contrainte d'unicité ne pouvait pas
+  le remplacer, parce que deux vacations d'une même prestation le même jour sont
+  légitimes en saisie manuelle.
+
+  Le test de concurrence est d'abord **resté vert verrou retiré**. Sans titulaire,
+  quatorze vacations s'écrivent en un aller-retour, et la première requête finit
+  avant que la seconde ait lu. Il porte maintenant un titulaire, ce qui élargit la
+  fenêtre de course.
+- **L'écriture immédiate des vacations pourvues.** Le moteur lit la base : une
+  affectation encore en mémoire ne compterait pas comme occupation, et le même
+  titulaire serait affecté deux fois au même créneau.
+- **La mesure, au haut de la cible.** 150 agents et 150 prestations sur douze
+  semaines donnent 8 850 vacations.
+  - Première mesure : **47 secondes**. Le délai de 30 s coupait la réponse en cours
+    d'écriture : un 200 au corps tronqué, sur un travail validé.
+  - Cause : 30 de ces 47 secondes venaient de la requête de la **note d'expérience**,
+    que l'éligibilité ne lit pas. `EstEligibleAsync` ne la calcule plus, et les filtres
+    durs restent ceux de la liste.
+  - Mesure finale : **15,7 secondes**.
+  - Réglages ajoutés : un délai propre de deux minutes sur cette seule route, et
+    l'annulation de la requête transmise au service. Un dépassement **défait la
+    transaction** au lieu de valider en silence.
+- **Une horloge substituable**, `TimeProvider`. « Douze semaines à partir
+  d'aujourd'hui » ne s'éprouve pas sur un jour qui change ; voir `CLAUDE.md` §11.
+
+**Limite assumée** : « aujourd'hui » est le jour UTC. Entre minuit et deux heures du
+matin à Paris, la génération peut créer une vacation du jour qui vient de finir. Le
+modèle n'a pas de fuseau par entreprise.
+
+**Lot C** — champs `heure` et `jours` des écrans de référence, titulaire et drapeau
+des fériés, bouton « Générer jusqu'au … » et rapport sur le planning.
 
 ---
 

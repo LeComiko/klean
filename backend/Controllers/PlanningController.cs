@@ -3,6 +3,7 @@ using Klean.Api.Filtres;
 using Klean.Api.Models;
 using Klean.Api.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Klean.Api.Controllers;
@@ -13,8 +14,13 @@ namespace Klean.Api.Controllers;
 public class PlanningController : ControllerBase
 {
     private readonly PlanningService _planning;
+    private readonly ServiceGeneration _generation;
 
-    public PlanningController(PlanningService planning) => _planning = planning;
+    public PlanningController(PlanningService planning, ServiceGeneration generation)
+    {
+        _planning = planning;
+        _generation = generation;
+    }
 
     /// <summary>
     /// Planning d'une semaine. <c>lundi</c> est obligatoire et doit tomber un
@@ -57,6 +63,51 @@ public class PlanningController : ControllerBase
             lundi.Value.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
 
         return Ok(await _planning.GetSemaineAsync(debut));
+    }
+
+    /// <summary>
+    /// Crée les vacations à venir depuis la récurrence des prestations, d'aujourd'hui à
+    /// <c>jusquAu</c> inclus (SPEC.md, étape 20). Idempotent : rejouée, elle ne recrée
+    /// rien, et elle ne modifie ni ne supprime jamais une vacation existante.
+    ///
+    /// Réservée à <c>Exploitation</c>, comme toute création de vacation.
+    ///
+    /// Pas journalisée (CLAUDE.md §7 bis) : c'est une écriture, et le rapport ne nomme
+    /// aucun agent.
+    ///
+    /// Délai de deux minutes au lieu du délai général : c'est la seule opération dont la
+    /// durée croît avec la taille de l'entreprise.
+    /// </summary>
+    [Authorize(Roles = RolesKlean.Exploitation)]
+    [RequestTimeout(ServiceGeneration.PolitiqueDelai)]
+    [HttpPost("generer")]
+    public async Task<ActionResult<RapportGenerationDto>> Generer(
+        GenerationDemandeDto dto, CancellationToken annulation)
+    {
+        if (dto.JusquAu is null)
+        {
+            return BadRequest(
+                "Champ « jusquAu » obligatoire, au format AAAA-MM-JJ : le dernier jour à générer, inclus.");
+        }
+
+        var jusquAu = DateOnly.FromDateTime(dto.JusquAu.Value);
+
+        if (jusquAu < _generation.Aujourdhui)
+        {
+            return BadRequest(
+                $"La date {jusquAu:yyyy-MM-dd} est passée. La génération part d'aujourd'hui, "
+                + $"{_generation.Aujourdhui:yyyy-MM-dd}, et ne crée jamais de vacation dans le passé.");
+        }
+
+        if (jusquAu > _generation.Horizon)
+        {
+            return BadRequest(
+                $"La génération porte sur {ServiceGeneration.SemainesMaximum} semaines au plus, "
+                + $"soit jusqu'au {_generation.Horizon:yyyy-MM-dd}. Générer plus loin figerait "
+                + "un planning que les absences et les contrats auront changé d'ici là.");
+        }
+
+        return Ok(await _generation.GenererAsync(jusquAu, annulation));
     }
 
     /// <summary>

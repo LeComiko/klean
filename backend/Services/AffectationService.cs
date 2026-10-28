@@ -129,6 +129,14 @@ public class AffectationService
     /// inéligible. Le coût est de calculer un classement pour n'en lire qu'une
     /// ligne ; sur les dizaines d'agents d'une entreprise de propreté, ce sont
     /// trois requêtes indexées.
+    ///
+    /// ⚠️ <b>Sans la note d'expérience</b>, qui ne décide de rien ici : l'éligibilité est
+    /// l'appartenance à la liste, et la note ne fait qu'ordonner. Sa requête — les
+    /// passages antérieurs sur le site — coûtait à elle seule 30 des 47 secondes d'une
+    /// génération de 8 850 vacations, et son coût croît avec l'historique. Les filtres
+    /// durs restent ceux de la liste, sans copie : c'est la seule chose que la décision
+    /// « une seule implémentation » protège. Les scores calculés ainsi sont faux et ne
+    /// sortent jamais de cette méthode.
     /// </summary>
     /// <param name="interventionAExclure">
     /// L'intervention en cours de modification, qui ne doit pas se compter
@@ -136,7 +144,7 @@ public class AffectationService
     /// </param>
     public async Task<bool> EstEligibleAsync(Guid agentId, Creneau creneau, Guid? interventionAExclure)
     {
-        var candidats = await CandidatsAsync(creneau, interventionAExclure);
+        var candidats = await CandidatsAsync(creneau, interventionAExclure, avecExperience: false);
 
         return candidats.Any(c => c.AgentId == agentId);
     }
@@ -155,7 +163,12 @@ public class AffectationService
 
     // ---------------------------------------------------------------------- cœur
 
-    private async Task<List<CandidatDto>> CandidatsAsync(Creneau creneau, Guid? interventionAExclure)
+    /// <param name="avecExperience">
+    /// <c>false</c> pour la seule éligibilité : les passages ne sont pas lus et la note
+    /// d'expérience vaut zéro pour tous. Aucun filtre dur n'en dépend.
+    /// </param>
+    private async Task<List<CandidatDto>> CandidatsAsync(
+        Creneau creneau, Guid? interventionAExclure, bool avecExperience = true)
     {
         var debut = creneau.Debut;
         var fin = creneau.Fin;
@@ -179,7 +192,9 @@ public class AffectationService
         var absents = await AgentsAbsentsAsync(creneau.Jour);
         var occupations = await OccupationsAsync(
             interventionAExclure, reposDebut, reposFin, semaineDebut, semaineFin);
-        var passages = await PassagesParAgentAsync(creneau.SiteId, creneau.Jour);
+        var passages = avecExperience
+            ? await PassagesParAgentAsync(creneau.SiteId, creneau.Jour)
+            : [];
 
         var candidats = new List<CandidatDto>();
 

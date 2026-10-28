@@ -101,11 +101,23 @@ builder.Services.AddCors(options => options.AddPolicy(PolitiqueCors, politique =
 }));
 
 builder.Services.AddRequestTimeouts(options =>
+{
     options.DefaultPolicy = new Microsoft.AspNetCore.Http.Timeouts.RequestTimeoutPolicy
     {
         Timeout = delaiRequete,
         TimeoutStatusCode = StatusCodes.Status504GatewayTimeout
+    };
+
+    // La génération des vacations (étape 20) est la seule opération dont la durée croît
+    // avec l'entreprise : 24 secondes mesurées pour 150 prestations sur douze semaines,
+    // trop près du délai général. Son propre délai, plutôt qu'un délai général relevé
+    // pour tous : une requête de liste qui tourne deux minutes est un défaut à voir.
+    options.AddPolicy(ServiceGeneration.PolitiqueDelai, new Microsoft.AspNetCore.Http.Timeouts.RequestTimeoutPolicy
+    {
+        Timeout = TimeSpan.FromMinutes(2),
+        TimeoutStatusCode = StatusCodes.Status504GatewayTimeout
     });
+});
 
 builder.Services.AddHttpsRedirection(options => options.HttpsPort = portHttps);
 
@@ -210,6 +222,11 @@ builder.Services.AddSingleton<IServiceCourriel, ServiceCourrielSmtp>();
 builder.Services.AddScoped<AffectationService>();
 builder.Services.AddScoped<RemplacementService>();
 builder.Services.AddScoped<PlanningService>();
+builder.Services.AddScoped<ServiceGeneration>();
+
+// L'horloge de la génération (étape 20), substituée par la série de tests : « douze
+// semaines à partir d'aujourd'hui » ne s'éprouve pas sur un jour qui change.
+builder.Services.AddSingleton(TimeProvider.System);
 // Résolu depuis RequestServices par JournaliserAccesAttribute : un attribut ne
 // reçoit pas d'injection par constructeur.
 builder.Services.AddScoped<ServiceJournalAcces>();

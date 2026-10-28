@@ -73,6 +73,7 @@ public class FixtureApi : IAsyncLifetime
         // tests exercent ainsi les vrais plafonds de production.
         portee.ServiceProvider.GetRequiredService<LimiteurDebit>().Vider();
         Fabrique.Courriels.Reinitialiser();
+        Fabrique.Horloge.Liberer();
 
         await db.Database.ExecuteSqlRawAsync("""
             TRUNCATE TABLE

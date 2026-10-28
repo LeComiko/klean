@@ -100,7 +100,8 @@ KLEAN/
 │   ├── DTOs/            un fichier par entité, XxxDto + XxxCreateDto
 │   ├── Controllers/     un par entité + Auth + Planning
 │   ├── Services/        AffectationService, RemplacementService,
-│   │                    PlanningService, JwtService, ServiceSession,
+│   │                    PlanningService, ServiceGeneration, JoursFeries,
+│   │                    JwtService, ServiceSession,
 │   │                    AmorcageService, TenantContext, LimiteurDebit,
 │   │                    ServiceCourrielSmtp, DescripteurErreursFrancais
 │   ├── Middleware/      VerificationCsrf, EnTetesSecurite, LimiteCorpsRequete,
@@ -850,8 +851,41 @@ est appelé par `POST` et `PUT /api/interventions` dès que la requête porte un
    Conséquence assumée : une ligne déjà illégale ne peut pas être réenregistrée
    telle quelle ; il faut d'abord la libérer en envoyant `agentId` à null.
 
+4. **`EstEligibleAsync` ne calcule pas la note d'expérience.** L'éligibilité est
+   l'appartenance à la liste ; la note ne fait qu'ordonner. Sa requête, les passages
+   antérieurs sur le site, coûtait à elle seule 30 des 47 secondes d'une génération
+   de 8 850 vacations, et son coût croît avec l'historique. Les filtres durs restent
+   ceux de la liste, sans copie. Les scores calculés sur ce chemin sont faux et n'en
+   sortent jamais.
+
 Pas de drapeau de forçage. Une échappatoire qui existe devient le chemin normal
 dès la première fois qu'elle dépanne.
+
+### La génération des vacations
+
+`POST /api/planning/generer { jusquAu }` est le **troisième chemin qui écrit un agent**,
+après le CRUD et le cycle de remplacement. Il obéit à la même règle : le titulaire de la
+prestation n'est affecté que si `EstEligibleAsync` l'accepte. Sinon la vacation est créée
+sans agent, et le rapport en donne la raison. Les arbitrages et leurs motifs sont dans
+`SPEC.md`, étape 20.
+
+Quatre choses à savoir avant d'y toucher :
+
+- ⚠️ **Chaque vacation pourvue est écrite aussitôt**, dans la transaction. Le moteur lit
+  la base : une affectation encore en mémoire ne compterait ni comme chevauchement ni
+  comme repos pour la vacation suivante du même agent. L'ordre chronologique de la
+  boucle est donc une condition, pas un confort d'affichage.
+- ⚠️ **Un verrou consultatif par entreprise** sérialise deux générations simultanées.
+  L'idempotence se lit avant d'écrire, elle ne protège pas d'un double clic. Aucune
+  contrainte d'unicité ne peut le remplacer : deux vacations d'une même prestation le
+  même jour sont légitimes en saisie manuelle.
+- **Elle n'ajoute que.** Une vacation existante n'est jamais modifiée ni supprimée,
+  et une vacation **annulée** occupe son créneau : la génération suivante ne la recrée
+  pas. Ce qui ne correspond plus à sa prestation est signalé comme orpheline, et laissé
+  tel quel.
+- **Son rapport ne nomme aucun agent.** La cause d'une vacation non pourvue mêle les
+  quatre filtres durs, comme le refus de l'affectation : elle ne divulgue donc pas une
+  absence, et la route n'a pas à être journalisée (§7 bis).
 
 ---
 
@@ -1181,6 +1215,20 @@ La parade qui tient n'est pas la vigilance mais la **réflexion sur les types** 
 part des DTOs et des propriétés qui rendent une personne identifiable, pas des URL.
 Voir §7 bis.
 
+**Un délai de requête dépassé ne défait rien de lui-même.** `UseRequestTimeouts`
+déclenche le jeton d'annulation de la requête, rien de plus. Un service qui ne le lit
+pas va au bout, valide sa transaction, puis la réponse est coupée en cours d'écriture.
+Mesuré sur la génération : un **200** au corps JSON tronqué au premier tampon, sur un
+travail entièrement validé. Toute opération longue doit recevoir le `CancellationToken`
+de l'action et le passer à chaque appel EF. Un dépassement défait alors la transaction,
+et l'appelant reçoit un 504 sur un travail qui n'a pas eu lieu.
+
+**Un test de concurrence sans fenêtre de course est vert à l'envers.** Deux requêtes
+lancées ensemble ne se chevauchent pas forcément : si la première écrit tout en un
+aller-retour, elle finit avant que la seconde ait lu. Le test de double génération est
+resté vert, verrou retiré, jusqu'à ce qu'on élargisse la fenêtre. Un tel test ne vaut
+qu'après un sabotage qui le fait rougir, **rejoué plusieurs fois**.
+
 **Deux `dotnet test` en parallèle détruisent `klean_test`, et l'erreur n'accuse pas sa
 cause.** Les deux séries partagent la base, et leurs fixtures s'y amorcent : l'une crée
 les deux entreprises de test pendant que l'autre nettoie les comptes. Il reste alors des
@@ -1297,6 +1345,18 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   « n'envoie pas vraiment » selon la configuration, ce qui ferait dépendre le
   comportement de production d'un réglage, sur un chemin d'authentification.
   Toute troisième interface de service doit être justifiée de la même façon.
+
+  **`TimeProvider`**, la classe abstraite du framework, tient cette place depuis
+  l'étape 20, et pour la même raison. « Douze semaines à partir d'aujourd'hui » ne
+  s'éprouve pas sur un jour qui change : sans substitution, la série de génération
+  dépendrait du jour où elle tourne. C'est le défaut que le paramètre obligatoire
+  `lundi` du planning existe pour éviter. Seul `ServiceGeneration` le lit.
+
+  Les autres lectures de l'horloge gardent `DateTime.UtcNow`. Plusieurs décident
+  pourtant : expiration des sessions et des jetons, fenêtre de la limitation de
+  débit. Leurs tests raisonnent en durées relatives à l'instant présent, pas sur
+  un jour du calendrier. Ils n'ont donc pas eu besoin de fixer l'horloge, et les
+  convertir serait un changement sans motif.
 - Ne jamais contourner les filtres multi-tenant avec `IgnoreQueryFilters()`.
 
 **Frontend**

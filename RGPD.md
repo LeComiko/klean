@@ -185,7 +185,7 @@ Les douze tables du modèle, plus les tables d'Identity. « DP » = donnée pers
 | `Clients` | `Nom`, `Email`, `Telephone`, `Adresse` | contact professionnel — voir §8.3 | `/api/clients` |
 | `Sites` | `Adresse`, coordonnées, **`Consignes`** | lieu, et DP par accident dans les consignes | `/api/sites` |
 | `Contrats` | aucune | — | `/api/contrats` |
-| `Prestations` | `AgentTitulaireId` — `Libelle` est un intitulé de prestation | affectation habituelle d'un salarié à un site, à une heure | `/api/prestations` |
+| `Prestations` | `AgentTitulaireId` — `Libelle` est un intitulé de prestation | affectation habituelle d'un salarié à un site, à une heure | `/api/prestations`, et le dossier de l'agent |
 | `Produits`, `Stocks` | aucune | — | — |
 | `AccesJournalises` | `UtilisateurId`, `CibleId`, `Horodatage` | trace d'activité d'un utilisateur | `/api/journal-acces` |
 | `AspNetUsers` | `Email`, `UserName`, `PhoneNumber`, `Nom`, `Prenom`, `PasswordHash`, verrouillage, `DateAnonymisation` | identité et **secret d'authentification** | `/api/auth/moi` seulement |
@@ -317,9 +317,11 @@ figurent pas, et les trois sont des choix, inscrits dans la réponse elle-même 
 - **L'historique des connexions et les adresses IP.** Leur finalité est la sécurité des
   sessions, pas la description de la personne, et leur conservation est de trente jours.
 
-⚠️ Et deux choses y figurent **exprès**, parce que les retenir serait le vrai
-manquement : le **motif** d'une absence quand il existe, et le **score** attribué à
-l'agent comme candidat au remplacement. Ce score est une évaluation de la personne — un
+⚠️ Et trois choses y figurent **exprès**, parce que les retenir serait le vrai
+manquement : le **motif** d'une absence quand il existe, les **prestations dont l'agent
+est titulaire** — jours, heure, site et ville : ce qu'on prévoit de lui confier, et que
+la génération des vacations lui affecte (étape 20 de `SPEC.md`) —, et le **score**
+attribué à l'agent comme candidat au remplacement. Ce score est une évaluation de la personne — un
 des trois critères qui rendent l'AIPD probable — et la lui cacher dans sa propre réponse
 d'accès serait précisément ce que l'article 15 interdit.
 

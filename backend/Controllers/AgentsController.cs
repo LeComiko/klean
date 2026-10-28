@@ -261,6 +261,33 @@ public class AgentsController : ControllerBase
             })
             .ToListAsync();
 
+        // La conversion des jours en noms se fait en mémoire : EnListe n'a pas de
+        // traduction SQL, et un agent est titulaire de quelques prestations, pas de
+        // milliers.
+        var prestations = (await _db.Prestations.AsNoTracking()
+            .Where(p => p.AgentTitulaireId == id)
+            .OrderBy(p => p.Contrat!.Site!.Nom).ThenBy(p => p.Libelle)
+            .Select(p => new
+            {
+                p.Id,
+                p.Libelle,
+                Site = p.Contrat!.Site!.Nom,
+                Ville = p.Contrat!.Site!.Ville,
+                p.Jours,
+                p.HeureDebut
+            })
+            .ToListAsync())
+            .Select(p => new PrestationDuDossierDto
+            {
+                Id = p.Id,
+                Libelle = p.Libelle,
+                Site = p.Site,
+                Ville = p.Ville,
+                Jours = JoursDeLaSemaine.EnListe(p.Jours),
+                HeureDebut = p.HeureDebut
+            })
+            .ToList();
+
         var remplacements = await _db.Remplacements.AsNoTracking()
             .Where(r => r.AgentRemplacantId == id)
             .OrderBy(r => r.DateCreation)
@@ -296,6 +323,7 @@ public class AgentsController : ControllerBase
             Compte = await CompteDuDossierAsync(agent),
             Absences = absences,
             Interventions = interventions,
+            PrestationsTitulaire = prestations,
             Remplacements = remplacements,
             AccesALaFiche = acces
         };
