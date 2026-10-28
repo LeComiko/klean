@@ -1740,6 +1740,67 @@ formes que `RecurrenceTests` et `GenerationTests` acceptent côté serveur.
 
 ---
 
+# Étape 21 — Catalogue des prestations
+
+Numérotée après l'étape 20, dont elle est le prolongement direct. Depuis l'étape 20, la
+**prestation** porte la récurrence, et c'est donc elle qu'on saisit pour mettre une
+entreprise en route : des dizaines de lignes, site par site — hall, escaliers, sortie
+des conteneurs, rentrée des conteneurs, vitrerie, ascenseur, local poubelles. Les
+retaper à chaque site est la friction du premier jour d'un pilote. Le catalogue en
+fait une sélection.
+
+Elle passe **avant** les modules stock et devis de la « Suite », et c'est la raison de
+la remonter. Les deux s'attachent naturellement à un **type** de prestation —
+« Escaliers » consomme tel produit, se chiffre à tel temps standard — plutôt qu'à
+chaque prestation d'un site. Poser le catalogue après eux obligerait à migrer une
+table peuplée, ce que ce projet a appris à éviter. Et contrairement à l'étape 19, elle
+n'attend aucune information d'un pilote.
+
+**Forme envisagée, non arbitrée**
+
+- Une entité `TypePrestation` : `Libelle`, `DureeParDefautMinutes`, `Actif`, et
+  `EntrepriseId` comme les dix autres entités métier — filtre global, forçage dans
+  `SaveChangesAsync`, absente du `CreateDto` (`CLAUDE.md` §7).
+- Une liste de départ proposée à l'entreprise : hall, escaliers, sortie des conteneurs,
+  rentrée des conteneurs, vitrerie, ascenseur, local poubelles, parking. Chaque
+  entreprise la modifie ensuite.
+- Sur `Prestation`, un `TypePrestationId` facultatif. Choisir un type à l'écran
+  **préremplit** le libellé et la durée, qui restent modifiables.
+- Un écran de référence de plus, décrit dans `reference/descriptions.ts` — et donc
+  gardé par la parité avec les DTOs posée au lot C de l'étape 20.
+
+**À trancher avant le lot A**
+
+| Question | Options | Penchant |
+|---|---|---|
+| Portée de la liste | propre à chaque entreprise, ou commune à l'instance | **par entreprise** : les métiers diffèrent, et une liste commune serait la seule donnée métier hors tenant |
+| Nature du lien | clé étrangère avec libellé **copié** ; simple aide à la saisie sans lien | **clé et copie** : le stock et le devis ont besoin de la clé ; la copie empêche qu'un type renommé réécrive l'historique des vacations |
+| Suppression d'un type utilisé | `Restrict`, `SetNull`, ou désactivation seule | **désactivation**, comme `Actif` sur l'agent ; à confirmer contre la règle de suppression du §10 de `CLAUDE.md` |
+| Liste de départ | posée à la création de l'entreprise par l'amorçage ; bouton « importer la liste type » ; rien | à trancher : l'amorçage ne crée qu'une entreprise, les suivantes n'existent pas encore par l'API |
+| Sortie et rentrée des conteneurs | deux prestations indépendantes, comme aujourd'hui ; un « modèle de paire » qui crée les deux d'un geste | ouvert. Les deux tâches vont ensemble — la veille au soir, le lendemain matin —, selon le calendrier de collecte de la commune, donc par site. Le modèle actuel les porte déjà ; la paire n'est qu'un gain de saisie |
+| Jours et heure par défaut sur le type | oui ; non | **non** : la récurrence dépend du site — un hall se fait le lundi ici, le jeudi là. Le type porte ce qui est vrai partout |
+
+**Conséquences à vérifier au cadrage**
+
+- `RGPD.md` §3 : `TypePrestation` ne porte aucune donnée personnelle. Le dire dans la
+  cartographie plutôt que le laisser supposer.
+- Module stock : son entité pivot est écrite `PrestationProduit`. Avec le catalogue,
+  la question devient « par type ou par prestation » — par type pour la consommation
+  standard, par prestation pour l'exception d'un site. À reprendre au cadrage du stock,
+  pas ici.
+- Module devis : le « catalogue de prestations » qu'il annonce est celui-ci. Il y
+  ajoutera ses propres règles — tarif, coefficients —, sans en créer un second.
+
+**Lots, provisoires**
+
+- **A** — `TypePrestation`, migration additive, CRUD, `TypePrestationId` sur
+  `Prestation`, tests d'isolation et de saisie.
+- **B** — liste de départ, selon l'arbitrage.
+- **C** — écran de référence du catalogue, et préremplissage dans le formulaire des
+  prestations.
+
+---
+
 # Suite — non planifié
 
 Par ordre de valeur, à cadrer le moment venu.
@@ -1787,7 +1848,7 @@ fixture reste vraie par construction.
 
 **Portail conseil syndical.** Outil de transparence et de preuve, pas un ERP.
 
-**Module devis** avec catalogue de prestations, **sans IA** : des règles
+**Module devis** sur le catalogue de prestations de l'étape 21, **sans IA** : des règles
 explicites (tarif au m², coefficients de fréquence, majorations, temps
 standard) donnent le même résultat qu'un modèle opaque, mais **auditables**.
 Quand un client demande « pourquoi ce montant ? », on peut répondre.
