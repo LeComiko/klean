@@ -64,7 +64,7 @@ export function FormulaireRessource({
 }: Proprietes) {
   const [valeurs, setValeurs] = useState<ValeursFormulaire>(depart)
 
-  function changer(nom: string, valeur: string | boolean) {
+  function changer(nom: string, valeur: ValeursFormulaire[string]) {
     setValeurs((precedentes) => ({ ...precedentes, [nom]: valeur }))
   }
 
@@ -157,17 +157,28 @@ export function FormulaireRessource({
 
 interface ProprietesChamp {
   champ: ChampRessource
-  valeur: string | boolean
+  valeur: ValeursFormulaire[string]
   options: readonly OptionReference[]
   tronquee: boolean
   lectureSeule: boolean
-  onChanger: (nom: string, valeur: string | boolean) => void
+  onChanger: (nom: string, valeur: ValeursFormulaire[string]) => void
 }
 
 function Champ({ champ, valeur, options, tronquee, lectureSeule, onChanger }: ProprietesChamp) {
   const identifiant = `champ-${champ.nom}`
   const identifiantAide = `${identifiant}-aide`
   const aide = champ.aide
+
+  if (champ.type === 'jours') {
+    return (
+      <ChampJours
+        champ={champ}
+        coches={Array.isArray(valeur) ? valeur : []}
+        lectureSeule={lectureSeule}
+        onChanger={onChanger}
+      />
+    )
+  }
 
   const commun = {
     id: identifiant,
@@ -267,7 +278,8 @@ function Champ({ champ, valeur, options, tronquee, lectureSeule, onChanger }: Pr
         || champ.type === 'courriel'
         || champ.type === 'telephone'
         || champ.type === 'nombre'
-        || champ.type === 'date') && (
+        || champ.type === 'date'
+        || champ.type === 'heure') && (
         <input
           {...commun}
           {...longueur}
@@ -300,11 +312,70 @@ function Champ({ champ, valeur, options, tronquee, lectureSeule, onChanger }: Pr
   )
 }
 
+/**
+ * Les jours de passage : un groupe de cases, donc un `fieldset` et sa légende — une
+ * étiquette unique ne peut pas nommer sept contrôles, et un lecteur d'écran annonce
+ * la légende en entrant dans le groupe.
+ */
+function ChampJours({
+  champ,
+  coches,
+  lectureSeule,
+  onChanger,
+}: {
+  champ: ChampRessource
+  coches: readonly string[]
+  lectureSeule: boolean
+  onChanger: (nom: string, valeur: ValeursFormulaire[string]) => void
+}) {
+  const identifiantAide = `champ-${champ.nom}-aide`
+
+  return (
+    <fieldset
+      className="champ champ--jours"
+      aria-describedby={champ.aide === undefined ? undefined : identifiantAide}
+    >
+      <legend className="champ__libelle">{champ.libelle}</legend>
+
+      <div className="champ__jours">
+        {(champ.choix ?? []).map((jour) => (
+          <label key={jour} className="champ__jour">
+            <input
+              className="champ__case"
+              type="checkbox"
+              name={champ.nom}
+              value={jour}
+              disabled={lectureSeule}
+              checked={coches.includes(jour)}
+              onChange={(evenement) => {
+                onChanger(
+                  champ.nom,
+                  evenement.target.checked
+                    ? [...coches, jour]
+                    : coches.filter((coche) => coche !== jour),
+                )
+              }}
+            />
+            {jour}
+          </label>
+        ))}
+      </div>
+
+      {champ.aide !== undefined && (
+        <p className="champ__aide" id={identifiantAide}>
+          {champ.aide}
+        </p>
+      )}
+    </fieldset>
+  )
+}
+
 function typeDeSaisie(type: ChampRessource['type']): string {
   if (type === 'courriel') return 'email'
   if (type === 'telephone') return 'tel'
   if (type === 'nombre') return 'number'
   if (type === 'date') return 'date'
+  if (type === 'heure') return 'time'
 
   return 'text'
 }

@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
+import { readFileSync, readdirSync } from 'node:fs'
 import { describe, test } from 'node:test'
 
 import { Roles } from '../types/auth.ts'
-import { Descriptions, descriptionDe, descriptionsLisibles, enfantsDe } from './descriptions.ts'
+import {
+  Descriptions, JoursSemaine, descriptionDe, descriptionsLisibles, enfantsDe,
+} from './descriptions.ts'
 
 /**
  * `descriptions.ts` est la source unique des écrans de référence : un seul motif
@@ -87,7 +90,7 @@ describe('descriptions — structure', () => {
   test('un champ de choix propose des valeurs, un autre type n’en propose pas', () => {
     for (const description of Descriptions) {
       for (const champ of description.champs) {
-        if (champ.type === 'choix') {
+        if (champ.type === 'choix' || champ.type === 'jours') {
           assert.ok((champ.choix ?? []).length > 0, `${description.cle} → ${champ.nom}`)
         } else {
           assert.equal(champ.choix, undefined, `${description.cle} → ${champ.nom}`)
@@ -298,6 +301,24 @@ describe('descriptions — structure', () => {
     assert.match(consignes?.aide ?? '', /ne pas y nommer de personne/i)
   })
 
+  test('un champ de jours propose exactement les sept jours, du lundi au dimanche', () => {
+    // Le serveur lit les noms exacts de `JoursSemaine` et refuse tout le reste, y
+    // compris « lundi » en minuscule. Et `corpsDe` envoie dans l'ordre de `choix` :
+    // un ordre faux ici ne serait refusé nulle part, il serait seulement faux.
+    assert.deepEqual(
+      [...JoursSemaine],
+      ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'],
+    )
+
+    for (const description of Descriptions) {
+      for (const champ of description.champs) {
+        if (champ.type !== 'jours') continue
+
+        assert.deepEqual(champ.choix, JoursSemaine, `${description.cle} → ${champ.nom}`)
+      }
+    }
+  })
+
   test('seul un booléen porte un défaut booléen', () => {
     // Un `defaut: true` sur un champ texte partirait en `true` dans le corps JSON
     // et se ferait refuser par la liaison de modèle.
@@ -451,3 +472,54 @@ describe('enfantsDe', () => {
     }
   })
 })
+
+/**
+ * ⚠️ **Tout champ du `XxxCreateDto` doit être décrit**, et ce n'est pas de la
+ * complétude pour le plaisir. Les cinq endpoints CRUD remplacent la ligne entière sur
+ * un `PUT` : un champ que l'écran n'envoie pas est remis à sa valeur par défaut à
+ * chaque enregistrement, sans aucune erreur. C'est exactement ce qui s'est produit
+ * entre les lots A et C de l'étape 20 — enregistrer une prestation depuis l'écran
+ * effaçait sa récurrence. Le transitoire était connu ; la classe de défaut, elle,
+ * n'était gardée par rien.
+ *
+ * Le test lit les DTOs C# **dans le dépôt**, plutôt qu'une liste recopiée ici : une
+ * liste recopiée prouverait la recopie, et c'est l'ajout d'une propriété côté serveur
+ * qu'il faut voir rougir.
+ */
+describe('descriptions — parité avec les DTOs du serveur', () => {
+  const dossierDtos = new URL('../../../backend/DTOs/', import.meta.url)
+
+  const sources = readdirSync(dossierDtos)
+    .filter((fichier) => fichier.endsWith('.cs'))
+    .map((fichier) => readFileSync(new URL(fichier, dossierDtos), 'utf8'))
+    .join('\n')
+
+  /** Propriétés publiques d'une classe, en camelCase comme le JSON du serveur. */
+  function proprietesDe(classe: string): string[] {
+    const debut = sources.indexOf(`class ${classe}\n`)
+
+    assert.notEqual(debut, -1, `classe ${classe} introuvable dans backend/DTOs`)
+
+    const corps = sources.slice(debut, sources.indexOf('\n}', debut))
+
+    return [...corps.matchAll(/public\s+[\w<>[\]?.]+\s+(\w+)\s*\{\s*get;\s*set;/g)]
+      .map((correspondance) => {
+        const nom = correspondance[1] ?? ''
+        return nom.charAt(0).toLowerCase() + nom.slice(1)
+      })
+  }
+
+  test('chaque champ du DTO de création a son champ à l’écran, et réciproquement', () => {
+    for (const description of Descriptions) {
+      const singulier = description.cle.slice(0, -1)
+      const classe = `${singulier.charAt(0).toUpperCase()}${singulier.slice(1)}CreateDto`
+
+      assert.deepEqual(
+        description.champs.map((champ) => champ.nom).toSorted(),
+        proprietesDe(classe).toSorted(),
+        `${description.cle} ↔ ${classe}`,
+      )
+    }
+  })
+})
+

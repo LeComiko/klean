@@ -61,6 +61,14 @@ const TypesDAbsence = ['Maladie', 'Conge', 'Indisponibilite', 'Retard', 'Autre']
  */
 const SansMotif = ['Maladie'] as const
 
+/**
+ * Les noms exacts de `JoursSemaine`, du lundi au dimanche. L'ordre est celui de
+ * l'envoi : `corpsDe` les range ainsi, quel que soit l'ordre des clics.
+ */
+export const JoursSemaine = [
+  'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche',
+] as const
+
 const Clients: DescriptionRessource = {
   cle: 'clients',
   chemin: '/clients',
@@ -263,11 +271,18 @@ const Contrats: DescriptionRessource = {
       type: 'texte',
       requis: true,
       longueurMax: 100,
-      // Texte libre côté serveur, et c'est assumé en V1 : aucune planification
-      // automatique ne le lit, les interventions sont créées une par une.
-      aide: 'En clair, par exemple « Lundi, mercredi, vendredi ». Elle désigne le contrat dans les listes.',
+      // Texte libre côté serveur, et c'est assumé : la génération ne le lit pas, elle
+      // lit les jours de chaque prestation (SPEC.md, étape 20). Le dire évite de
+      // croire qu'écrire « lundi » ici planifie quoi que ce soit.
+      aide: 'En clair, par exemple « Lundi, mercredi, vendredi ». Elle désigne le contrat dans les listes ; les jours générés sont ceux de ses prestations.',
     },
     { nom: 'actif', libelle: 'Actif', type: 'booleen', defaut: true },
+    {
+      nom: 'inclutJoursFeries',
+      libelle: 'Travaillé les jours fériés',
+      type: 'booleen',
+      aide: 'Cochée, la génération crée aussi les vacations des jours fériés — un hôpital, une résidence services. Décochée, elle les saute.',
+    },
   ],
 
   rolesLecture: RolesInternes,
@@ -290,6 +305,9 @@ const Prestations: DescriptionRessource = {
     { nom: 'libelle', libelle: 'Libellé' },
     { nom: 'contratId', libelle: 'Contrat', reference: 'contrats' },
     { nom: 'dureeEstimeeMinutes', libelle: 'Durée (min)', chiffres: true },
+    { nom: 'jours', libelle: 'Jours' },
+    { nom: 'heureDebut', libelle: 'Heure', chiffres: true },
+    { nom: 'agentTitulaireId', libelle: 'Titulaire', reference: 'agents' },
   ],
 
   champs: [
@@ -312,6 +330,29 @@ const Prestations: DescriptionRessource = {
       // Décrire l'effet : cette durée n'est pas documentaire, elle pèse un tiers du
       // score de remplacement par la charge hebdomadaire (CLAUDE.md §8).
       aide: 'Alimente la charge de la semaine, qui compte pour 35 points sur 100 dans le classement des remplaçants.',
+    },
+    {
+      nom: 'jours',
+      libelle: 'Jours de passage',
+      type: 'jours',
+      choix: JoursSemaine,
+      aide: 'Les jours cochés font créer une vacation par semaine, depuis le planning. Aucun jour coché : la prestation se planifie à la main.',
+    },
+    {
+      nom: 'heureDebut',
+      libelle: 'Heure de début',
+      type: 'heure',
+      // Pas `requis` : l'heure ne l'est que si un jour est coché, et le serveur le dit
+      // en français. La rendre obligatoire partout bloquerait les prestations
+      // planifiées à la main, qui n'en ont pas.
+      aide: 'Obligatoire dès qu’un jour est coché.',
+    },
+    {
+      nom: 'agentTitulaireId',
+      libelle: 'Titulaire',
+      type: 'reference',
+      reference: 'agents',
+      aide: 'Affecté par la génération s’il est disponible ce jour-là. Sinon la vacation reste à pourvoir.',
     },
   ],
 

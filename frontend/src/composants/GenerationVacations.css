@@ -1,0 +1,179 @@
+.generation {
+  margin-top: var(--espace-6);
+  padding: var(--espace-4) var(--espace-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-carte);
+}
+
+.generation__formulaire {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espace-3);
+}
+
+.generation__titre {
+  font-size: var(--titre-section-taille);
+  line-height: var(--titre-section-interligne);
+  font-weight: var(--titre-section-graisse);
+}
+
+.generation__libelle {
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  color: var(--texte-2);
+}
+
+.generation__date {
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-3);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-family: var(--police-chiffres);
+}
+
+.generation__date:focus {
+  border-color: var(--brand);
+}
+
+.generation__bouton {
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-6);
+  background: var(--brand);
+  color: var(--sur-brand);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+}
+
+.generation__bouton:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+
+.generation__bouton:disabled {
+  background: var(--brand-strong);
+  cursor: progress;
+}
+
+.generation__aide {
+  flex-basis: 100%;
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  color: var(--texte-2);
+}
+
+.generation__erreur {
+  margin-top: var(--espace-3);
+  color: var(--texte);
+}
+
+.generation__erreur-mot {
+  color: var(--alerte);
+}
+
+/* ---- Le rapport ---- */
+
+.rapport {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  margin-top: var(--espace-4);
+  padding-top: var(--espace-4);
+  border-top: 1px solid var(--border);
+}
+
+.rapport__entete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espace-3);
+}
+
+.rapport__resume {
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+}
+
+.rapport__fermer {
+  font-size: var(--corps-taille);
+  font-weight: 600;
+  color: var(--texte);
+  text-decoration: underline;
+}
+
+.rapport__vide,
+.rapport__aide {
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  color: var(--texte-2);
+}
+
+.rapport__section-titre {
+  font-weight: 600;
+  color: var(--texte);
+}
+
+.rapport__section {
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-bloc);
+}
+
+/* Le trait gauche de la non pourvue du planning : la même marque pour la même
+   chose. La couleur n'est pas seule, le titre la nomme. */
+.rapport__section--alerte {
+  border-left: 3px solid var(--alerte);
+}
+
+.rapport__sommaire {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-2);
+  padding: var(--espace-2) var(--espace-3);
+  cursor: pointer;
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+}
+
+.rapport__compte {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 var(--espace-2);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-pilule);
+  font-size: var(--etiquette-taille);
+  font-weight: 700;
+}
+
+.rapport__section .rapport__aide {
+  padding: 0 var(--espace-3) var(--espace-2);
+}
+
+.rapport__lignes {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.rapport__ligne {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--espace-4);
+  padding: var(--espace-2) var(--espace-3);
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  font-weight: var(--ligne-tableau-graisse);
+}
+
+.rapport__ligne + .rapport__ligne {
+  border-top: 1px solid var(--border);
+}
+
+.rapport__cause {
+  color: var(--texte-2);
+}

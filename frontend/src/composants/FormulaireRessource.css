@@ -160,6 +160,35 @@
   accent-color: var(--brand);
 }
 
+/* Les jours de passage : un fieldset sans le cadre du navigateur, qui ferait de ce
+   champ le seul encadré du formulaire. */
+.champ--jours {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.champ--jours .champ__libelle {
+  padding: 0;
+  margin-bottom: var(--espace-1);
+}
+
+.champ__jours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-2) var(--espace-4);
+}
+
+.champ__jour {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espace-2);
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  color: var(--texte);
+}
+
 /* Corps desktop, 14/20, et non l'échelle des étiquettes : une aide de champ est
    du texte à lire, pas un intitulé à repérer. À 11 px sur deux lignes elle serait
    sautée, ce qui reviendrait à ne pas l'écrire. */

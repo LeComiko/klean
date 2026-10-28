@@ -67,3 +67,32 @@ export interface PlanningNonPourvue {
 
 /** Au-delà, la charge hebdomadaire d'un agent s'affiche en `--retard`. */
 export const SeuilHeuresHebdomadaires = 30
+
+/**
+ * Miroir de `backend/DTOs/GenerationDto.cs` : ce que la génération a fait, et ce qui
+ * demande un regard.
+ *
+ * Aucun nom d'agent, ni ici ni dans les lignes — c'est voulu côté serveur, et l'écran
+ * ne doit pas le recomposer à partir de la liste des agents.
+ */
+export interface RapportGeneration {
+  du: HorodatageApi
+  au: HorodatageApi
+  creees: number
+  pourvues: number
+  dejaPresentes: number
+  nonPourvues: LigneRapportGeneration[]
+  feries: LigneRapportGeneration[]
+  orphelines: LigneRapportGeneration[]
+}
+
+export interface LigneRapportGeneration {
+  /** Nul pour un jour férié : rien n'a été créé. */
+  interventionId: string | null
+  date: HorodatageApi
+  heure: HeureApi
+  prestationId: string
+  prestation: string
+  site: string
+  cause: string
+}

@@ -27,6 +27,17 @@ export type TypeChamp =
   | 'booleen'
   /** Clé étrangère : rendue par une liste déroulante alimentée par l'API. */
   | 'reference'
+  /**
+   * Heure de la journée. Saisie `hh:mm`, envoyée `hh:mm:ss` : la sérialisation d'un
+   * `TimeSpan` par le serveur, qui ne lit pas la forme courte.
+   */
+  | 'heure'
+  /**
+   * Jours de la semaine, en cases à cocher. Envoyés en **tableau** de noms, du lundi
+   * au dimanche — `JoursDeLaSemaine.TryLire` côté serveur, qui refuse toute autre
+   * forme. Les valeurs possibles sont dans `choix`.
+   */
+  | 'jours'
 
 /** Genre grammatical, pour accorder « créé/créée » et « le/la ». */
 export type Genre = 'masculin' | 'feminin'
@@ -53,7 +64,10 @@ export interface ChampRessource {
    */
   defaut?: string | boolean
 
-  /** Pour `choix` : les valeurs exactes que l'énumération du serveur accepte. */
+  /**
+   * Pour `choix` et `jours` : les valeurs exactes que le serveur accepte. Pour `jours`,
+   * leur ordre est celui de l'envoi.
+   */
   choix?: readonly string[]
 
   /** Pour `reference` : la clé de la description visée. */

@@ -19,8 +19,11 @@ import { depuisChaineIso, formaterDateLongue, jourIso } from '../utils/dates.ts'
  * pas dans le fuseau du développeur.
  */
 
-/** Valeurs d'un formulaire, telles qu'elles partiront dans le corps JSON. */
-export type ValeursFormulaire = Record<string, string | boolean>
+/**
+ * Valeurs d'un formulaire, telles qu'elles partiront dans le corps JSON. Un tableau
+ * pour les jours cochés : une chaîne jointe serait un format de plus à découper.
+ */
+export type ValeursFormulaire = Record<string, string | boolean | readonly string[]>
 
 /** Une ligne telle que le serveur la rend. */
 export type Ligne = Record<string, unknown>
@@ -61,7 +64,7 @@ export function departCreation(
   for (const champ of champs) {
     valeurs[champ.nom] = champ.nom in imposees
       ? imposees[champ.nom]
-      : champ.defaut ?? (champ.type === 'booleen' ? false : '')
+      : champ.defaut ?? videDe(champ)
   }
 
   return valeurs
@@ -86,6 +89,14 @@ export function masque(champ: ChampRessource, valeurs: ValeursFormulaire): boole
   return typeof pivot === 'string' && condition.vaut.includes(pivot)
 }
 
+/** Valeur d'un champ que rien n'a encore rempli. */
+function videDe(champ: ChampRessource): string | boolean | readonly string[] {
+  if (champ.type === 'booleen') return false
+  if (champ.type === 'jours') return []
+
+  return ''
+}
+
 export function departOuverture(
   champs: readonly ChampRessource[],
   ligne: Ligne,
@@ -100,8 +111,24 @@ export function departOuverture(
       continue
     }
 
+    if (champ.type === 'jours') {
+      valeurs[champ.nom] = Array.isArray(brut)
+        ? brut.filter((jour): jour is string => typeof jour === 'string')
+        : []
+      continue
+    }
+
     if (brut === null || brut === undefined) {
       valeurs[champ.nom] = ''
+      continue
+    }
+
+    // `<input type="time">` attend `hh:mm`, le serveur envoie `hh:mm:ss`. Une valeur
+    // avec secondes y est acceptée par certains navigateurs et affichée « 07:00:00 »,
+    // par d'autres ignorée — le champ paraît alors vide sur une prestation qui a une
+    // heure, et l'enregistrer l'effacerait.
+    if (champ.type === 'heure' && typeof brut === 'string') {
+      valeurs[champ.nom] = brut.slice(0, 5)
       continue
     }
 
@@ -154,6 +181,16 @@ export function corpsDe(
       continue
     }
 
+    // ⚠️ Un tableau, toujours, et jamais `null` : aucun jour coché s'écrit `[]`, ce
+    // que le serveur lit « planifiée à la main ». Dans l'ordre de `choix`, du lundi au
+    // dimanche, quel que soit l'ordre des clics — et seulement des valeurs connues,
+    // pour qu'une valeur égarée soit retirée ici plutôt que refusée là-bas.
+    if (champ.type === 'jours') {
+      const coches = Array.isArray(brut) ? brut : []
+      corps[champ.nom] = (champ.choix ?? []).filter((jour) => coches.includes(jour))
+      continue
+    }
+
     const texte = typeof brut === 'string' ? brut.trim() : ''
 
     if (texte === '') {
@@ -161,7 +198,9 @@ export function corpsDe(
       continue
     }
 
-    corps[champ.nom] = champ.type === 'nombre' ? Number(texte) : texte
+    corps[champ.nom] = champ.type === 'nombre'
+      ? Number(texte)
+      : champ.type === 'heure' && /^\d{2}:\d{2}$/.test(texte) ? `${texte}:00` : texte
   }
 
   return corps
@@ -190,7 +229,13 @@ export function rendu(
 
   if (typeof valeur === 'boolean') return valeur ? 'Oui' : 'Non'
 
+  if (Array.isArray(valeur)) {
+    return valeur.length === 0 ? Vide : valeur.map((jour) => String(jour).slice(0, 3)).join(' ')
+  }
+
   const champ = champs.find((candidat) => candidat.nom === colonne.nom)
+
+  if (champ?.type === 'heure' && typeof valeur === 'string') return valeur.slice(0, 5)
 
   // ⚠️ Trois fonctions éprouvées, et dans cet ordre. Le serveur envoie les jours à
   // minuit UTC : `jourIso` extrait la sous-chaîne, `depuisChaineIso` construit une

@@ -497,3 +497,71 @@ describe('les formules de langue', () => {
     assert.equal(majuscule(''), '')
   })
 })
+
+/**
+ * La récurrence d'une prestation (étape 20) : deux types de champ que le serveur lit
+ * à la lettre. `JoursDeLaSemaine.TryLire` refuse toute autre forme qu'un tableau de
+ * noms exacts, et un `TimeSpan` ne se lit pas en `hh:mm`.
+ */
+describe('les jours et l’heure', () => {
+  const Semaine = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'] as const
+
+  const Recurrence: readonly ChampRessource[] = [
+    { nom: 'jours', libelle: 'Jours', type: 'jours', choix: Semaine },
+    { nom: 'heureDebut', libelle: 'Heure', type: 'heure' },
+  ]
+
+  test('une création part sans jour coché et sans heure', () => {
+    assert.deepEqual(departCreation(Recurrence), { jours: [], heureDebut: '' })
+  })
+
+  test('l’ouverture reprend les jours et rend l’heure sans secondes', () => {
+    // Un `<input type="time">` qui reçoit « 07:30:00 » l'ignore dans certains
+    // navigateurs : le champ paraît vide, et l'enregistrer effacerait l'heure.
+    assert.deepEqual(
+      departOuverture(Recurrence, { jours: ['Lundi', 'Jeudi'], heureDebut: '07:30:00' }),
+      { jours: ['Lundi', 'Jeudi'], heureDebut: '07:30' },
+    )
+  })
+
+  test('une prestation sans récurrence s’ouvre sans jour et sans heure', () => {
+    assert.deepEqual(
+      departOuverture(Recurrence, { jours: [], heureDebut: null }),
+      { jours: [], heureDebut: '' },
+    )
+  })
+
+  test('les jours partent du lundi au dimanche, quel que soit l’ordre des clics', () => {
+    const corps = corpsDe(Recurrence, { jours: ['Vendredi', 'Lundi', 'Mercredi'], heureDebut: '07:00' })
+
+    assert.deepEqual(corps.jours, ['Lundi', 'Mercredi', 'Vendredi'])
+  })
+
+  test('aucun jour coché part en tableau vide, jamais en null', () => {
+    // `null` serait lu par le serveur comme « champ absent », que le `PUT` remet à
+    // vide de toute façon ; mais le tableau vide dit ce que l'écran veut dire.
+    assert.deepEqual(corpsDe(Recurrence, { jours: [], heureDebut: '' }), { jours: [], heureDebut: null })
+  })
+
+  test('une valeur inconnue est retirée plutôt qu’envoyée', () => {
+    assert.deepEqual(corpsDe(Recurrence, { jours: ['lundi', 'Jeudi'], heureDebut: '' }).jours, ['Jeudi'])
+  })
+
+  test('l’heure part avec ses secondes, comme un TimeSpan', () => {
+    assert.equal(corpsDe(Recurrence, { jours: ['Lundi'], heureDebut: '07:30' }).heureDebut, '07:30:00')
+  })
+
+  test('la colonne montre les jours abrégés et l’heure sans secondes', () => {
+    const resoudre = () => ''
+
+    assert.equal(
+      rendu({ jours: ['Lundi', 'Jeudi'] }, { nom: 'jours', libelle: 'Jours' }, Recurrence, resoudre),
+      'Lun Jeu',
+    )
+    assert.equal(rendu({ jours: [] }, { nom: 'jours', libelle: 'Jours' }, Recurrence, resoudre), Vide)
+    assert.equal(
+      rendu({ heureDebut: '07:30:00' }, { nom: 'heureDebut', libelle: 'Heure' }, Recurrence, resoudre),
+      '07:30',
+    )
+  })
+})

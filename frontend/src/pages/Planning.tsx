@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { getPlanningSemaine } from '../api/planning'
+import { genererVacations, getPlanningSemaine } from '../api/planning'
 import { accepter, getCandidats, ouvrirRemplacement, proposer, refuser } from '../api/remplacements'
+import { useAuth } from '../auth/contexte'
 import { CartesKpi } from '../composants/CartesKpi'
 import { EnTetePage } from '../composants/EnTetePage'
+import { GenerationVacations } from '../composants/GenerationVacations'
 import { GrillePlanning } from '../composants/GrillePlanning'
 import { ListeNonPourvues } from '../composants/ListeNonPourvues'
 import { PanneauCandidats } from '../composants/PanneauCandidats'
 import { SelecteurSemaine } from '../composants/SelecteurSemaine'
-import type { PlanningSemaine } from '../types/planning'
+import { aUnRole, Roles } from '../types/auth'
+import type { PlanningSemaine, RapportGeneration } from '../types/planning'
 import type { Candidat } from '../types/remplacement'
-import { lundiDeLaSemaine, versChaineIso } from '../utils/dates'
+import { ajouterJours, lundiDeLaSemaine, versChaineIso } from '../utils/dates'
 import './Planning.css'
 
 /** Semaine obtenue, avec la clé de la demande à laquelle elle répond. */
@@ -31,6 +34,16 @@ interface Panneau {
   remplacementId: string
   candidats: Candidat[]
 }
+
+/**
+ * Qui génère : le reflet de `RolesKlean.Exploitation` sur `POST /api/planning/generer`.
+ * Le chef d'équipe lit le planning sans pouvoir générer, et un bouton qui répondrait
+ * 403 est une faute d'interface (CLAUDE.md §11).
+ */
+const RolesGeneration: readonly string[] = [Roles.Administrateur, Roles.Responsable]
+
+/** Douze semaines, comme `ServiceGeneration.SemainesMaximum`. */
+const JoursHorizon = 12 * 7
 
 function messageDe(echec: unknown, repli: string): string {
   return echec instanceof Error ? echec.message : repli
@@ -60,6 +73,25 @@ export function Planning() {
   const [panneau, setPanneau] = useState<Panneau | null>(null)
   const [panneauEchoue, setPanneauEchoue] = useState<Echouee | null>(null)
   const [agentEnCours, setAgentEnCours] = useState<string | null>(null)
+
+  const { profil } = useAuth()
+  const peutGenerer = profil !== null && aUnRole(profil, RolesGeneration)
+  const [generationEnCours, setGenerationEnCours] = useState(false)
+  const [erreurGeneration, setErreurGeneration] = useState<string | null>(null)
+  const [rapport, setRapport] = useState<RapportGeneration | null>(null)
+
+  // Bornes de la saisie, en jour **local**. Le serveur raisonne en jour UTC : autour
+  // de minuit les deux diffèrent d'un jour, et son 400 en français le dit alors.
+  // Proposé par défaut : jusqu'au dimanche de la quatrième semaine, celle-ci comprise.
+  const [bornes] = useState(() => {
+    const aujourdhui = new Date()
+
+    return {
+      minimum: versChaineIso(aujourdhui),
+      maximum: versChaineIso(ajouterJours(aujourdhui, JoursHorizon)),
+      depart: versChaineIso(ajouterJours(lundiDeLaSemaine(aujourdhui), 27)),
+    }
+  })
 
   const lundiIso = versChaineIso(lundi)
   const cle = `${lundiIso}#${String(rechargement)}`
@@ -175,6 +207,23 @@ export function Planning() {
     }
   }
 
+  async function generer(jusquAu: string) {
+    setGenerationEnCours(true)
+    setErreurGeneration(null)
+
+    try {
+      setRapport(await genererVacations(jusquAu))
+
+      // La semaine affichée a pu recevoir des vacations : elle est rechargée, et ses
+      // non pourvues apparaissent à leur place dans la liste du dessous.
+      setRechargement((tour) => tour + 1)
+    } catch (echec: unknown) {
+      setErreurGeneration(messageDe(echec, 'Génération refusée.'))
+    } finally {
+      setGenerationEnCours(false)
+    }
+  }
+
   return (
     <>
       <EnTetePage
@@ -210,6 +259,23 @@ export function Planning() {
               heures={obtenue.semaine.totalHeures}
               nonPourvues={obtenue.semaine.totalNonPourvues}
             />
+
+            {peutGenerer && (
+              <GenerationVacations
+                minimum={bornes.minimum}
+                maximum={bornes.maximum}
+                depart={bornes.depart}
+                enCours={generationEnCours}
+                erreur={erreurGeneration}
+                rapport={rapport}
+                onGenerer={(jusquAu) => {
+                  void generer(jusquAu)
+                }}
+                onFermerRapport={() => {
+                  setRapport(null)
+                }}
+              />
+            )}
 
             <GrillePlanning semaine={obtenue.semaine} />
 

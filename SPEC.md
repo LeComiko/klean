@@ -1643,9 +1643,10 @@ l'avenir, et `Restrict` rendrait insupprimable un agent qui n'a jamais travaill�
 colonne retiré laissait le test vert, la conversion d'énumération d'EF relisant la
 chaîne vide comme `Aucun` sans rien lever : le test lit désormais la valeur stockée.
 
-⚠️ **Transitoire jusqu'au lot C** : les écrans de référence n'envoient pas encore les
-nouveaux champs, et un `PUT` remplace la ligne entière. Enregistrer une prestation ou un
-contrat depuis l'écran remet donc à zéro sa récurrence et son drapeau de fériés.
+~~⚠️ **Transitoire jusqu'au lot C**~~ — fermé au lot C. Les écrans de référence
+n'envoyaient pas encore les nouveaux champs, et un `PUT` remplace la ligne entière.
+Enregistrer une prestation ou un contrat depuis l'écran remettait donc à zéro sa
+récurrence et son drapeau de fériés.
 
 **Lot B fait.** `POST /api/planning/generer { jusquAu }`, rôles `Exploitation`.
 
@@ -1705,8 +1706,37 @@ dans `DossierAgentTests`. Vingt sabotages joués, tous rougis.
 matin à Paris, la génération peut créer une vacation du jour qui vient de finir. Le
 modèle n'a pas de fuseau par entreprise.
 
-**Lot C** — champs `heure` et `jours` des écrans de référence, titulaire et drapeau
-des fériés, bouton « Générer jusqu'au … » et rapport sur le planning.
+**Lot C fait.**
+
+- **Les prestations** reçoivent trois champs : les jours (sept cases), l'heure de
+  début et le titulaire. Les deux nouveaux types de champ sont `jours` et `heure`.
+  - Les jours partent en tableau, du lundi au dimanche, quel que soit l'ordre des clics.
+  - L'heure part avec ses secondes, comme un `TimeSpan`.
+- **Les contrats** reçoivent le drapeau « Travaillé les jours fériés ».
+- **Le planning** porte « Générer les vacations jusqu'au … » et son rapport.
+  - Seuls l'administrateur et le responsable voient le bouton.
+  - La date proposée est le dimanche de la quatrième semaine, et la saisie est bornée
+    à douze semaines.
+  - Le rapport donne un résumé, puis trois sections repliables : les vacations restées
+    à pourvoir, les jours fériés sautés, les orphelines.
+  - La semaine affichée est rechargée après la génération.
+
+⚠️ **La classe de défaut du transitoire est désormais gardée.** Un test de
+`descriptions.test.ts` lit les DTOs C# du dépôt. Il exige que chaque propriété d'un
+`XxxCreateDto` ait son champ à l'écran, et réciproquement, sur les sept ressources.
+Un champ ajouté côté serveur et oublié côté écran fait rougir ce test, au lieu d'être
+remis à zéro à chaque enregistrement. Un sabotage l'a vérifié : on retire
+`inclutJoursFeries` de la description, et le test rougit.
+
+⚠️ **Le choix du titulaire coûte une lecture journalisée.** L'écran des prestations
+charge `GET /api/agents` pour remplir sa liste déroulante. Chaque ouverture laisse donc
+une ligne « Agent / Liste » dans le journal d'accès, comme l'écran des absences le
+faisait déjà. Une route de choix qui ne rendrait que l'identifiant et le nom allégerait
+le journal comme la réponse. Ce n'est pas fait.
+
+Non éprouvé dans un navigateur : cela demande une session sur la base de
+développement. Les corps envoyés sont ceux que `valeurs.test.ts` fixe, et ce sont les
+formes que `RecurrenceTests` et `GenerationTests` acceptent côté serveur.
 
 ---
 

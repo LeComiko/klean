@@ -1385,6 +1385,12 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   appliquer `EcritureReference` présenterait un formulaire en lecture seule sur la
   seule chose que l'étape 15 demande de saisir — la faute d'interface symétrique de
   celle que tout ce motif évite.
+- **Un écran de référence décrit chaque champ de son DTO de création, sans exception.**
+  Les `PUT` remplacent la ligne entière : un champ que l'écran n'envoie pas est remis à
+  son défaut à chaque enregistrement, sans erreur. C'est arrivé entre les lots A et C de
+  l'étape 20. `descriptions.test.ts` lit désormais `backend/DTOs/*.cs` et compare les
+  deux listes ; ajouter une propriété à un `XxxCreateDto` demande donc d'ajouter son
+  champ à la description.
 - **La logique de conversion sort du composant.** `src/reference/valeurs.ts` porte
   le passage d'une ligne du serveur au formulaire et au corps JSON, parce que c'est
   la seule partie qui écrit des données fausses au lieu d'afficher quelque chose de
