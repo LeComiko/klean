@@ -1,7 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
+using Klean.Api.Data;
 using Klean.Api.DTOs;
 using Klean.Api.Tests.Infrastructure;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Klean.Api.Tests;
 
@@ -437,6 +440,110 @@ public class CrudTests : IAsyncLifetime
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, reponse.StatusCode);
+    }
+
+    /// <summary>
+    /// <c>DateCreation</c> est la seule date d'un site ou d'un client sans contrat,
+    /// donc celle dont part leur conservation (RGPD.md §9.7). Une date que le corps
+    /// de la requête pourrait poser rendrait une ligne purgeable à volonté, ou
+    /// impurgeable : le serveur la pose, et le <c>PUT</c> n'y touche pas.
+    ///
+    /// Les corps sont des objets anonymes, pas les <c>CreateDto</c>, pour pouvoir
+    /// y forger la propriété que ces derniers n'ont pas.
+    /// </summary>
+    [Fact]
+    public async Task DateCreation_posee_par_le_serveur_et_inchangee_par_PUT()
+    {
+        var forgee = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var avant = DateTime.UtcNow;
+
+        var client = await Creer<ClientDto>("/api/clients", new
+        {
+            Nom = "Client daté",
+            Type = "Copropriete",
+            DateCreation = forgee
+        });
+        var site = await Creer<SiteDto>("/api/sites", new
+        {
+            ClientId = client.Id,
+            Nom = "Site daté",
+            Adresse = "1 rue du Test",
+            Latitude = 48.85,
+            Longitude = 2.33,
+            DateCreation = forgee
+        });
+
+        Assert.InRange(client.DateCreation, avant.AddSeconds(-5), DateTime.UtcNow.AddSeconds(5));
+        Assert.InRange(site.DateCreation, avant.AddSeconds(-5), DateTime.UtcNow.AddSeconds(5));
+
+        // Relue en base, et non prise dans la réponse du POST : PostgreSQL tronque
+        // à la microseconde ce que .NET porte au dixième.
+        var clientRelu = await _client.GetFromJsonAsync<ClientDto>($"/api/clients/{client.Id}");
+        var siteRelu = await _client.GetFromJsonAsync<SiteDto>($"/api/sites/{site.Id}");
+
+        var modificationClient = await _client.PutAsJsonAsync($"/api/clients/{client.Id}", new
+        {
+            Nom = "Client daté, renommé",
+            Type = "Copropriete",
+            DateCreation = forgee
+        });
+        var modificationSite = await _client.PutAsJsonAsync($"/api/sites/{site.Id}", new
+        {
+            ClientId = client.Id,
+            Nom = "Site daté, renommé",
+            Adresse = "1 rue du Test",
+            Latitude = 48.85,
+            Longitude = 2.33,
+            DateCreation = forgee
+        });
+        Assert.Equal(HttpStatusCode.NoContent, modificationClient.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, modificationSite.StatusCode);
+
+        var clientApres = await _client.GetFromJsonAsync<ClientDto>($"/api/clients/{client.Id}");
+        var siteApres = await _client.GetFromJsonAsync<SiteDto>($"/api/sites/{site.Id}");
+
+        Assert.Equal("Client daté, renommé", clientApres!.Nom);
+        Assert.Equal(clientRelu!.DateCreation, clientApres.DateCreation);
+        Assert.Equal(siteRelu!.DateCreation, siteApres!.DateCreation);
+    }
+
+    /// <summary>
+    /// Ce que la migration fait aux lignes antérieures à la colonne. Sans défaut en
+    /// base, une colonne <c>timestamp</c> non nullable les date du 1er janvier de
+    /// l'an 1, et le script de conservation les voit toutes hors délai : la purge la
+    /// plus large possible, sur les lignes les moins bien connues.
+    ///
+    /// Une insertion SQL qui omet la colonne est exactement la situation d'une ligne
+    /// existante au moment de l'<c>ALTER TABLE</c>, d'où le passage direct par la
+    /// base — c'est ce que l'API ne peut pas produire.
+    /// </summary>
+    [Fact]
+    public async Task Ligne_inseree_sans_DateCreation_est_datee_par_la_base()
+    {
+        var clientId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var entreprise = _fixture.EntrepriseAlpha;
+
+        await _fixture.AvecServicesAsync(async services =>
+        {
+            var db = services.GetRequiredService<KleanDbContext>();
+
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO "Clients" ("Id", "EntrepriseId", "Nom", "Type")
+                VALUES ({clientId}, {entreprise}, 'Client antérieur', 'Autre')
+                """);
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO "Sites" ("Id", "EntrepriseId", "ClientId", "Nom", "Adresse", "Latitude", "Longitude")
+                VALUES ({siteId}, {entreprise}, {clientId}, 'Site antérieur', '1 rue du Test', 48.85, 2.33)
+                """);
+        });
+
+        var client = await _client.GetFromJsonAsync<ClientDto>($"/api/clients/{clientId}");
+        var site = await _client.GetFromJsonAsync<SiteDto>($"/api/sites/{siteId}");
+
+        var maintenant = DateTime.UtcNow;
+        Assert.InRange(client!.DateCreation, maintenant.AddMinutes(-1), maintenant.AddMinutes(1));
+        Assert.InRange(site!.DateCreation, maintenant.AddMinutes(-1), maintenant.AddMinutes(1));
     }
 
     // ---- fabriques de contexte ----

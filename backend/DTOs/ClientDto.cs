@@ -16,8 +16,13 @@ public class ClientDto
     public string? Ville { get; set; }
     public string? Email { get; set; }
     public string? Telephone { get; set; }
+    public DateTime DateCreation { get; set; }
 }
 
+/// <summary>
+/// Création et mise à jour. <c>DateCreation</c> est absente volontairement :
+/// elle est posée par le serveur à la création et jamais modifiée ensuite.
+/// </summary>
 public class ClientCreateDto
 {
     [Required]

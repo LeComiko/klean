@@ -99,6 +99,15 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
 
         modelBuilder.Entity<Entreprise>().HasIndex(e => e.Siret).IsUnique();
 
+        // ⚠️ Le défaut en base n'est pas là pour l'application, qui pose la valeur
+        // elle-même : il est là pour les lignes qui existaient avant la colonne.
+        // Sans lui, la migration les daterait du 1er janvier de l'an 1, et
+        // `conservation-donnees-metier.sql` les verrait toutes hors délai depuis
+        // deux mille ans. `now()` les date du jour de la migration — une borne
+        // haute de leur vraie création, donc une purge retardée, jamais avancée.
+        modelBuilder.Entity<Site>().Property(e => e.DateCreation).HasDefaultValueSql("now()");
+        modelBuilder.Entity<Client>().Property(e => e.DateCreation).HasDefaultValueSql("now()");
+
         // ---- Comportements de suppression ----
         //
         // Une seule règle, et elle se lit sans exception à retenir :

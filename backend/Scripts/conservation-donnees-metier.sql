@@ -9,7 +9,8 @@
 --   Interventions ................. 5 ans après la date prévue
 --   Absences ...................... 5 ans après la date de fin
 --   Remplacements ................. 1 an après leur création
---   Contrats, sites, clients ...... 5 ans après la fin du dernier contrat
+--   Contrats, sites, clients ...... 5 ans après la fin du dernier contrat ;
+--                                   à défaut de contrat, 5 ans après la création
 --   Agents ........................ 5 ans après la fin du contrat de travail,
 --                                   et par PSEUDONYMISATION, pas par suppression
 --
@@ -95,17 +96,32 @@ WHERE c."DateFin" IS NOT NULL
 
 UNION ALL
 
--- Un site n'a pas de date propre : il est hors délai quand TOUS ses contrats le sont,
--- et il n'en faut aucun en cours. Un site sans aucun contrat n'est jamais compté ici —
--- il n'a pas de date de fin dont partir, et c'est une donnée à traiter à la main.
+-- Un site est hors délai quand aucun de ses contrats n'est en cours ni échu depuis
+-- moins de 5 ans, ET qu'il a été créé il y a plus de 5 ans. La seconde condition est
+-- celle qui manquait avant `DateCreation` (RGPD.md §9.7) : sans elle, un site saisi
+-- hier et pas encore sous contrat ressemblait trait pour trait à un site dont les
+-- contrats ont été purgés. Pour un site qui a eu des contrats, elle ne retire rien —
+-- il a été créé avant leur échéance.
+--
+-- ⚠️ Avant `DateCreation`, la colonne `supprimable_maintenant` valait TOUJOURS zéro
+-- sur cette ligne et la suivante : elle exigeait à la fois qu'un contrat existe (pour
+-- avoir une date) et qu'il n'en existe aucun (pour être supprimable). C'était §9.7
+-- sous une autre forme.
+--
+-- `Stocks.EmplacementId` n'a pas de clé étrangère (CLAUDE.md §5) : rien en base
+-- n'empêcherait de supprimer un site qui porte encore du stock, qui deviendrait
+-- orphelin. La garde est donc écrite ici.
 SELECT
     'sites',
     count(*),
     count(*) FILTER (
         WHERE NOT EXISTS (SELECT 1 FROM "Contrats" c2 WHERE c2."SiteId" = s."Id")
+          AND NOT EXISTS (
+              SELECT 1 FROM "Stocks" st
+              WHERE st."TypeEmplacement" = 'Site' AND st."EmplacementId" = s."Id")
     )
 FROM "Sites" s
-WHERE EXISTS (SELECT 1 FROM "Contrats" c3 WHERE c3."SiteId" = s."Id")
+WHERE s."DateCreation" < now() - interval '5 years'
   AND NOT EXISTS (
       SELECT 1 FROM "Contrats" c4
       WHERE c4."SiteId" = s."Id"
@@ -114,14 +130,27 @@ WHERE EXISTS (SELECT 1 FROM "Contrats" c3 WHERE c3."SiteId" = s."Id")
 
 UNION ALL
 
+-- Même règle, un niveau plus haut : aucun site du client sous un contrat en cours ou
+-- récent, aucun site créé depuis moins de 5 ans, et le client lui-même créé il y a
+-- plus de 5 ans.
+--
+-- `AspNetUsers.ClientId` n'a pas de clé étrangère non plus : un compte `ClientSyndic`
+-- rattaché à un client supprimé ne verrait plus rien, sans qu'aucune erreur le dise.
+-- Il faut d'abord pseudonymiser ce compte (`POST /api/auth/comptes/{id}/anonymiser`).
 SELECT
     'clients',
     count(*),
     count(*) FILTER (
         WHERE NOT EXISTS (SELECT 1 FROM "Sites" s2 WHERE s2."ClientId" = cl."Id")
+          AND NOT EXISTS (SELECT 1 FROM "AspNetUsers" u WHERE u."ClientId" = cl."Id")
     )
 FROM "Clients" cl
-WHERE EXISTS (SELECT 1 FROM "Sites" s3 WHERE s3."ClientId" = cl."Id")
+WHERE cl."DateCreation" < now() - interval '5 years'
+  AND NOT EXISTS (
+      SELECT 1 FROM "Sites" s3
+      WHERE s3."ClientId" = cl."Id"
+        AND s3."DateCreation" >= now() - interval '5 years'
+  )
   AND NOT EXISTS (
       SELECT 1
       FROM "Sites" s4
@@ -131,16 +160,28 @@ WHERE EXISTS (SELECT 1 FROM "Sites" s3 WHERE s3."ClientId" = cl."Id")
   );
 
 \echo ''
-\echo '=== 5. Sites et clients sans aucun contrat — à traiter à la main ==='
+\echo '=== 5. Sites et clients sans aucun contrat, par ancienneté ==='
 
--- Aucune date dont partir : ni création, ni fin. Ce sont des saisies abandonnées, ou
--- des prospects. Le registre doit en dire quelque chose, et le script ne peut pas
--- décider pour lui.
-SELECT 'sites sans contrat'  AS cas, count(*) AS lignes
-FROM "Sites" s WHERE NOT EXISTS (SELECT 1 FROM "Contrats" c WHERE c."SiteId" = s."Id")
+-- Des prospects, des saisies abandonnées, ou des reliquats dont les contrats ont été
+-- purgés. Ceux de plus de 5 ans sont déjà comptés en section 4 ; ceux de moins de 5
+-- ans sont dans leur délai.
+--
+-- ⚠️ Les lignes antérieures à la migration `DateCreationSurSitesEtClients` sont
+-- datées du jour de cette migration, faute de mieux : c'est une borne haute de leur
+-- vraie création, donc leur purge est retardée, jamais avancée.
+SELECT
+    'sites sans contrat'                                                         AS cas,
+    count(*) FILTER (WHERE s."DateCreation" >= now() - interval '5 years')      AS dans_le_delai,
+    count(*) FILTER (WHERE s."DateCreation" <  now() - interval '5 years')      AS hors_delai
+FROM "Sites" s
+WHERE NOT EXISTS (SELECT 1 FROM "Contrats" c WHERE c."SiteId" = s."Id")
 UNION ALL
-SELECT 'clients sans site', count(*)
-FROM "Clients" cl WHERE NOT EXISTS (SELECT 1 FROM "Sites" s WHERE s."ClientId" = cl."Id");
+SELECT
+    'clients sans site',
+    count(*) FILTER (WHERE cl."DateCreation" >= now() - interval '5 years'),
+    count(*) FILTER (WHERE cl."DateCreation" <  now() - interval '5 years')
+FROM "Clients" cl
+WHERE NOT EXISTS (SELECT 1 FROM "Sites" s WHERE s."ClientId" = cl."Id");
 
 \echo ''
 \echo '=== 6. Agents : pseudonymisation, jamais suppression ==='
@@ -221,18 +262,21 @@ WHERE a."DateAnonymisation" IS NOT NULL
 -- WHERE c."DateFin" IS NOT NULL AND c."DateFin" < now() - interval '5 years'
 --   AND NOT EXISTS (SELECT 1 FROM "Prestations" p WHERE p."ContratId" = c."Id");
 --
--- -- 6. Sites devenus sans contrat, qui en avaient
+-- -- 6. Sites sans contrat, créés il y a plus de 5 ans, sans stock rattaché
+-- --    Couvre d'un même geste le site dont les contrats viennent d'être purgés par
+-- --    le DELETE 5 et le prospect jamais signé. `DateCreation` les distingue d'un
+-- --    site saisi hier — c'est tout l'objet de la colonne (RGPD.md §9.7).
 -- DELETE FROM "Sites" s
--- WHERE NOT EXISTS (SELECT 1 FROM "Contrats" c WHERE c."SiteId" = s."Id")
---   AND EXISTS (SELECT 1 FROM "Interventions" x WHERE false);  -- garde-fou : voir ci-dessous
+-- WHERE s."DateCreation" < now() - interval '5 years'
+--   AND NOT EXISTS (SELECT 1 FROM "Contrats" c WHERE c."SiteId" = s."Id")
+--   AND NOT EXISTS (
+--       SELECT 1 FROM "Stocks" st
+--       WHERE st."TypeEmplacement" = 'Site' AND st."EmplacementId" = s."Id");
 --
--- --    ⚠️ Le garde-fou ci-dessus est volontairement toujours faux, donc ce DELETE ne
--- --    supprime rien tel quel. Raison : « site sans contrat » ne distingue pas un site
--- --    dont les contrats ont expiré et été purgés d'un site saisi hier et pas encore
--- --    sous contrat. Le modèle ne porte pas de date de création sur `Sites`, donc la
--- --    distinction n'est pas calculable. Les lignes de la section 5 ci-dessus sont à
--- --    traiter à la main, ou le modèle doit gagner une `DateCreation`.
---
--- -- 7. Clients : même réserve exactement.
+-- -- 7. Clients sans site, créés il y a plus de 5 ans, sans compte rattaché
+-- DELETE FROM "Clients" cl
+-- WHERE cl."DateCreation" < now() - interval '5 years'
+--   AND NOT EXISTS (SELECT 1 FROM "Sites" s WHERE s."ClientId" = cl."Id")
+--   AND NOT EXISTS (SELECT 1 FROM "AspNetUsers" u WHERE u."ClientId" = cl."Id");
 --
 -- -- 8. Agents : AUCUN DELETE. Voir la section 6.

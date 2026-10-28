@@ -39,5 +39,12 @@ public class Site
 
     public string? Consignes { get; set; }
 
+    /// <summary>
+    /// Posée par le serveur, jamais modifiée. Seule date d'un site sans contrat :
+    /// sans elle, la conservation ne distingue pas un site saisi hier d'un site
+    /// dont les contrats ont été purgés (RGPD.md §9.7).
+    /// </summary>
+    public DateTime DateCreation { get; set; } = DateTime.UtcNow;
+
     public ICollection<Contrat> Contrats { get; set; } = new List<Contrat>();
 }

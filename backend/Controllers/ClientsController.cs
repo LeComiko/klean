@@ -39,7 +39,8 @@ public class ClientsController : ControllerBase
                 CodePostal = c.CodePostal,
                 Ville = c.Ville,
                 Email = c.Email,
-                Telephone = c.Telephone
+                Telephone = c.Telephone,
+                DateCreation = c.DateCreation
             })
             .ToListAsync();
 
@@ -69,7 +70,8 @@ public class ClientsController : ControllerBase
                 CodePostal = c.CodePostal,
                 Ville = c.Ville,
                 Email = c.Email,
-                Telephone = c.Telephone
+                Telephone = c.Telephone,
+                DateCreation = c.DateCreation
             })
             .FirstOrDefaultAsync();
 
@@ -169,6 +171,7 @@ public class ClientsController : ControllerBase
         CodePostal = c.CodePostal,
         Ville = c.Ville,
         Email = c.Email,
-        Telephone = c.Telephone
+        Telephone = c.Telephone,
+        DateCreation = c.DateCreation
     };
 }

@@ -58,7 +58,8 @@ public class SitesController : ControllerBase
                 Ville = s.Ville,
                 Latitude = s.Latitude,
                 Longitude = s.Longitude,
-                Consignes = s.Consignes
+                Consignes = s.Consignes,
+                DateCreation = s.DateCreation
             })
             .ToListAsync();
 
@@ -89,7 +90,8 @@ public class SitesController : ControllerBase
                 Ville = s.Ville,
                 Latitude = s.Latitude,
                 Longitude = s.Longitude,
-                Consignes = s.Consignes
+                Consignes = s.Consignes,
+                DateCreation = s.DateCreation
             })
             .FirstOrDefaultAsync();
 
@@ -186,6 +188,7 @@ public class SitesController : ControllerBase
         Ville = s.Ville,
         Latitude = s.Latitude,
         Longitude = s.Longitude,
-        Consignes = s.Consignes
+        Consignes = s.Consignes,
+        DateCreation = s.DateCreation
     };
 }

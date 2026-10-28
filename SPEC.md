@@ -1392,9 +1392,11 @@ décision produit.
   **Leçon à retenir du lot** : un sabotage resté vert ne dit pas toujours qu'un test
   manque — parfois il dit que le code est mort, et la vraie garde est ailleurs.
 
-  ⚠️ **Un seul écart reste, et c'est une décision de modèle** : §9.7, un site ou un client
-  sans contrat n'a aucune date dont partir. Les deux issues sont écrites — une
-  `DateCreation` additive, ou l'examen manuel assumé.
+  **§9.7 tranché le 28 octobre 2026 : `DateCreation` sur `Sites` et `Clients`.** Aucun
+  écart ne reste ouvert côté logiciel. La migration date du jour de son application les
+  lignes qui existaient avant elle, et non du 1er janvier de l'an 1 : sinon le script de
+  conservation les aurait toutes vues hors délai. Elle corrige au passage une colonne
+  `supprimable_maintenant` qui valait toujours zéro. Détail en `RGPD.md` §9.7.
 
   ⚠️ **Une AIPD est requise selon toute vraisemblance** : trois critères de l'article
   35(3) sont réunis, là où deux suffisent à la présomption — données de l'article 9

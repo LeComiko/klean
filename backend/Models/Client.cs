@@ -46,5 +46,11 @@ public class Client
     [MaxLength(30)]
     public string? Telephone { get; set; }
 
+    /// <summary>
+    /// Posée par le serveur, jamais modifiée. Seule date d'un client sans site :
+    /// voir <see cref="Site.DateCreation"/> et RGPD.md §9.7.
+    /// </summary>
+    public DateTime DateCreation { get; set; } = DateTime.UtcNow;
+
     public ICollection<Site> Sites { get; set; } = new List<Site>();
 }

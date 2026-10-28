@@ -14,8 +14,13 @@ public class SiteDto
     public double Latitude { get; set; }
     public double Longitude { get; set; }
     public string? Consignes { get; set; }
+    public DateTime DateCreation { get; set; }
 }
 
+/// <summary>
+/// Création et mise à jour. <c>DateCreation</c> est absente volontairement :
+/// elle est posée par le serveur à la création et jamais modifiée ensuite.
+/// </summary>
 public class SiteCreateDto
 {
     [Required]

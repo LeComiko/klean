@@ -238,7 +238,7 @@ est la dernière : une durée sans mécanisme est une promesse que personne ne t
 | Absences de type `Maladie` | **3 mois après la date de fin** | voir §8.2 : KLEAN n'est pas un outil de paie, il n'a aucune raison de garder une donnée de santé au-delà du remplacement | 📋 `degradation-absences-maladie.sql` |
 | Interventions et leur statut | 5 ans | preuve des passages facturés, prescription de l'action contractuelle | 📋 `conservation-donnees-metier.sql` §1 |
 | Remplacements et scores | 1 an | état dérivé, sans valeur probante au-delà de l'exercice | 📋 `conservation-donnees-metier.sql` §3 |
-| Clients et sites | durée du contrat, puis 5 ans | relation commerciale | 📋 `conservation-donnees-metier.sql` §4 — partiel, voir §9.7 |
+| Clients et sites | durée du contrat, puis 5 ans ; sans contrat, 5 ans après la création | relation commerciale ; pour un prospect jamais signé, la CNIL retient plutôt 3 ans (§9.7) | 📋 `conservation-donnees-metier.sql` §4 et §5 |
 | Comptes (`AspNetUsers`) | désactivation à la sortie, effacement à 5 ans | un compte désactivé reste nécessaire pour attribuer les lignes du journal | 📋 geste manuel par `POST /api/auth/comptes/{id}/anonymiser` (§9.3) |
 | Jetons de rafraîchissement | **30 jours après révocation ou expiration** | la fenêtre de diagnostic d'un rejeu ; au-delà, seule l'adresse IP survit, sans usage | ✅ `purge-jetons-rafraichissement.sql` |
 | Journal d'accès | **12 mois** | un journal RGPD est lui-même une donnée personnelle | ✅ `purge-journal-acces.sql` |
@@ -618,26 +618,49 @@ Deux critères suffisent à la présomption. L'AIPD est un document de l'exploit
 du logiciel ; ce fichier lui fournit la matière des sections « description du
 traitement », « nécessité et proportionnalité » et « mesures de sécurité ».
 
-### 9.7 — Un site ou un client sans contrat n'a aucune date dont partir
+### 9.7 — ✅ CORRIGÉ — un site ou un client sans contrat n'avait aucune date dont partir
 
 Découvert en écrivant `conservation-donnees-metier.sql`, et c'est le genre de trou qu'on
 ne voit qu'en essayant d'appliquer une politique de conservation.
 
-`Sites` et `Clients` ne portent **aucune date** : ni création, ni fin. Leur échéance se
-déduit de celle de leurs contrats — un site est hors délai quand tous ses contrats le
+`Sites` et `Clients` ne portaient **aucune date** : ni création, ni fin. Leur échéance se
+déduisait de celle de leurs contrats — un site est hors délai quand tous ses contrats le
 sont. Ce raisonnement ne fonctionne pas pour une ligne qui n'a **aucun** contrat : la
-requête ne peut pas distinguer un site dont les contrats ont expiré puis été purgés d'un
-site saisi hier et pas encore sous contrat. Les deux se présentent identiquement.
+requête ne pouvait pas distinguer un site dont les contrats ont expiré puis été purgés
+d'un site saisi hier et pas encore sous contrat. Les deux se présentaient identiquement.
 
-Le script les compte donc à part, dans une section intitulée « à traiter à la main », et
-leur `DELETE` porte un garde-fou volontairement toujours faux plutôt qu'une condition
-approximative. Un garde-fou explicite qui ne supprime rien vaut mieux qu'une condition
-qui supprime parfois la mauvaise ligne.
+Le trou était plus large qu'il n'y paraissait. La colonne `supprimable_maintenant` des
+lignes `sites` et `clients` valait **toujours zéro** : elle exigeait qu'un contrat existe
+pour dater la ligne, et qu'il n'en existe aucun pour la supprimer. Aucun site ni aucun
+client n'était donc jamais purgeable, même après la purge de toute sa chaîne.
 
-**Deux issues, et c'est une décision de modèle, pas de script** : ajouter une
-`DateCreation` à `Sites` et `Clients` — une migration additive, qui rendrait la règle
-calculable — ou assumer que ces lignes relèvent d'un examen manuel. La seconde est
-tenable à l'échelle visée ; la première est la seule qui tienne si le volume grandit.
+**Corrigé** le 28 octobre 2026 par la migration `DateCreationSurSitesEtClients` : une
+colonne `DateCreation`, posée par le serveur, absente des deux `CreateDto` (donc ni un
+`POST` ni un `PUT` ne la fixe), exposée en lecture dans `SiteDto` et `ClientDto`. La
+règle devient : **5 ans après la fin du dernier contrat ; à défaut de contrat, 5 ans
+après la création**. Pour un site qui a eu des contrats, la seconde condition ne retire
+rien, puisqu'il a été créé avant leur échéance.
+
+Trois choses à savoir sur cette correction :
+
+- ⚠️ **Les lignes antérieures à la migration sont datées du jour de la migration.** Sans
+  défaut en base, une colonne `timestamp` non nullable les aurait datées du 1er janvier
+  de l'an 1, et le script les aurait toutes vues hors délai depuis deux mille ans : la
+  purge la plus large possible, sur les lignes les moins bien connues. `now()` donne une
+  borne **haute** de leur vraie création, donc une purge retardée, jamais avancée. Gardé
+  par `Ligne_inseree_sans_DateCreation_est_datee_par_la_base`, éprouvé par un sabotage.
+- **Deux gardes nouvelles dans les `DELETE`**, sur des liens que la base ne protège pas,
+  faute de clé étrangère : un site qui porte encore du stock (`Stocks.EmplacementId`)
+  n'est pas supprimé, et un client rattaché à un compte `ClientSyndic`
+  (`AspNetUsers.ClientId`) non plus, ce compte devant d'abord être pseudonymisé.
+  Vérifiées dans une transaction annulée.
+- **Un prospect jamais signé suit la même règle de 5 ans.** Pour la prospection pure, le
+  référentiel de la CNIL sur la gestion commerciale retient plutôt **3 ans** après le
+  dernier contact. C'est une durée de §5 de plus à faire valider par l'exploitant.
+
+`DateCreation` ne fait pas tomber l'exemption de `ClientDto` posée au §8.3 : c'est la
+date d'ouverture de la relation contractuelle, de même nature que les dates d'un
+contrat, et non une information sur l'interlocuteur.
 
 ---
 
@@ -677,7 +700,7 @@ Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail es
 fichier, remettre la note du §7, conclure les contrats de l'article 28 avec l'hébergeur
 et le fournisseur SMTP, tenir l'AIPD du §9.6, désigner un point de contact.
 
-**Par le logiciel** — état au 3 octobre 2026, dans l'ordre de gravité où les écarts ont
+**Par le logiciel** — état au 28 octobre 2026, dans l'ordre de gravité où les écarts ont
 été relevés :
 
 | Écart | État |
@@ -689,11 +712,10 @@ et le fournisseur SMTP, tenir l'AIPD du §9.6, désigner un point de contact.
 | §9.5 — `Sites.Consignes` nommant une personne | ✅ aide du champ, gardée par un test |
 | §9.3 — aucun effacement pour un compte sans fiche agent | ✅ `POST /api/auth/comptes/{id}/anonymiser` |
 | §9.4 — aucun export ni portabilité | ✅ `GET /api/agents/{id}/dossier` |
-| §9.7 — sites et clients sans contrat ni date | ⬜ décision de modèle, voir §9.7 |
+| §9.7 — sites et clients sans contrat ni date | ✅ `DateCreation`, migration `DateCreationSurSitesEtClients` |
 
-**Un seul écart reste**, et c'est une décision de modèle, pas un travail en attente :
-§9.7, un site ou un client sans contrat n'a aucune date dont partir. Les deux issues sont
-écrites — une `DateCreation` additive, ou l'examen manuel assumé.
+**Aucun écart ne reste ouvert côté logiciel.** Ce qui reste est à l'exploitant :
+valider les durées, dont celle des prospects (§9.7), et décommenter les purges.
 
 ⚠️ **Deux des sept corrections sont des rapports, pas des purges**, et il ne faut pas lire
 le tableau trop vite : `conservation-donnees-metier.sql` et

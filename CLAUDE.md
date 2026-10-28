@@ -153,8 +153,8 @@ Entreprise ─┬─ Client ─── Site ─── Contrat ─── Prestatio
 | Entité | Champs notables |
 |---|---|
 | Entreprise | RaisonSociale, Siret, DateCreation |
-| Client | Type (enum `TypeClient`), coordonnées |
-| Site | Latitude, Longitude, Consignes |
+| Client | Type (enum `TypeClient`), coordonnées, DateCreation |
+| Site | Latitude, Longitude, Consignes, DateCreation |
 | Contrat | DateDebut, DateFin (nullable), Frequence, Actif |
 | Prestation | DureeEstimeeMinutes |
 | Agent | Latitude, Longitude (nullable), DateEmbauche, Actif |
