@@ -38,11 +38,13 @@ public enum RessourceAccedee
     /// <summary>
     /// Un compte de connexion — nom, prénom, courriel, téléphone (RGPD.md §9.3).
     ///
-    /// ⚠️ Aucune <b>lecture</b> de compte n'est journalisée, et ce n'est pas un oubli :
-    /// aucune route ne liste les comptes, et <c>GET /api/auth/moi</c> ne rend que
-    /// l'identité de l'appelant lui-même — un journal de « qui a lu son propre nom » est
-    /// du bruit. Cette valeur ne sert donc que la pseudonymisation d'un compte, qui est
-    /// une écriture irréversible.
+    /// Deux usages. La pseudonymisation d'un compte, écriture irréversible ; et depuis
+    /// l'étape 19, <c>GET /api/agents/chefs-equipe</c>, la seule route qui liste des
+    /// comptes — nom et prénom des chefs d'équipe de l'entreprise.
+    ///
+    /// <c>GET /api/auth/moi</c> n'est pas journalisée, et ce n'est pas un oubli : elle ne
+    /// rend que l'identité de l'appelant lui-même, et un journal de « qui a lu son propre
+    /// nom » est du bruit.
     /// </summary>
     Compte
 }

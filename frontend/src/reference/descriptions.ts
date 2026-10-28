@@ -227,6 +227,16 @@ const Agents: DescriptionRessource = {
       // provoque, et le moteur d'affectation l'écarte par un filtre dur.
       aide: 'Décoché, l’agent n’apparaît plus dans aucun classement de remplaçants.',
     },
+    {
+      // ⚠️ Décrit pour que le PUT le renvoie : la fiche est remplacée entière, et un
+      // champ absent du formulaire détacherait l'agent de son chef à chaque
+      // enregistrement (CLAUDE.md §11).
+      nom: 'chefEquipeId',
+      libelle: 'Chef d’équipe',
+      type: 'compte',
+      comptes: '/api/agents/chefs-equipe',
+      aide: 'Facultatif. Un agent appartient à une seule équipe.',
+    },
   ],
 
   rolesLecture: RolesInternes,

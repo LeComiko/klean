@@ -104,6 +104,9 @@ namespace Klean.Api.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<Guid?>("ChefEquipeId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("DateAnonymisation")
                         .HasColumnType("timestamp with time zone");
 
@@ -138,6 +141,8 @@ namespace Klean.Api.Migrations
                         .HasColumnType("character varying(30)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ChefEquipeId");
 
                     b.HasIndex("EntrepriseId");
 
@@ -768,11 +773,18 @@ namespace Klean.Api.Migrations
 
             modelBuilder.Entity("Klean.Api.Models.Agent", b =>
                 {
+                    b.HasOne("Klean.Api.Models.Utilisateur", "ChefEquipe")
+                        .WithMany()
+                        .HasForeignKey("ChefEquipeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Klean.Api.Models.Entreprise", "Entreprise")
                         .WithMany("Agents")
                         .HasForeignKey("EntrepriseId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("ChefEquipe");
 
                     b.Navigation("Entreprise");
                 });

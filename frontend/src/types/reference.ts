@@ -38,6 +38,12 @@ export type TypeChamp =
    * forme. Les valeurs possibles sont dans `choix`.
    */
   | 'jours'
+  /**
+   * Un compte de connexion, choisi dans une liste déroulante alimentée par la route
+   * `comptes`. Les comptes n'ont pas d'écran de référence, donc pas de description à
+   * viser : c'est la seule différence avec `reference`.
+   */
+  | 'compte'
 
 /** Genre grammatical, pour accorder « créé/créée » et « le/la ». */
 export type Genre = 'masculin' | 'feminin'
@@ -72,6 +78,16 @@ export interface ChampRessource {
 
   /** Pour `reference` : la clé de la description visée. */
   reference?: string
+
+  /**
+   * Pour `compte` : la route qui rend la liste des comptes possibles, en tableau de
+   * `{ id, nom, prenom, actif }`.
+   *
+   * ⚠️ Chargée seulement quand le formulaire est éditable. Les routes de comptes sont
+   * réservées à qui écrit, et un lecteur n'en a pas l'usage : le charger pour lui
+   * rendrait un 403 à chaque ouverture d'écran.
+   */
+  comptes?: string
 
   /** Texte d'aide sous le champ. Expliquer, pas décorer. */
   aide?: string

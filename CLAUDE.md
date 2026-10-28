@@ -165,7 +165,7 @@ Entreprise ─┬─ Client ─── Site ─── Contrat ─── Prestatio
 | Site | Latitude, Longitude, Consignes, DateCreation |
 | Contrat | DateDebut, DateFin (nullable), Frequence (libellé libre), Actif, InclutJoursFeries |
 | Prestation | DureeEstimeeMinutes, Jours (enum à drapeaux), HeureDebut (nullable), AgentTitulaireId (nullable, `SetNull`) |
-| Agent | Latitude, Longitude (nullable), DateEmbauche, Actif |
+| Agent | Latitude, Longitude (nullable), DateEmbauche, Actif, ChefEquipeId (nullable, `SetNull`, vise un **compte**) |
 | Intervention | DatePrevue, HeurePrevue (TimeSpan), AgentId (nullable), Statut (enum) |
 | Absence | Type (enum), DateDebut, DateFin, Motif |
 | Remplacement | Statut (enum), Score (nullable), AgentRemplacantId (nullable) |
@@ -509,7 +509,7 @@ d'écrire du code ici :
 - **Un seul mécanisme de conservation existe** — la purge du journal. Les neuf autres
   durées sont déclaratives, et c'est inscrit noir sur blanc plutôt que supposé.
 
-**Neuf lectures sont journalisées, et deux ne s'en doutaient pas.** C'est le fait
+**Dix lectures sont journalisées, et deux ne s'en doutaient pas.** C'est le fait
 central de ce mécanisme : chercher « les routes `/api/agents` et `/api/absences` »
 donne un journal qui a l'air complet et qui a deux trous.
 
@@ -522,6 +522,7 @@ donne un journal qui a l'air complet et qui a deux trous.
 | `GET /api/planning` | `Planning` | nom de **tous** les agents, et la cause « Agent absent » |
 | `GET /api/journal-acces` | `JournalAcces` | le journal lui-même |
 | `GET /api/agents/{id}/dossier` | `Agent` | **tout**, en une réponse — nature `Export` |
+| `GET /api/agents/chefs-equipe` | `Compte` | nom et prénom des chefs d'équipe — la seule liste de comptes |
 
 `CandidatDto` expose `DistanceKm`, dérivée des coordonnées du domicile — exactement
 la donnée que `SPEC.md` signale comme relevant de la doctrine CNIL. Et
@@ -590,7 +591,7 @@ est consignée dans le test, pas tranchée. Et `ProduitDto` montre le prix de la
 `ClientDto`. Une règle grossière dont chaque exception est écrite vaut mieux qu'une
 règle fine qui laisse passer en silence.
 
-Un second test garde l'excès symétrique — les dix actions journalisées sont
+Un second test garde l'excès symétrique — les douze actions journalisées sont
 exactement celles attendues, parce qu'un journal bruyant ne se lit plus.
 
 **`Divulgation` et `Compter` sont `public`, pour être éprouvées directement.** Même
@@ -601,10 +602,11 @@ qu'aucune action ne produit aujourd'hui — notamment qu'une `string`, étant un
 `IEnumerable<char>`, vaut **une** ligne et non cent trente-quatre. Trois sabotages y
 sont restés verts avant que ces tests existent.
 
-**Coût assumé** : une insertion synchrone par lecture sur ces neuf endpoints.
+**Coût assumé** : une insertion synchrone par lecture sur ces dix endpoints.
 
-⚠️ **Dix attributs pour neuf lectures** : la dixième action est `Anonymiser`, qui n'est
-pas une lecture mais une **écriture irréversible** — nature `Anonymisation`. Et
+⚠️ **Douze attributs pour dix lectures** : les deux autres sont les deux `Anonymiser`, de
+l'agent et du compte, qui ne sont pas des lectures mais des **écritures irréversibles** —
+nature `Anonymisation`. Et
 `Dossier` porte la nature `Export` plutôt que `Lecture`, parce que sortir le dossier
 complet d'un salarié n'est pas le même geste que consulter sa fiche : les confondre
 ferait disparaître l'export dans le bruit des consultations.

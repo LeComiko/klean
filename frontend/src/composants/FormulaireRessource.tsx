@@ -241,7 +241,7 @@ function Champ({ champ, valeur, options, tronquee, lectureSeule, onChanger }: Pr
         </select>
       )}
 
-      {champ.type === 'reference' && (
+      {(champ.type === 'reference' || champ.type === 'compte') && (
         <select
           {...commun}
           className="champ__liste"
@@ -256,6 +256,15 @@ function Champ({ champ, valeur, options, tronquee, lectureSeule, onChanger }: Pr
               {option.libelle}
             </option>
           ))}
+          {/* Un compte rattaché que la liste ne contient pas : celle-ci n'est chargée
+              que pour qui écrit. Sans cette option, un lecteur verrait « — choisir — »
+              et croirait l'agent sans chef. */}
+          {champ.type === 'compte'
+            && typeof valeur === 'string'
+            && valeur !== ''
+            && !options.some((option) => option.valeur === valeur) && (
+            <option value={valeur}>Rattaché — nom non communiqué</option>
+          )}
         </select>
       )}
 

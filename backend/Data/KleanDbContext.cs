@@ -238,6 +238,13 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
             .HasOne(e => e.AgentTitulaire).WithMany()
             .HasForeignKey(e => e.AgentTitulaireId).OnDelete(DeleteBehavior.SetNull);
 
+        // Chef d'équipe d'un agent : **SetNull**, même raisonnement. Le lien vise un
+        // compte d'Identity, et supprimer ce compte ne doit ni être bloqué par son
+        // équipe, ni emporter les agents qu'il encadrait.
+        modelBuilder.Entity<Agent>()
+            .HasOne(e => e.ChefEquipe).WithMany()
+            .HasForeignKey(e => e.ChefEquipeId).OnDelete(DeleteBehavior.SetNull);
+
         // ---- Filtres globaux multi-tenant ----
         //
         // Entreprise est filtrée sur son PROPRE Id : elle ne porte pas de
@@ -299,6 +306,10 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Contrat>().HasIndex(e => e.EntrepriseId);
         modelBuilder.Entity<Prestation>().HasIndex(e => e.EntrepriseId);
         modelBuilder.Entity<Agent>().HasIndex(e => e.EntrepriseId);
+
+        // L'équipe d'un chef se lit par cette colonne : c'est le filtre du lot B de
+        // l'étape 19, appliqué à chaque lecture d'agent, d'absence et d'intervention.
+        modelBuilder.Entity<Agent>().HasIndex(e => e.ChefEquipeId);
         modelBuilder.Entity<Absence>().HasIndex(e => e.EntrepriseId);
         modelBuilder.Entity<Remplacement>().HasIndex(e => e.EntrepriseId);
         modelBuilder.Entity<Produit>().HasIndex(e => e.EntrepriseId);

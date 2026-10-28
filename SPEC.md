@@ -1662,6 +1662,41 @@ planning lisent le contexte filtré : ils n'ont rien à savoir du chef.
 - **C** — le rattachement sur la fiche de l'agent, le planning du chef, `RGPD.md`,
   `CLAUDE.md` §7. Livré **avec** B, pour la raison écrite plus haut.
 
+**Lot A — fait le 28 octobre 2026**
+
+- `Agent.ChefEquipeId`, clé étrangère vers `AspNetUsers` en `SetNull`, indexée pour le
+  filtre du lot B. Migration `RattachementChefEquipe`, additive : une colonne nullable,
+  un index, une clé étrangère.
+- **Validation à chaque `POST` et `PUT`** d'un agent : le compte visé est de la même
+  entreprise **et** porte le rôle `ChefEquipe`, sinon 400. Les deux conditions sont écrites
+  à la main, dans une seule requête que partagent la vérification et la liste — deux
+  définitions de « chef de l'entreprise » finiraient par diverger.
+- **`GET /api/agents/chefs-equipe`**, administrateur seul, non paginée : identifiant, nom,
+  prénom, actif — ni courriel ni téléphone. Première lecture de comptes du produit, donc
+  **journalisée** en `Compte` / `Liste` : douze actions journalisées au lieu de onze.
+- **Le champ est sur l'écran des agents dès ce lot**, et non au lot C : `ChefEquipeId` est
+  dans `AgentCreateDto`, et un `PUT` qui l'omettrait détacherait l'agent à chaque
+  enregistrement. La parité DTO ↔ écran l'impose. Un type de champ `compte` alimente la
+  liste déroulante par une route plutôt que par une description, les comptes n'ayant pas
+  d'écran de référence ; il n'est chargé que pour qui écrit.
+
+Trois arbitrages, faits ici :
+
+- **Un chef désactivé reste acceptable.** Le refuser obligerait à rattacher ailleurs toute
+  l'équipe d'un chef parti avant de pouvoir corriger le téléphone de l'un de ses agents.
+  La liste le propose, marqué « (désactivé) ».
+- **Un lecteur voit « Rattaché — nom non communiqué »**, la liste des chefs étant réservée
+  à l'administrateur. Sans cette option, la liste déroulante vide afficherait « — choisir — »
+  et ferait croire l'agent sans chef.
+- **L'intrus est créé par l'API, pas en base.** Un chef d'une autre entreprise est un compte
+  légitime de cette entreprise : rien ne le rend incréable, contrairement aux comptes de
+  l'étape 17. Les deux conditions sont éprouvées séparément, chacune par un compte qui ne
+  viole qu'elle, et six sabotages font chacun rougir la série.
+
+Reste au lot C : la colonne « Chef d'équipe » dans la liste, et le **dossier de l'agent**,
+qui porte aujourd'hui le rattachement en identifiant brut, ce que l'article 15 ne tient pas
+pour intelligible.
+
 **Périmètre initial** — écrit avant la réponse, conservé pour mémoire
 
 - le modèle retenu, sa migration présentée pour relecture

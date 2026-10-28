@@ -63,6 +63,22 @@ public class Agent
     /// </summary>
     public DateTime? DateAnonymisation { get; set; }
 
+    /// <summary>
+    /// Le compte du chef d'équipe qui encadre cet agent, nul s'il n'en a pas (SPEC.md,
+    /// étape 19). Une équipe par agent, d'où une colonne et non une table de liaison.
+    ///
+    /// ⚠️ Il vise un <b>compte</b>, pas une fiche agent : le chef pilote ses agents et ne
+    /// fait pas de vacations. Or <c>AspNetUsers</c> n'est pas filtrée par le multi-tenant
+    /// (CLAUDE.md §7) : l'entreprise et le rôle du compte visé sont vérifiés à la main, à
+    /// chaque écriture, par <c>AgentsController</c>.
+    ///
+    /// <b>SetNull</b> à la suppression du compte, pour la raison qui vaut pour le
+    /// titulaire d'une prestation : c'est un rattachement, pas un fait. L'agent perdrait
+    /// son chef, rien d'autre.
+    /// </summary>
+    public Guid? ChefEquipeId { get; set; }
+    public Utilisateur? ChefEquipe { get; set; }
+
     public ICollection<Absence> Absences { get; set; } = new List<Absence>();
     public ICollection<Intervention> Interventions { get; set; } = new List<Intervention>();
 }

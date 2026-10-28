@@ -178,7 +178,7 @@ Les douze tables du modèle, plus les tables d'Identity. « DP » = donnée pers
 | Table | Colonnes porteuses de DP | Catégorie | Sort par |
 |---|---|---|---|
 | `Entreprises` | `RaisonSociale`, `Siret` | personne morale — pas une DP | `GET /api/entreprises` |
-| `Agents` | `Nom`, `Prenom`, `Email`, `Telephone`, `Adresse`, **`Latitude`**, **`Longitude`**, `DateEmbauche` | identité, **localisation du domicile** | `/api/agents`, et **`/api/planning`** et les deux routes de candidats |
+| `Agents` | `Nom`, `Prenom`, `Email`, `Telephone`, `Adresse`, **`Latitude`**, **`Longitude`**, `DateEmbauche`, `ChefEquipeId` | identité, **localisation du domicile**, lien hiérarchique | `/api/agents`, et **`/api/planning`** et les deux routes de candidats |
 | `Absences` | `AgentId`, `Type`, dates, `Motif` | **art. 9 quand `Type = Maladie`** | `/api/absences`, et la cause « Agent absent » du planning |
 | `Interventions` | `AgentId`, `DatePrevue`, `HeurePrevue`, `Statut` | activité professionnelle | `/api/interventions`, `/api/planning` |
 | `Remplacements` | `AgentRemplacantId`, `Score` | **évaluation** d'une personne | `/api/remplacements` |
@@ -188,7 +188,7 @@ Les douze tables du modèle, plus les tables d'Identity. « DP » = donnée pers
 | `Prestations` | `AgentTitulaireId` — `Libelle` est un intitulé de prestation | affectation habituelle d'un salarié à un site, à une heure | `/api/prestations`, et le dossier de l'agent |
 | `Produits`, `Stocks` | aucune | — | — |
 | `AccesJournalises` | `UtilisateurId`, `CibleId`, `Horodatage` | trace d'activité d'un utilisateur | `/api/journal-acces` |
-| `AspNetUsers` | `Email`, `UserName`, `PhoneNumber`, `Nom`, `Prenom`, `PasswordHash`, verrouillage, `DateAnonymisation` | identité et **secret d'authentification** | `/api/auth/moi` seulement |
+| `AspNetUsers` | `Email`, `UserName`, `PhoneNumber`, `Nom`, `Prenom`, `PasswordHash`, verrouillage, `DateAnonymisation` | identité et **secret d'authentification** | `/api/auth/moi`, et nom et prénom des chefs d'équipe par `/api/agents/chefs-equipe` (administrateur, journalisée) |
 | `JetonsRafraichissement` | `UtilisateurId`, **`AdresseIp`**, dates | trace de connexion | **aucune route** |
 
 ⚠️ **Deux colonnes sont des données personnelles que personne ne cherche là.**

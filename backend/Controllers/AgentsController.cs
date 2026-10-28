@@ -18,10 +18,13 @@ public class AgentsController : ControllerBase
 
     private readonly ServiceAnonymisation _anonymisation;
 
-    public AgentsController(KleanDbContext db, ServiceAnonymisation anonymisation)
+    private readonly ITenantContext _tenant;
+
+    public AgentsController(KleanDbContext db, ServiceAnonymisation anonymisation, ITenantContext tenant)
     {
         _db = db;
         _anonymisation = anonymisation;
+        _tenant = tenant;
     }
 
     [JournaliserAcces(RessourceAccedee.Agent, NatureAcces.Liste)]
@@ -51,7 +54,8 @@ public class AgentsController : ControllerBase
                 Longitude = a.Longitude,
                 DateEmbauche = a.DateEmbauche,
                 Actif = a.Actif,
-                DateAnonymisation = a.DateAnonymisation
+                DateAnonymisation = a.DateAnonymisation,
+                ChefEquipeId = a.ChefEquipeId
             })
             .ToListAsync();
 
@@ -85,7 +89,8 @@ public class AgentsController : ControllerBase
                 Longitude = a.Longitude,
                 DateEmbauche = a.DateEmbauche,
                 Actif = a.Actif,
-                DateAnonymisation = a.DateAnonymisation
+                DateAnonymisation = a.DateAnonymisation,
+                ChefEquipeId = a.ChefEquipeId
             })
             .FirstOrDefaultAsync();
 
@@ -96,6 +101,8 @@ public class AgentsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<AgentDto>> Creer(AgentCreateDto dto)
     {
+        if (await RefusDuChefAsync(dto.ChefEquipeId) is { } refus) return BadRequest(refus);
+
         var agent = new Agent
         {
             Nom = dto.Nom,
@@ -108,7 +115,8 @@ public class AgentsController : ControllerBase
             // Npgsql refuse un DateTime dont le Kind est Unspecified, ce que
             // produit la liaison JSON d'une date sans fuseau (CLAUDE.md §10).
             DateEmbauche = DateTime.SpecifyKind(dto.DateEmbauche, DateTimeKind.Utc),
-            Actif = dto.Actif
+            Actif = dto.Actif,
+            ChefEquipeId = dto.ChefEquipeId
         };
 
         _db.Agents.Add(agent);
@@ -124,6 +132,8 @@ public class AgentsController : ControllerBase
         var agent = await _db.Agents.FindAsync(id);
         if (agent is null) return NotFound();
 
+        if (await RefusDuChefAsync(dto.ChefEquipeId) is { } refus) return BadRequest(refus);
+
         agent.Nom = dto.Nom;
         agent.Prenom = dto.Prenom;
         agent.Email = dto.Email;
@@ -133,6 +143,7 @@ public class AgentsController : ControllerBase
         agent.Longitude = dto.Longitude;
         agent.DateEmbauche = DateTime.SpecifyKind(dto.DateEmbauche, DateTimeKind.Utc);
         agent.Actif = dto.Actif;
+        agent.ChefEquipeId = dto.ChefEquipeId;
 
         await _db.SaveChangesAsync();
         return NoContent();
@@ -411,6 +422,78 @@ public class AgentsController : ControllerBase
         Longitude = a.Longitude,
         DateEmbauche = a.DateEmbauche,
         Actif = a.Actif,
-        DateAnonymisation = a.DateAnonymisation
+        DateAnonymisation = a.DateAnonymisation,
+        ChefEquipeId = a.ChefEquipeId
     };
+
+    /// <summary>
+    /// Les chefs d'équipe de l'entreprise — <c>GET /api/agents/chefs-equipe</c>, pour
+    /// choisir le rattachement d'un agent (SPEC.md, étape 19).
+    ///
+    /// Administrateur seul : c'est lui qui pose le rattachement. Non paginée, comme les
+    /// candidats : sa taille est bornée par l'effectif d'encadrement, pas par la requête.
+    /// Les comptes désactivés y figurent, marqués : des agents peuvent leur rester
+    /// rattachés, et l'écran doit pouvoir le dire.
+    ///
+    /// ⚠️ Journalisée : elle nomme des personnes. C'est la première lecture de comptes
+    /// du produit, et elle tombe sous la règle structurelle de §7 bis sans exemption —
+    /// ce ne sont ni l'appelant ni une personne morale.
+    /// </summary>
+    [JournaliserAcces(RessourceAccedee.Compte, NatureAcces.Liste)]
+    [Authorize(Roles = RolesKlean.Administrateur)]
+    [HttpGet("chefs-equipe")]
+    public async Task<ActionResult<List<ChefEquipeDto>>> ChefsEquipe()
+    {
+        return Ok(await ChefsEquipeDeLEntreprise()
+            .AsNoTracking()
+            .OrderBy(u => u.Nom).ThenBy(u => u.Prenom)
+            .Select(u => new ChefEquipeDto
+            {
+                Id = u.Id,
+                Nom = u.Nom,
+                Prenom = u.Prenom,
+                Actif = u.Actif
+            })
+            .ToListAsync());
+    }
+
+    /// <summary>
+    /// Le message de refus d'un rattachement, ou <c>null</c> s'il est acceptable.
+    ///
+    /// Un compte désactivé reste acceptable : refuser obligerait à rattacher ailleurs
+    /// toute l'équipe d'un chef parti avant de pouvoir corriger le téléphone de l'un de
+    /// ses agents. La frontière du lot B ne lui donne rien, puisqu'il ne se connecte
+    /// plus.
+    /// </summary>
+    private async Task<string?> RefusDuChefAsync(Guid? chefEquipeId)
+    {
+        if (chefEquipeId is not { } chef) return null;
+
+        return await ChefsEquipeDeLEntreprise().AnyAsync(u => u.Id == chef)
+            ? null
+            : $"Le compte {chef} n'est pas un chef d'équipe de cette entreprise.";
+    }
+
+    /// <summary>
+    /// Les comptes de rôle ChefEquipe de l'entreprise de l'appelant — la seule définition,
+    /// partagée par la liste et par la vérification, pour qu'elles ne divergent pas.
+    ///
+    /// ⚠️ Les deux conditions sont écrites à la main, et chacune est nécessaire.
+    /// <c>AspNetUsers</c> n'est pas filtrée (CLAUDE.md §7) : sans la première, un chef
+    /// d'une autre entreprise serait accepté — et le lot B lui ouvrirait l'équipe. Sans
+    /// la seconde, n'importe quel compte de l'entreprise deviendrait chef, un agent ou un
+    /// syndic compris.
+    ///
+    /// Un jeton sans entreprise ne trouve personne : la comparaison à <c>null</c> ne vaut
+    /// jamais vrai, le refus est donc fermé par défaut.
+    /// </summary>
+    private IQueryable<Utilisateur> ChefsEquipeDeLEntreprise()
+    {
+        var entrepriseId = _tenant.EntrepriseId;
+
+        return _db.Users.Where(u =>
+            u.EntrepriseId == entrepriseId
+            && _db.UserRoles.Any(ur => ur.UserId == u.Id
+                && _db.Roles.Any(r => r.Id == ur.RoleId && r.Name == RolesKlean.ChefEquipe)));
+    }
 }

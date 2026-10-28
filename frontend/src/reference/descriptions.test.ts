@@ -117,6 +117,20 @@ describe('descriptions — structure', () => {
     }
   })
 
+  test('un champ de compte, et lui seul, porte la route de sa liste', () => {
+    for (const description of Descriptions) {
+      for (const champ of description.champs) {
+        if (champ.type !== 'compte') {
+          assert.equal(champ.comptes, undefined, `${description.cle} → ${champ.nom}`)
+          continue
+        }
+
+        assert.match(champ.comptes ?? '', /^\/api\//, `${description.cle} → ${champ.nom}`)
+        assert.equal(champ.reference, undefined, `${description.cle} → ${champ.nom}`)
+      }
+    }
+  })
+
   test('une colonne de référence vise aussi une description existante', () => {
     for (const description of Descriptions) {
       for (const colonne of description.colonnes) {

@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import {
   creerRessource,
   listerRessource,
+  listerComptes,
   listerToutPourChoix,
   modifierRessource,
   supprimerRessource,
@@ -220,6 +221,52 @@ function EcranReference({
   }, [description])
 
   const ecriture = profil !== null && aUnRole(profil, description.rolesEcriture)
+
+  // ---- Les listes déroulantes des champs de compte ----
+  //
+  // Seulement pour qui écrit : les routes de comptes lui sont réservées, et un lecteur
+  // n'ouvre le formulaire qu'en lecture seule, où la valeur n'a pas à être choisie.
+  // Rangées dans `choix` sous leur route, qu'aucune clé de description ne peut
+  // prendre puisqu'elle commence par une barre.
+  useEffect(() => {
+    if (!ecriture) return
+
+    const controleur = new AbortController()
+
+    const routes = [
+      ...new Set(
+        description.champs
+          .map((champ) => champ.comptes)
+          .filter((route): route is string => route !== undefined),
+      ),
+    ]
+
+    for (const route of routes) {
+      listerComptes(route, controleur.signal)
+        .then((comptes) => {
+          setChoix((precedent) => ({
+            ...precedent,
+            [route]: {
+              // Un compte désactivé reste proposé et le dit : des agents peuvent lui
+              // être encore rattachés, et l'option manquante viderait le champ à
+              // l'affichage sans rien dire.
+              options: comptes.map((compte) => ({
+                valeur: compte.id,
+                libelle: `${compte.prenom} ${compte.nom}${compte.actif ? '' : ' (désactivé)'}`,
+              })),
+              tronquee: false,
+            },
+          }))
+        })
+        .catch(() => {
+          // Silencieux, pour la même raison que les champs de référence.
+        })
+    }
+
+    return () => {
+      controleur.abort()
+    }
+  }, [description, ecriture])
   const lectureSeule = !ecriture
   const designation = designer(description.singulier, description.genre)
 
@@ -330,10 +377,12 @@ function EcranReference({
   const tronqueesParChamp: Record<string, boolean> = {}
 
   for (const champ of description.champs) {
-    if (champ.reference === undefined) continue
+    const source = champ.reference ?? champ.comptes
 
-    optionsParChamp[champ.nom] = choix[champ.reference]?.options ?? []
-    tronqueesParChamp[champ.nom] = choix[champ.reference]?.tronquee === true
+    if (source === undefined) continue
+
+    optionsParChamp[champ.nom] = choix[source]?.options ?? []
+    tronqueesParChamp[champ.nom] = choix[source]?.tronquee === true
   }
 
   // ---- La descente de niveau ----

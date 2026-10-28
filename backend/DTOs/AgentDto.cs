@@ -24,6 +24,9 @@ public class AgentDto
     /// rien — elle dit qu'il n'y a plus rien à révéler.
     /// </summary>
     public DateTime? DateAnonymisation { get; set; }
+
+    /// <summary>Le compte du chef d'équipe, nul si l'agent n'est rattaché à personne.</summary>
+    public Guid? ChefEquipeId { get; set; }
 }
 
 public class AgentCreateDto
@@ -56,4 +59,29 @@ public class AgentCreateDto
     public DateTime DateEmbauche { get; set; }
 
     public bool Actif { get; set; } = true;
+
+    /// <summary>
+    /// Le compte d'un chef d'équipe <b>de la même entreprise</b>, ou nul. Refusé en 400
+    /// sinon : <c>AspNetUsers</c> n'étant pas filtrée, rien d'autre ne l'empêcherait.
+    ///
+    /// ⚠️ Le PUT remplace la fiche entière : un corps qui omet ce champ détache l'agent
+    /// de son chef. C'est pourquoi l'écran des agents le décrit (CLAUDE.md §11).
+    /// </summary>
+    public Guid? ChefEquipeId { get; set; }
+}
+
+/// <summary>
+/// Un chef d'équipe de l'entreprise, pour le choix du rattachement d'un agent —
+/// <c>GET /api/agents/chefs-equipe</c>.
+///
+/// Ni courriel ni téléphone : choisir un chef demande de le reconnaître, pas de le
+/// joindre. <see cref="Actif"/> permet à l'écran de signaler un compte désactivé, auquel
+/// des agents peuvent rester rattachés.
+/// </summary>
+public class ChefEquipeDto
+{
+    public Guid Id { get; set; }
+    public string Nom { get; set; } = string.Empty;
+    public string Prenom { get; set; } = string.Empty;
+    public bool Actif { get; set; }
 }

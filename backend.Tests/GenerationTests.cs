@@ -375,6 +375,13 @@ public class GenerationTests : IAsyncLifetime
     /// L'ordre est garanti par le verrou consultatif : la seconde génération attend que la
     /// première ait fini, validée ou défaite, avant de lire. Si la première avait validé
     /// malgré l'annulation, la seconde ne créerait rien.
+    ///
+    /// ⚠️ <b>Le travail doit durer plus longtemps que la minuterie, de loin.</b> Sur quatre
+    /// semaines, soit 560 vacations, la génération finissait en moins de 300 ms une fois le
+    /// processus chaud : l'annulation n'arrivait jamais, et le test échouait dans la suite
+    /// complète en passant isolé. D'où l'horizon entier. Raccourcir la minuterie ne vaut
+    /// rien : l'annulation partirait avant que la requête n'atteigne le serveur, et le test
+    /// passerait sans rien éprouver.
     /// </summary>
     [Fact]
     public async Task Une_generation_interrompue_est_defaite_en_entier()
@@ -384,19 +391,23 @@ public class GenerationTests : IAsyncLifetime
             await Prestation(await Contrat(), TousLesJours, await Id(Agent($"Titulaire{n}")));
         }
 
-        var finDeMois = Lundi24Mai.AddDays(27);
+        var horizon = Lundi24Mai.AddDays(7 * ServiceGeneration.SemainesMaximum);
 
         using (var minuterie = new CancellationTokenSource(TimeSpan.FromMilliseconds(300)))
         {
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                 _client.PostAsJsonAsync("/api/planning/generer",
-                    new { JusquAu = finDeMois.ToString("yyyy-MM-dd") }, minuterie.Token));
+                    new { JusquAu = horizon.ToString("yyyy-MM-dd") }, minuterie.Token));
         }
 
-        var rapport = await Rapport(finDeMois);
+        var rapport = await Rapport(horizon);
+
+        // Le 14 juillet et le 15 août tombent dans la période, et sont sautés.
+        var jours = Enumerable.Range(0, horizon.DayNumber - Lundi24Mai.DayNumber + 1)
+            .Count(d => JoursFeries.Nom(Lundi24Mai.AddDays(d)) is null);
 
         Assert.Equal(0, rapport.DejaPresentes);
-        Assert.Equal(20 * 28, rapport.Creees);
+        Assert.Equal(20 * jours, rapport.Creees);
     }
 
     /// <summary>

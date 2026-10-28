@@ -75,6 +75,24 @@ export function listerToutPourChoix<T>(route: string, signal?: AbortSignal): Pro
   return listerRessource<T>(route, 1, TailleMaximale, signal)
 }
 
+/**
+ * Un compte proposé par un champ de type `compte` — le chef d'équipe d'un agent.
+ *
+ * Ni courriel ni téléphone : le serveur ne les envoie pas, choisir un compte demande de
+ * le reconnaître, pas de le joindre.
+ */
+export interface CompteChoix {
+  id: string
+  nom: string
+  prenom: string
+  actif: boolean
+}
+
+/** La liste d'une route de comptes. Non paginée : bornée par l'effectif d'encadrement. */
+export function listerComptes(route: string, signal?: AbortSignal): Promise<CompteChoix[]> {
+  return api.get<CompteChoix[]>(route, { signal })
+}
+
 export function creerRessource<T>(route: string, corps: unknown): Promise<T> {
   return api.post<T>(route, corps)
 }
