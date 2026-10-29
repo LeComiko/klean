@@ -1917,6 +1917,23 @@ n'attend aucune information d'un pilote.
 | Sortie et rentrée des conteneurs | deux prestations indépendantes, comme aujourd'hui ; un « modèle de paire » qui crée les deux d'un geste | ouvert. Les deux tâches vont ensemble — la veille au soir, le lendemain matin —, selon le calendrier de collecte de la commune, donc par site. Le modèle actuel les porte déjà ; la paire n'est qu'un gain de saisie |
 | Jours et heure par défaut sur le type | oui ; non | **non** : la récurrence dépend du site — un hall se fait le lundi ici, le jeudi là. Le type porte ce qui est vrai partout |
 
+**Réponses obtenues le 29 octobre 2026** — les six penchants sont retenus, et les deux
+questions ouvertes sont tranchées.
+
+| Question | Réponse | Ce que cela veut dire dans le code |
+|---|---|---|
+| Portée | **par entreprise** | `TypePrestation` porte `EntrepriseId` et son filtre global, comme les onze autres |
+| Lien | **clé et libellé copié** | `Prestation.TypePrestationId` nullable ; le libellé est copié à la création et reste modifiable par site |
+| Retrait d'un type utilisé | **désactivation** | `Actif = false` : plus proposé à la saisie, conservé par les prestations. La suppression reste possible pour un type jamais utilisé — `Restrict` sur la clé, et le 409 nomme la désactivation comme sortie (`CLAUDE.md` §10) |
+| Jours et heure par défaut | **non** | le type porte le libellé et la durée par défaut, rien d'autre |
+| Liste de départ | **bouton « Importer la liste type »** | geste explicite de l'administrateur, valable pour toute entreprise et non seulement la première ; **rejouable sans doublon** — un type de même libellé, à la casse près, n'est pas recréé, même désactivé |
+| Conteneurs | **deux prestations indépendantes** | deux types dans la liste type, « Sortie des conteneurs » et « Rentrée des conteneurs » ; rien de nouveau dans le modèle, la génération les traite déjà |
+
+Restent à poser au lot B, avec toi : le **contenu** de la liste type — quels libellés,
+quelles durées par défaut. Une durée inventée ici deviendrait la durée de toutes les
+prestations créées sans la corriger, donc celle du moteur d'affectation et de la charge
+de la semaine.
+
 **Conséquences à vérifier au cadrage**
 
 - `RGPD.md` §3 : `TypePrestation` ne porte aucune donnée personnelle. Le dire dans la
@@ -1930,11 +1947,13 @@ n'attend aucune information d'un pilote.
 
 **Lots, provisoires**
 
-- **A** — `TypePrestation`, migration additive, CRUD, `TypePrestationId` sur
-  `Prestation`, tests d'isolation et de saisie.
-- **B** — liste de départ, selon l'arbitrage.
-- **C** — écran de référence du catalogue, et préremplissage dans le formulaire des
-  prestations.
+- **A** — `TypePrestation` (libellé, durée par défaut, actif), migration additive, CRUD,
+  `TypePrestationId` sur `Prestation`, refus d'un type désactivé ou d'une autre
+  entreprise à la saisie, tests d'isolation et de saisie.
+- **B** — la route d'import de la liste type, idempotente, et son contenu, validé avec
+  toi avant d'être écrit.
+- **C** — écran de référence du catalogue avec le bouton d'import, et préremplissage du
+  libellé et de la durée dans le formulaire des prestations.
 
 ---
 
