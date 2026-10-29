@@ -94,7 +94,7 @@ KLEAN/
 ├── .env.example         le seul endroit où un exploitant écrit un secret
 ├── backend/
 │   ├── Dockerfile       l'API ET son bundle de migration, une seule image
-│   ├── Models/          11 entités métier + AccesJournalise + Utilisateur
+│   ├── Models/          12 entités métier + AccesJournalise + Utilisateur
 │   │                    + RolesKlean
 │   ├── Data/            KleanDbContext (filtres multi-tenant)
 │   ├── DTOs/            un fichier par entité, XxxDto + XxxCreateDto
@@ -144,16 +144,18 @@ répond 403, un jeton mal orthographié qu'aucun navigateur ne signale.
 
 ## 5. Modèle de données
 
-Onze entités métier, toutes avec un `Id` de type `Guid` généré côté
-application et une colonne `EntrepriseId` (dénormalisée, voir §7).
+Douze entités métier, toutes avec un `Id` de type `Guid` généré côté
+application et une colonne `EntrepriseId` (dénormalisée, voir §7). La douzième,
+`TypePrestation`, est le catalogue de l'étape 21.
 
-Une douzième entité existe et n'est **pas** métier : `AccesJournalise`, le journal
+Une treizième entité existe et n'est **pas** métier : `AccesJournalise`, le journal
 d'accès aux données personnelles de §7 bis. Elle suit les mêmes règles — `Guid`
 applicatif, `EntrepriseId` dénormalisé, filtre global — mais elle ne décrit rien du
-nettoyage de bureaux : elle rend compte de l'usage des onze autres.
+nettoyage de bureaux : elle rend compte de l'usage des douze autres.
 
 ```
 Entreprise ─┬─ Client ─── Site ─── Contrat ─── Prestation ─── Intervention
+            ├─ TypePrestation ────────────────────┘                 │
             ├─ Agent ─── Absence                                    │
             └─ Produit ─── Stock                    Remplacement ───┘
 ```
@@ -164,7 +166,8 @@ Entreprise ─┬─ Client ─── Site ─── Contrat ─── Prestatio
 | Client | Type (enum `TypeClient`), coordonnées, DateCreation |
 | Site | Latitude, Longitude, Consignes, DateCreation |
 | Contrat | DateDebut, DateFin (nullable), Frequence (libellé libre), Actif, InclutJoursFeries |
-| Prestation | DureeEstimeeMinutes, Jours (enum à drapeaux), HeureDebut (nullable), AgentTitulaireId (nullable, `SetNull`) |
+| Prestation | DureeEstimeeMinutes, Jours (enum à drapeaux), HeureDebut (nullable), AgentTitulaireId (nullable, `SetNull`), TypePrestationId (nullable, `Restrict`) |
+| TypePrestation | Libelle (unique dans l'entreprise, à la casse près), DureeParDefautMinutes, Actif — ni jours ni heure, qui dépendent du site |
 | Agent | Latitude, Longitude (nullable), DateEmbauche, Actif, ChefEquipeId (nullable, `SetNull`, vise un **compte**) |
 | Intervention | DatePrevue, HeurePrevue (TimeSpan), AgentId (nullable), Statut (enum) |
 | Absence | Type (enum), DateDebut, DateFin, Motif |
@@ -423,7 +426,7 @@ Mécanisme en trois parties, toutes nécessaires :
    utilisé par l'amorçage qui doit créer la première entreprise avant
    qu'aucun tenant n'existe.
 
-2. **Filtres globaux EF Core**, **douze** au total :
+2. **Filtres globaux EF Core**, **treize** au total :
    ```csharp
    modelBuilder.Entity<X>().HasQueryFilter(e =>
        !TenantFiltrageActif || TenantEntrepriseId == null
@@ -432,9 +435,11 @@ Mécanisme en trois parties, toutes nécessaires :
    où `TenantFiltrageActif` et `TenantEntrepriseId` sont des **propriétés
    privées d'instance du DbContext**. Voir le piège §10.
 
-   Dix filtres sur les entités métier portant `EntrepriseId`, un onzième sur
+   Onze filtres sur les entités métier portant `EntrepriseId`, un douzième sur
    `AccesJournalise` (§7 bis), **plus un sur `Entreprise` elle-même**, sur son
-   propre `Id` :
+   propre `Id`. Depuis l'étape 21, `IsolationTests` refuse toute entité portant
+   `EntrepriseId` sans filtre : une entité oubliée ne casse rien de visible, elle se lit
+   seulement d'une entreprise à l'autre. Celui d'`Entreprise` :
    ```csharp
    modelBuilder.Entity<Entreprise>().HasQueryFilter(e =>
        !TenantFiltrageActif || TenantEntrepriseId == null

@@ -111,5 +111,16 @@ public class Prestation
     public Guid? AgentTitulaireId { get; set; }
     public Agent? AgentTitulaire { get; set; }
 
+    /// <summary>
+    /// Le type du catalogue dont la prestation est issue, nul pour une prestation saisie
+    /// librement ou antérieure au catalogue (SPEC.md, étape 21).
+    ///
+    /// ⚠️ Le <see cref="Libelle"/> est une <b>copie</b>, pas un renvoi : renommer un type ne
+    /// réécrit ni les prestations ni l'historique de leurs vacations, et un site garde son
+    /// « Hall + escalier B ». La clé, elle, sert au stock et au devis.
+    /// </summary>
+    public Guid? TypePrestationId { get; set; }
+    public TypePrestation? TypePrestation { get; set; }
+
     public ICollection<Intervention> Interventions { get; set; } = new List<Intervention>();
 }

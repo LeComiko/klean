@@ -51,6 +51,9 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
     public DbSet<Absence> Absences => Set<Absence>();
     public DbSet<Remplacement> Remplacements => Set<Remplacement>();
     public DbSet<Produit> Produits => Set<Produit>();
+
+    /// <summary>Le catalogue des prestations de l'entreprise (SPEC.md, étape 21).</summary>
+    public DbSet<TypePrestation> TypesPrestation => Set<TypePrestation>();
     public DbSet<Stock> Stocks => Set<Stock>();
 
     /// <summary>
@@ -169,6 +172,10 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
             .HasOne(e => e.Entreprise).WithMany(e => e.Produits)
             .HasForeignKey(e => e.EntrepriseId).OnDelete(DeleteBehavior.Cascade);
 
+        modelBuilder.Entity<TypePrestation>()
+            .HasOne(e => e.Entreprise).WithMany()
+            .HasForeignKey(e => e.EntrepriseId).OnDelete(DeleteBehavior.Cascade);
+
         // Chaîne d'exploitation : **Restrict**. Chacune de ces lignes a son écran,
         // son formulaire et son bouton de suppression depuis l'étape 16 bis. Perdre
         // l'historique d'exploitation d'un client sur un clic n'est pas réparable
@@ -241,6 +248,15 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Prestation>()
             .HasOne(e => e.AgentTitulaire).WithMany()
             .HasForeignKey(e => e.AgentTitulaireId).OnDelete(DeleteBehavior.SetNull);
+
+        // Type du catalogue d'une prestation : **Restrict**, et non SetNull comme le
+        // titulaire juste au-dessus. Le titulaire est une préférence que son départ rend
+        // sans objet ; le type est la clé dont le stock et le devis auront besoin, et le
+        // perdre en silence ferait mentir leurs calculs. Un type utilisé se retire par
+        // désactivation, ce que dit le 409 de sa suppression (SPEC.md, étape 21).
+        modelBuilder.Entity<Prestation>()
+            .HasOne(e => e.TypePrestation).WithMany()
+            .HasForeignKey(e => e.TypePrestationId).OnDelete(DeleteBehavior.Restrict);
 
         // Chef d'équipe d'un agent : **SetNull**, même raisonnement. Le lien vise un
         // compte d'Identity, et supprimer ce compte ne doit ni être bloqué par son
@@ -323,6 +339,8 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
                 && (TenantChefEquipeId == null || Interventions.Any(i => i.Id == e.InterventionId))));
         modelBuilder.Entity<Produit>().HasQueryFilter(e =>
             !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+        modelBuilder.Entity<TypePrestation>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
         modelBuilder.Entity<Stock>().HasQueryFilter(e =>
             !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
 
@@ -358,6 +376,7 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Absence>().HasIndex(e => e.EntrepriseId);
         modelBuilder.Entity<Remplacement>().HasIndex(e => e.EntrepriseId);
         modelBuilder.Entity<Produit>().HasIndex(e => e.EntrepriseId);
+        modelBuilder.Entity<TypePrestation>().HasIndex(e => e.EntrepriseId);
         modelBuilder.Entity<Stock>().HasIndex(e => e.EntrepriseId);
 
         // ⚠️ Le journal se lit toujours du plus récent au plus ancien, et se purge

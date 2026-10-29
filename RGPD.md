@@ -173,7 +173,7 @@ un outil de surveillance des collègues — ce qu'un journal RGPD n'est pas cens
 
 ## 3. Cartographie des données
 
-Les douze tables du modèle, plus les tables d'Identity. « DP » = donnée personnelle.
+Les treize tables du modèle, plus les tables d'Identity. « DP » = donnée personnelle.
 
 | Table | Colonnes porteuses de DP | Catégorie | Sort par |
 |---|---|---|---|
@@ -187,6 +187,7 @@ Les douze tables du modèle, plus les tables d'Identity. « DP » = donnée pers
 | `Contrats` | aucune | — | `/api/contrats` |
 | `Prestations` | `AgentTitulaireId` — `Libelle` est un intitulé de prestation | affectation habituelle d'un salarié à un site, à une heure | `/api/prestations`, et le dossier de l'agent |
 | `Produits`, `Stocks` | aucune | — | — |
+| `TypesPrestation` | aucune — un libellé de catalogue et une durée | — | `/api/types-prestation` |
 | `AccesJournalises` | `UtilisateurId`, `CibleId`, `Horodatage` | trace d'activité d'un utilisateur | `/api/journal-acces` |
 | `AspNetUsers` | `Email`, `UserName`, `PhoneNumber`, `Nom`, `Prenom`, `PasswordHash`, verrouillage, `DateAnonymisation` | identité et **secret d'authentification** | `/api/auth/moi`, et nom et prénom des chefs d'équipe par `/api/agents/chefs-equipe` (administrateur, journalisée) |
 | `JetonsRafraichissement` | `UtilisateurId`, **`AdresseIp`**, dates | trace de connexion | **aucune route** |

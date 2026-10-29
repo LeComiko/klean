@@ -523,10 +523,19 @@ describe('descriptions — parité avec les DTOs du serveur', () => {
       })
   }
 
+  /**
+   * La règle « clé moins son s final » ne vaut pas pour un pluriel composé :
+   * `typesPrestation` donnerait `TypesPrestatioCreateDto`. Écrit ici plutôt que deviné.
+   */
+  const ClassesExplicites: Readonly<Record<string, string>> = {
+    typesPrestation: 'TypePrestationCreateDto',
+  }
+
   test('chaque champ du DTO de création a son champ à l’écran, et réciproquement', () => {
     for (const description of Descriptions) {
       const singulier = description.cle.slice(0, -1)
-      const classe = `${singulier.charAt(0).toUpperCase()}${singulier.slice(1)}CreateDto`
+      const classe = ClassesExplicites[description.cle]
+        ?? `${singulier.charAt(0).toUpperCase()}${singulier.slice(1)}CreateDto`
 
       assert.deepEqual(
         description.champs.map((champ) => champ.nom).toSorted(),

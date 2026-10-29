@@ -1955,6 +1955,32 @@ de la semaine.
 - **C** — écran de référence du catalogue avec le bouton d'import, et préremplissage du
   libellé et de la durée dans le formulaire des prestations.
 
+**Lot A — fait le 29 octobre 2026**
+
+- `TypePrestation` — libellé, durée par défaut de 1 à 1 440 minutes, actif —, clé vers
+  l'entreprise en `Cascade` comme `Produit`, et treizième filtre global.
+  `Prestation.TypePrestationId`, nullable, en **`Restrict`**. Migration
+  `CatalogueDesPrestations`, additive.
+- `/api/types-prestation`, les cinq routes : lecture par les rôles internes — le chef
+  d'équipe en aura besoin pour ses devis —, écriture par l'administrateur.
+- **Libellé unique dans l'entreprise, à la casse et aux espaces près**, type désactivé
+  compris, en 409 : deux « Hall d'entrée » rendraient le choix illisible, et l'import du
+  lot B s'y fiera pour ne rien recréer. Sur un type désactivé, le refus dit de le
+  réactiver.
+- **Retrait** : un type jamais utilisé se supprime ; un type utilisé est refusé en 409,
+  et le message nomme la désactivation.
+- **À l'enregistrement d'une prestation**, un type d'une autre entreprise est inconnu, et
+  un type désactivé est refusé quand on le **choisit**, jamais quand on le garde : sinon
+  changer l'heure d'une prestation obligerait à lui retirer son type.
+- **L'écran du catalogue existe dès ce lot**, et le champ « Type » sur les prestations
+  aussi : la parité DTO ↔ écran l'impose, comme au lot A de l'étape 19. Le lot C se réduit
+  donc au bouton d'import et au préremplissage — et à la liste déroulante, qui propose
+  encore les types désactivés, que le serveur refuse en français.
+- **Un garde-fou de plus** : `IsolationTests` refuse désormais toute entité portant
+  `EntrepriseId` sans filtre global. Il manquait, et une treizième entité filtrée était
+  le moment de l'écrire.
+- `TypesPrestationTests` : 16 tests, et sept sabotages, tous rouges.
+
 ---
 
 # Suite — non planifié

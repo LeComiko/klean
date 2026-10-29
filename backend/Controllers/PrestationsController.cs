@@ -56,7 +56,8 @@ public class PrestationsController : ControllerBase
                 DureeEstimeeMinutes = p.DureeEstimeeMinutes,
                 Jours = JoursDeLaSemaine.EnListe(p.Jours),
                 HeureDebut = p.HeureDebut,
-                AgentTitulaireId = p.AgentTitulaireId
+                AgentTitulaireId = p.AgentTitulaireId,
+                TypePrestationId = p.TypePrestationId
             })
             .ToListAsync();
 
@@ -85,7 +86,8 @@ public class PrestationsController : ControllerBase
                 DureeEstimeeMinutes = p.DureeEstimeeMinutes,
                 Jours = JoursDeLaSemaine.EnListe(p.Jours),
                 HeureDebut = p.HeureDebut,
-                AgentTitulaireId = p.AgentTitulaireId
+                AgentTitulaireId = p.AgentTitulaireId,
+                TypePrestationId = p.TypePrestationId
             })
             .FirstOrDefaultAsync();
 
@@ -104,6 +106,11 @@ public class PrestationsController : ControllerBase
         var (refus, jours) = await ValiderRecurrenceAsync(dto);
         if (refus is not null) return BadRequest(refus);
 
+        if (await RefusDuTypeAsync(dto.TypePrestationId, actuel: null) is { } refusDuType)
+        {
+            return BadRequest(refusDuType);
+        }
+
         var prestation = new Prestation
         {
             ContratId = dto.ContratId,
@@ -111,7 +118,8 @@ public class PrestationsController : ControllerBase
             DureeEstimeeMinutes = dto.DureeEstimeeMinutes,
             Jours = jours,
             HeureDebut = dto.HeureDebut,
-            AgentTitulaireId = dto.AgentTitulaireId
+            AgentTitulaireId = dto.AgentTitulaireId,
+            TypePrestationId = dto.TypePrestationId
         };
 
         _db.Prestations.Add(prestation);
@@ -135,12 +143,18 @@ public class PrestationsController : ControllerBase
         var (refus, jours) = await ValiderRecurrenceAsync(dto);
         if (refus is not null) return BadRequest(refus);
 
+        if (await RefusDuTypeAsync(dto.TypePrestationId, prestation.TypePrestationId) is { } refusDuType)
+        {
+            return BadRequest(refusDuType);
+        }
+
         prestation.ContratId = dto.ContratId;
         prestation.Libelle = dto.Libelle;
         prestation.DureeEstimeeMinutes = dto.DureeEstimeeMinutes;
         prestation.Jours = jours;
         prestation.HeureDebut = dto.HeureDebut;
         prestation.AgentTitulaireId = dto.AgentTitulaireId;
+        prestation.TypePrestationId = dto.TypePrestationId;
 
         await _db.SaveChangesAsync();
         return NoContent();
@@ -207,6 +221,30 @@ public class PrestationsController : ControllerBase
         return (null, jours);
     }
 
+    /// <summary>
+    /// Le refus du type demandé, ou <c>null</c>.
+    ///
+    /// Cherché à travers les filtres globaux : un type d'une autre entreprise est inconnu,
+    /// comme un identifiant inventé. Un type désactivé n'est refusé que si on le
+    /// <b>choisit</b> : la prestation qui le portait déjà le garde, sinon le moindre
+    /// changement d'horaire obligerait à lui retirer son type (SPEC.md, étape 21).
+    /// </summary>
+    private async Task<string?> RefusDuTypeAsync(Guid? demande, Guid? actuel)
+    {
+        if (demande is not { } id || demande == actuel) return null;
+
+        var type = await _db.TypesPrestation.AsNoTracking()
+            .Where(t => t.Id == id)
+            .Select(t => new { t.Libelle, t.Actif })
+            .FirstOrDefaultAsync();
+
+        if (type is null) return $"Type de prestation {id} inconnu.";
+
+        return type.Actif
+            ? null
+            : $"Le type « {type.Libelle} » est désactivé : le réactiver dans le catalogue, ou en choisir un autre.";
+    }
+
     private static PrestationDto Vers(Prestation p) => new()
     {
         Id = p.Id,
@@ -216,6 +254,7 @@ public class PrestationsController : ControllerBase
         DureeEstimeeMinutes = p.DureeEstimeeMinutes,
         Jours = JoursDeLaSemaine.EnListe(p.Jours),
         HeureDebut = p.HeureDebut,
-        AgentTitulaireId = p.AgentTitulaireId
+        AgentTitulaireId = p.AgentTitulaireId,
+        TypePrestationId = p.TypePrestationId
     };
 }

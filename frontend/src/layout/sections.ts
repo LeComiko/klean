@@ -81,7 +81,9 @@ export const Sections: readonly Section[] = [
     pastille: 'SI',
     libelle: 'Clients et sites',
     roles: InternesEtClientSyndic,
-    ressources: ['clients', 'sites', 'contrats', 'prestations'],
+    // Le catalogue clôt la chaîne : il ne descend d'aucune ressource, il sert les
+    // prestations (SPEC.md, étape 21).
+    ressources: ['clients', 'sites', 'contrats', 'prestations', 'typesPrestation'],
   },
 
   // Agents → Absences. C'est l'ajout qui rend le panneau de remplacement de

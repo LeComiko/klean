@@ -370,6 +370,9 @@ namespace Klean.Api.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<Guid?>("TypePrestationId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AgentTitulaireId");
@@ -377,6 +380,8 @@ namespace Klean.Api.Migrations
                     b.HasIndex("ContratId");
 
                     b.HasIndex("EntrepriseId");
+
+                    b.HasIndex("TypePrestationId");
 
                     b.ToTable("Prestations");
                 });
@@ -535,6 +540,32 @@ namespace Klean.Api.Migrations
                     b.HasIndex("ProduitId");
 
                     b.ToTable("Stocks");
+                });
+
+            modelBuilder.Entity("Klean.Api.Models.TypePrestation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Actif")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("DureeParDefautMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("EntrepriseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Libelle")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntrepriseId");
+
+                    b.ToTable("TypesPrestation");
                 });
 
             modelBuilder.Entity("Klean.Api.Models.Utilisateur", b =>
@@ -853,9 +884,16 @@ namespace Klean.Api.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Klean.Api.Models.TypePrestation", "TypePrestation")
+                        .WithMany()
+                        .HasForeignKey("TypePrestationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("AgentTitulaire");
 
                     b.Navigation("Contrat");
+
+                    b.Navigation("TypePrestation");
                 });
 
             modelBuilder.Entity("Klean.Api.Models.Produit", b =>
@@ -914,6 +952,17 @@ namespace Klean.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Produit");
+                });
+
+            modelBuilder.Entity("Klean.Api.Models.TypePrestation", b =>
+                {
+                    b.HasOne("Klean.Api.Models.Entreprise", "Entreprise")
+                        .WithMany()
+                        .HasForeignKey("EntrepriseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Entreprise");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>

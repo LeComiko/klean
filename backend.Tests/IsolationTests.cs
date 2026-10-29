@@ -174,6 +174,26 @@ public class IsolationTests : IAsyncLifetime
     }
 
     [Fact]
+    public void Toute_entite_portant_EntrepriseId_a_un_filtre_global()
+    {
+        // Le mécanisme de §7 tient à une ligne par entité, et rien ne rappelait de
+        // l'écrire. Une entité ajoutée sans son filtre ne casse aucune fonctionnalité :
+        // elle se lit seulement d'une entreprise à l'autre. Ce test la refuse dès sa
+        // création, sans qu'il faille penser à lui écrire un test d'isolation.
+        using var portee = _fixture.Fabrique.Services.CreateScope();
+        var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
+
+        var sansFiltre = db.Model.GetEntityTypes()
+            .Where(t => t.FindProperty("EntrepriseId") is not null || t.ClrType == typeof(Entreprise))
+            .Where(t => t.ClrType != typeof(Utilisateur))
+            .Where(t => t.GetDeclaredQueryFilters().Count == 0)
+            .Select(t => t.ClrType.Name)
+            .ToList();
+
+        Assert.Empty(sansFiltre);
+    }
+
+    [Fact]
     public void Aucun_CreateDto_n_expose_EntrepriseId()
     {
         // Garde du contrat. Le retrait d'EntrepriseId des DTO d'entrée est ce

@@ -15,6 +15,7 @@ public class PrestationDto
 
     public TimeSpan? HeureDebut { get; set; }
     public Guid? AgentTitulaireId { get; set; }
+    public Guid? TypePrestationId { get; set; }
 }
 
 public class PrestationCreateDto
@@ -43,4 +44,10 @@ public class PrestationCreateDto
     public TimeSpan? HeureDebut { get; set; }
 
     public Guid? AgentTitulaireId { get; set; }
+
+    /// <summary>
+    /// Le type du catalogue, ou nul. Un type d'une autre entreprise est inconnu ; un type
+    /// désactivé est refusé quand on le <b>choisit</b>, pas quand on le garde.
+    /// </summary>
+    public Guid? TypePrestationId { get; set; }
 }

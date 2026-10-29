@@ -364,12 +364,76 @@ const Prestations: DescriptionRessource = {
       reference: 'agents',
       aide: 'Affecté par la génération s’il est disponible ce jour-là. Sinon la vacation reste à pourvoir.',
     },
+    {
+      // ⚠️ Décrit dès le lot A de l'étape 21 pour que le PUT le renvoie : sans lui,
+      // chaque enregistrement d'une prestation lui retirerait son type (CLAUDE.md §11).
+      // Le préremplissage du libellé et de la durée vient au lot C.
+      nom: 'typePrestationId',
+      libelle: 'Type',
+      type: 'reference',
+      reference: 'typesPrestation',
+      aide: 'Facultatif. Le type du catalogue dont elle relève ; le libellé ci-dessus reste propre à ce site.',
+    },
   ],
 
   rolesLecture: RolesInternes,
   rolesEcriture: EcritureReference,
 
   parent: { ressource: 'contrats', champ: 'contratId' },
+}
+
+/**
+ * Le catalogue des prestations de l'entreprise (SPEC.md, étape 21). Un type porte ce
+ * qui est vrai partout — libellé et durée par défaut ; les jours et l'heure, qui
+ * dépendent du site, restent sur la prestation.
+ */
+const TypesPrestation: DescriptionRessource = {
+  cle: 'typesPrestation',
+  chemin: '/catalogue',
+  route: '/api/types-prestation',
+  libelle: 'Catalogue',
+  singulier: 'type de prestation',
+  genre: 'masculin',
+  sousTitre: 'Les prestations types, à choisir plutôt qu’à retaper',
+  etiquette: 'libelle',
+
+  colonnes: [
+    { nom: 'libelle', libelle: 'Libellé' },
+    { nom: 'dureeParDefautMinutes', libelle: 'Durée par défaut (min)', chiffres: true },
+    { nom: 'actif', libelle: 'Actif' },
+  ],
+
+  champs: [
+    {
+      nom: 'libelle',
+      libelle: 'Libellé',
+      type: 'texte',
+      requis: true,
+      longueurMax: 200,
+      aide: 'Unique dans le catalogue. Le renommer ne change pas les prestations déjà créées.',
+    },
+    {
+      nom: 'dureeParDefautMinutes',
+      libelle: 'Durée par défaut (minutes)',
+      type: 'nombre',
+      requis: true,
+      min: 1,
+      max: 1440,
+      aide: 'Proposée à la création d’une prestation, qui reste libre de la changer.',
+    },
+    {
+      nom: 'actif',
+      libelle: 'Actif',
+      type: 'booleen',
+      defaut: true,
+      // Décrire l'effet : c'est la seule façon de retirer un type utilisé, sa
+      // suppression étant refusée.
+      aide: 'Décoché, le type n’est plus proposé ; les prestations qui le portent le gardent.',
+    },
+  ],
+
+  rolesLecture: RolesInternes,
+  rolesEcriture: EcritureReference,
 }
 
 const Absences: DescriptionRessource = {
@@ -484,6 +548,7 @@ export const Descriptions: readonly DescriptionRessource[] = [
   Sites,
   Contrats,
   Prestations,
+  TypesPrestation,
   Agents,
   Absences,
   Produits,
