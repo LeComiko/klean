@@ -1981,6 +1981,54 @@ de la semaine.
   le moment de l'écrire.
 - `TypesPrestationTests` : 16 tests, et sept sabotages, tous rouges.
 
+**Lot B — fait le 29 octobre 2026**
+
+- **La liste type**, dans `Services/ListeTypePrestations.cs` : dix-sept types validés avec
+  toi.
+  - Treize pour les parties communes de copropriété : hall, escaliers et paliers,
+    ascenseur, boîtes aux lettres, local poubelles, sortie, rentrée et lavage des
+    conteneurs, encombrants, caves, parking, vitrerie, abords.
+  - Trois pour les bureaux : bureaux, sanitaires, espace pause.
+  - Un ponctuel : remise en état.
+
+  ⚠️ **Les durées sont des hypothèses**, et le commentaire le dit. Aucune source ne publie
+  de durée par type : la profession chiffre au m² ou au forfait. Seuls « Bureaux » et
+  « Sanitaires » s'appuient sur une cadence publiée. Les durées ne font que préremplir :
+  elles se corrigent dans le catalogue, et chaque prestation garde la sienne.
+- **`POST /api/types-prestation/importer-liste-type`**, administrateur seul.
+  - Il crée les libellés absents et laisse **tels quels** ceux déjà présents, à la casse
+    et aux espaces près. Une durée corrigée n'est pas écrasée, et un type désactivé n'est
+    pas recréé, puisque le désactiver était un retrait.
+  - Le compte rendu nomme les deux listes, `Crees` et `DejaPresents` : qui rejoue l'import
+    voit que rien n'a été recréé.
+- **Deux protections contre les doublons, et chacune couvre un cas différent.**
+  - Un **verrou consultatif par entreprise** sérialise deux imports simultanés. Sans lui,
+    l'index empêche bien le doublon, mais l'un des deux imports échoue en 500 au lieu de
+    répondre « déjà présents ». C'est la forme à deux entiers, dont aucune clé ne recoupe
+    celles du verrou de la génération.
+  - Un **index unique `(EntrepriseId, lower(Libelle))`**, migration `LibelleDeTypeUnique`,
+    additive, en SQL brut : EF ne décrit pas un index sur expression. Il tranche quand
+    deux créations ou deux renommages se croisent entre la vérification et l'écriture. Ce
+    refus sort en **409**, pas en 500.
+- ⚠️ **Le test de création concurrente a d'abord été vert à l'envers.** Huit créations
+  simultanées du même libellé ne se chevauchaient qu'à froid. Dans la série, processus
+  chaud, la première finissait avant que les autres lisent : le test passait avec la
+  conversion du 409 retirée. Il est remplacé par une course **provoquée** :
+  1. le test insère « PARKING » dans une transaction laissée ouverte ;
+  2. il attend que l'insertion du contrôleur soit bloquée sur l'index, ce que
+     `pg_stat_activity` montre ;
+  3. il valide sa transaction, et la requête du contrôleur doit répondre 409.
+- `TypesPrestationTests` : 25 tests.
+  - Sept sabotages, tous rouges et pour la bonne raison : verrou retiré, conversion du
+    23505 retirée, existants non sautés, clé sensible à la casse, import ouvert aux rôles
+    internes, déjà-présents non rapportés, index supprimé de `klean_test`.
+  - Ceux du verrou et de la conversion ont été rejoués trois fois, à froid et à chaud.
+
+Reste au lot C :
+- le bouton d'import sur l'écran du catalogue ;
+- le préremplissage du libellé et de la durée dans le formulaire des prestations ;
+- le retrait des types désactivés de la liste déroulante.
+
 ---
 
 # Suite — non planifié

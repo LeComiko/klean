@@ -1,13 +1,18 @@
 using System.Net;
 using System.Net.Http.Json;
+using Klean.Api.Data;
 using Klean.Api.DTOs;
 using Klean.Api.Models;
+using Klean.Api.Services;
 using Klean.Api.Tests.Infrastructure;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 
 namespace Klean.Api.Tests;
 
 /// <summary>
-/// Le catalogue des prestations — étape 21, lot A.
+/// Le catalogue des prestations — étape 21, lots A et B.
 ///
 /// Trois choses à garder, et chacune a sa raison dans SPEC.md : le catalogue est
 /// <b>par entreprise</b> ; le libellé d'une prestation est une <b>copie</b>, qu'un type
@@ -18,6 +23,7 @@ namespace Klean.Api.Tests;
 public class TypesPrestationTests : IAsyncLifetime
 {
     private const string Route = "/api/types-prestation";
+    private const string RouteImport = "/api/types-prestation/importer-liste-type";
 
     private readonly FixtureApi _fixture;
     private HttpClient _admin = null!;
@@ -262,7 +268,209 @@ public class TypesPrestationTests : IAsyncLifetime
         Assert.Equal(type.Id, (await _admin.GetFromJsonAsync<PrestationDto>($"/api/prestations/{prestation.Id}"))!.TypePrestationId);
     }
 
+    [Fact]
+    public async Task Un_libelle_ecrit_entre_la_verification_et_l_insertion_rend_409_et_non_500()
+    {
+        // ⚠️ La course est provoquée, pas espérée. Huit créations simultanées ne se
+        // chevauchaient qu'à froid : dans la série, le processus chaud, la première finissait
+        // avant que les autres aient lu, et le test restait vert la conversion retirée
+        // (CLAUDE.md §10). Ici, « Parking » est inséré dans une transaction laissée ouverte :
+        // la vérification du contrôleur ne le voit pas, son insertion attend sur l'index, et
+        // la validation la fait tomber sur la violation d'unicité.
+        using var portee = _fixture.Fabrique.Services.CreateScope();
+        var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlAsync($"""
+            INSERT INTO "TypesPrestation" ("Id", "EntrepriseId", "Libelle", "DureeParDefautMinutes", "Actif")
+            VALUES ({Guid.NewGuid()}, {_fixture.EntrepriseAlpha}, 'PARKING', 60, true)
+            """);
+
+        var creation = _admin.PostAsJsonAsync(Route, new TypePrestationCreateDto
+        {
+            Libelle = "Parking", DureeParDefautMinutes = 60
+        });
+
+        await AttendreUneAttenteDeVerrouAsync(creation);
+        await transaction.CommitAsync();
+
+        var reponse = await creation;
+        Assert.Equal(HttpStatusCode.Conflict, reponse.StatusCode);
+        Assert.Contains("Recharger", await reponse.Content.ReadAsStringAsync());
+        Assert.Equal(1, await CompterEnBaseAsync("parking"));
+    }
+
+    [Fact]
+    public async Task L_index_refuse_un_doublon_ecrit_hors_de_l_api()
+    {
+        // La garde de dernier ressort, éprouvée sous le contrôleur : sans l'index, ce
+        // doublon passerait, et le test de concurrence ci-dessus ne tiendrait plus.
+        await Type("Hall d'entrée", 30);
+
+        var refus = await Assert.ThrowsAsync<PostgresException>(() =>
+            InsererEnBaseAsync(_fixture.EntrepriseAlpha, "HALL D'ENTRÉE"));
+
+        Assert.Equal(PostgresErrorCodes.UniqueViolation, refus.SqlState);
+
+        // Par entreprise : le même libellé reste libre ailleurs.
+        await InsererEnBaseAsync(_fixture.EntrepriseBeta, "HALL D'ENTRÉE");
+    }
+
+    // ------------------------------------------------------------- l'import de la liste type
+
+    [Fact]
+    public async Task L_import_cree_toute_la_liste_type()
+    {
+        var compteRendu = await Importer(_admin);
+
+        Assert.Equal(ListeTypePrestations.Elements.Select(e => e.Libelle), compteRendu.Crees);
+        Assert.Empty(compteRendu.DejaPresents);
+
+        var catalogue = await _admin.ListerAsync<TypePrestationDto>(Route);
+        Assert.Equal(ListeTypePrestations.Elements.Count, catalogue.Count);
+        Assert.All(catalogue, t => Assert.True(t.Actif));
+        Assert.Equal(180, catalogue.Single(t => t.Libelle == "Remise en état").DureeParDefautMinutes);
+    }
+
+    [Fact]
+    public async Task Rejouer_l_import_ne_recree_rien()
+    {
+        await Importer(_admin);
+
+        var second = await Importer(_admin);
+
+        Assert.Empty(second.Crees);
+        Assert.Equal(ListeTypePrestations.Elements.Select(e => e.Libelle), second.DejaPresents);
+        Assert.Equal(ListeTypePrestations.Elements.Count, (await _admin.ListerAsync<TypePrestationDto>(Route)).Count);
+    }
+
+    [Fact]
+    public async Task L_import_n_ecrase_ni_une_saisie_ni_une_correction_ni_une_desactivation()
+    {
+        // Saisi avant l'import, sous une autre casse et une autre durée.
+        var saisi = await Type("hall d'entrée", 45);
+
+        var premier = await Importer(_admin);
+        Assert.Contains("Hall d'entrée", premier.DejaPresents);
+        Assert.DoesNotContain("Hall d'entrée", premier.Crees);
+
+        var catalogue = await _admin.ListerAsync<TypePrestationDto>(Route);
+        var parking = catalogue.Single(t => t.Libelle == "Parking");
+        var ascenseur = catalogue.Single(t => t.Libelle == "Ascenseur");
+        await Modifier(parking.Id, "Parking", 90, actif: true);
+        await Modifier(ascenseur.Id, "Ascenseur", 10, actif: false);
+
+        var second = await Importer(_admin);
+        Assert.Empty(second.Crees);
+
+        var relu = await _admin.ListerAsync<TypePrestationDto>(Route);
+        Assert.Equal(ListeTypePrestations.Elements.Count, relu.Count);
+        Assert.Equal(("hall d'entrée", 45), Resume(relu.Single(t => t.Id == saisi.Id)));
+        Assert.Equal(90, relu.Single(t => t.Id == parking.Id).DureeParDefautMinutes);
+        Assert.False(relu.Single(t => t.Id == ascenseur.Id).Actif);
+    }
+
+    [Fact]
+    public async Task L_import_est_propre_a_chaque_entreprise()
+    {
+        await Importer(_admin);
+
+        var beta = await _fixture.ClientConnecteAsync(FixtureApi.AdminBeta);
+        Assert.Empty(await beta.ListerAsync<TypePrestationDto>(Route));
+
+        // Alpha a déjà tout : Beta crée quand même toute la liste chez elle.
+        Assert.Equal(ListeTypePrestations.Elements.Count, (await Importer(beta)).Crees.Count);
+    }
+
+    [Fact]
+    public async Task Deux_imports_simultanes_ne_dupliquent_rien_et_n_echouent_pas()
+    {
+        // Le verrou sérialise : chaque import lit ce que le précédent a écrit. Sans lui,
+        // l'index empêcherait le doublon mais l'un des imports échouerait en 500. Six
+        // requêtes : à deux, la première peut finir avant que la seconde ait lu.
+        var reponses = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => _admin.PostAsync(RouteImport, null)));
+
+        var crees = 0;
+        foreach (var reponse in reponses)
+        {
+            Assert.True(reponse.StatusCode == HttpStatusCode.OK, await reponse.Content.ReadAsStringAsync());
+            crees += (await reponse.Content.ReadFromJsonAsync<ImportListeTypeDto>())!.Crees.Count;
+        }
+
+        Assert.Equal(ListeTypePrestations.Elements.Count, crees);
+        Assert.Equal(1, await CompterEnBaseAsync("parking"));
+    }
+
+    [Theory]
+    [InlineData(RolesKlean.Responsable, "resp@test.local")]
+    [InlineData(RolesKlean.ChefEquipe, "chef@test.local")]
+    public async Task Seul_l_administrateur_importe(string role, string email)
+    {
+        var client = await _fixture.ClientDeRoleAsync(_admin, role, email);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync(RouteImport, null)).StatusCode);
+        Assert.Empty(await _admin.ListerAsync<TypePrestationDto>(Route));
+    }
+
     // ------------------------------------------------------------- outils
+
+    private static async Task<ImportListeTypeDto> Importer(HttpClient client)
+    {
+        var reponse = await client.PostAsync(RouteImport, null);
+
+        Assert.True(reponse.StatusCode == HttpStatusCode.OK, await reponse.Content.ReadAsStringAsync());
+
+        return (await reponse.Content.ReadFromJsonAsync<ImportListeTypeDto>())!;
+    }
+
+    private static (string, int) Resume(TypePrestationDto t) => (t.Libelle, t.DureeParDefautMinutes);
+
+    /// <summary>Lu en base, toutes entreprises : la vérité, pas ce que l'API veut bien montrer.</summary>
+    private async Task<int> CompterEnBaseAsync(string libelleEnMinuscules)
+    {
+        using var portee = _fixture.Fabrique.Services.CreateScope();
+        var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
+
+        return await db.TypesPrestation.CountAsync(t => t.Libelle.ToLower() == libelleEnMinuscules);
+    }
+
+    /// <summary>
+    /// Attend qu'une session de la base soit bloquée sur un verrou — l'insertion de la
+    /// requête en cours. Échoue si la requête a fini avant : elle n'a donc pas attendu, et
+    /// le test n'éprouverait rien.
+    /// </summary>
+    private async Task AttendreUneAttenteDeVerrouAsync(Task requete)
+    {
+        using var portee = _fixture.Fabrique.Services.CreateScope();
+        var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
+
+        for (var essai = 0; essai < 200; essai++)
+        {
+            Assert.False(requete.IsCompleted, "La requête a fini sans attendre l'index.");
+
+            var bloquees = await db.Database.SqlQuery<int>($"""
+                SELECT count(*)::int AS "Value" FROM pg_stat_activity
+                WHERE datname = current_database() AND wait_event_type = 'Lock'
+                """).SingleAsync();
+
+            if (bloquees > 0) return;
+
+            await Task.Delay(25);
+        }
+
+        Assert.Fail("Aucune insertion n'a attendu l'index en cinq secondes.");
+    }
+
+    /// <summary>Écrit sous le contrôleur et sous <c>SaveChangesAsync</c> : seule la base répond.</summary>
+    private async Task InsererEnBaseAsync(Guid entrepriseId, string libelle)
+    {
+        using var portee = _fixture.Fabrique.Services.CreateScope();
+        var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
+
+        await db.Database.ExecuteSqlAsync($"""
+            INSERT INTO "TypesPrestation" ("Id", "EntrepriseId", "Libelle", "DureeParDefautMinutes", "Actif")
+            VALUES ({Guid.NewGuid()}, {entrepriseId}, {libelle}, 30, true)
+            """);
+    }
 
     private async Task<T> Creer<T>(string route, object corps)
     {

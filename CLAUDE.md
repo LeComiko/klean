@@ -103,7 +103,8 @@ KLEAN/
 │   │                    PlanningService, ServiceGeneration, JoursFeries,
 │   │                    JwtService, ServiceSession,
 │   │                    AmorcageService, TenantContext, LimiteurDebit,
-│   │                    ServiceCourrielSmtp, DescripteurErreursFrancais
+│   │                    ServiceCourrielSmtp, DescripteurErreursFrancais,
+│   │                    ListeTypePrestations
 │   ├── Middleware/      VerificationCsrf, EnTetesSecurite, LimiteCorpsRequete,
 │   │                    IdentifiantCorrelation
 │   ├── Filtres/         JournaliserAcces — filtre d'action MVC, pas un middleware
@@ -167,7 +168,7 @@ Entreprise ─┬─ Client ─── Site ─── Contrat ─── Prestatio
 | Site | Latitude, Longitude, Consignes, DateCreation |
 | Contrat | DateDebut, DateFin (nullable), Frequence (libellé libre), Actif, InclutJoursFeries |
 | Prestation | DureeEstimeeMinutes, Jours (enum à drapeaux), HeureDebut (nullable), AgentTitulaireId (nullable, `SetNull`), TypePrestationId (nullable, `Restrict`) |
-| TypePrestation | Libelle (unique dans l'entreprise, à la casse près), DureeParDefautMinutes, Actif — ni jours ni heure, qui dépendent du site |
+| TypePrestation | Libelle (unique dans l'entreprise, à la casse près : vérifié par le contrôleur **et** par l'index sur `lower("Libelle")`, en SQL brut), DureeParDefautMinutes, Actif — ni jours ni heure, qui dépendent du site |
 | Agent | Latitude, Longitude (nullable), DateEmbauche, Actif, ChefEquipeId (nullable, `SetNull`, vise un **compte**) |
 | Intervention | DatePrevue, HeurePrevue (TimeSpan), AgentId (nullable), Statut (enum) |
 | Absence | Type (enum), DateDebut, DateFin, Motif |
@@ -1278,6 +1279,20 @@ lancées ensemble ne se chevauchent pas forcément : si la première écrit tout
 aller-retour, elle finit avant que la seconde ait lu. Le test de double génération est
 resté vert, verrou retiré, jusqu'à ce qu'on élargisse la fenêtre. Un tel test ne vaut
 qu'après un sabotage qui le fait rougir, **rejoué plusieurs fois**.
+
+⚠️ **Et rejoué dans la série, pas seulement seul.** La fenêtre dépend aussi de la chaleur
+du processus. Au lot B de l'étape 21, huit créations simultanées du même libellé se
+chevauchaient quand le test tournait seul, à froid : le sabotage rougissait. Dans la
+série, processus chaud, la première finissait avant que les autres lisent, et le même
+sabotage restait vert.
+
+La parade est de **provoquer** la course plutôt que de l'espérer :
+1. le test écrit la ligne concurrente dans une transaction laissée ouverte ;
+2. il attend que la requête soit bloquée sur l'index, ce que `pg_stat_activity` montre
+   par `wait_event_type = 'Lock'` ;
+3. il valide sa transaction.
+
+Voir `TypesPrestationTests`.
 
 **EF ne retire pas d'un filtre global la branche d'un paramètre nul.** Un filtre écrit
 `Axe == null || EXISTS (…)` ne devient pas `TRUE` quand l'axe est nul : EF émet

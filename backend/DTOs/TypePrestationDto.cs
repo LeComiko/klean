@@ -11,6 +11,22 @@ public class TypePrestationDto
     public bool Actif { get; set; }
 }
 
+/// <summary>
+/// Compte rendu de <c>POST /api/types-prestation/importer-liste-type</c>. Les deux
+/// listes, et pas seulement leur nombre : qui rejoue l'import doit voir que rien n'a été
+/// recréé, et lesquels étaient déjà là.
+/// </summary>
+public class ImportListeTypeDto
+{
+    public List<string> Crees { get; set; } = [];
+
+    /// <summary>
+    /// Laissés tels quels, durée et état compris, parce qu'un type de même libellé existait
+    /// déjà, actif ou non. C'est ce qui rend l'import rejouable sans écraser une correction.
+    /// </summary>
+    public List<string> DejaPresents { get; set; } = [];
+}
+
 public class TypePrestationCreateDto
 {
     [Required]
