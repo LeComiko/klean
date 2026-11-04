@@ -293,6 +293,74 @@ export function filtreDe(
  * des contrats c'est le genre de défaut qu'on ne voit qu'en le lisant à voix haute.
  */
 
+/**
+ * Les valeurs après le choix d'une ligne dans un champ qui `preremplit`.
+ *
+ * Un champ cible n'est réécrit que s'il est **vide**, ou s'il porte encore la valeur
+ * que le choix **précédent** y avait mise. C'est ce qui permet de se raviser —
+ * « Hall d'entrée » puis « Escaliers » remplace bien le libellé — sans jamais écraser
+ * une saisie : un libellé propre au site, tapé ou déjà enregistré, n'est plus égal au
+ * libellé du type, donc il reste.
+ *
+ * ⚠️ Revenir à « — choisir — » ne vide rien : la saisie reste, seul le lien part.
+ *
+ * Les valeurs sont comparées en texte, comme le formulaire les tient : une durée de
+ * 30 y est la chaîne « 30 ».
+ */
+export function preremplir(
+  champ: ChampRessource,
+  valeurs: ValeursFormulaire,
+  precedente: Ligne | undefined,
+  choisie: Ligne | undefined,
+): ValeursFormulaire {
+  if (champ.preremplit === undefined || choisie === undefined) return valeurs
+
+  const suivantes: ValeursFormulaire = { ...valeurs }
+
+  for (const [cible, source] of Object.entries(champ.preremplit)) {
+    const proposee = texteDe(choisie[source])
+
+    if (proposee === undefined) continue
+
+    const actuelle = valeurs[cible]
+    const laissee = precedente === undefined ? undefined : texteDe(precedente[source])
+
+    if (actuelle === '' || actuelle === undefined || actuelle === laissee) {
+      suivantes[cible] = proposee
+    }
+  }
+
+  return suivantes
+}
+
+/** Ce qu'une option doit porter pour être filtrée par `optionsProposees`. */
+export interface OptionFiltrable {
+  valeur: string
+  libelle: string
+  actif?: boolean
+}
+
+/**
+ * Les options d'une liste déroulante, sans les lignes désactivées si le champ le
+ * demande — **sauf** `gardee`, la valeur enregistrée, rendue et dite « (désactivé) ».
+ *
+ * `gardee` est la valeur **à l'ouverture**, pas la valeur courante : qui choisit un
+ * autre type puis se ravise doit pouvoir revenir à celui que la prestation portait.
+ */
+export function optionsProposees<O extends OptionFiltrable>(
+  champ: ChampRessource,
+  options: readonly O[],
+  gardee: ValeursFormulaire[string] | undefined,
+): readonly O[] {
+  if (champ.seulementActifs !== true) return options
+
+  return options
+    .filter((option) => option.actif !== false || option.valeur === gardee)
+    .map((option) => (option.actif === false
+      ? { ...option, libelle: `${option.libelle} (désactivé)` }
+      : option))
+}
+
 const Voyelles = /^[aeiouyâàäéèêëîïôöùûü]/i
 
 /** « le client », « la prestation », « l’absence ». */

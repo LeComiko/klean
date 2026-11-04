@@ -16,6 +16,8 @@ import {
   majuscule,
   masque,
   nouveau,
+  optionsProposees,
+  preremplir,
   rendu,
   texteDe,
   tousLes,
@@ -571,5 +573,102 @@ describe('les jours et l’heure', () => {
       rendu({ heureDebut: '07:30:00' }, { nom: 'heureDebut', libelle: 'Heure' }, Recurrence, resoudre),
       '07:30',
     )
+  })
+})
+
+/**
+ * Le préremplissage d'une prestation par son type — étape 21, lot C.
+ *
+ * La règle tient en une ligne — un champ n'est réécrit que s'il est vide ou encore à
+ * la valeur du choix précédent —, et chacun de ses deux bras protège quelque chose :
+ * le premier permet de se raviser, le second de ne jamais écraser un libellé propre
+ * au site.
+ */
+describe('preremplir', () => {
+  const ChampType: ChampRessource = {
+    nom: 'typePrestationId',
+    libelle: 'Type',
+    type: 'reference',
+    reference: 'typesPrestation',
+    preremplit: { libelle: 'libelle', dureeEstimeeMinutes: 'dureeParDefautMinutes' },
+  }
+
+  const Hall = { id: 'h', libelle: 'Hall d’entrée', dureeParDefautMinutes: 20 }
+  const Escaliers = { id: 'e', libelle: 'Escaliers et paliers', dureeParDefautMinutes: 30 }
+
+  const vierge = { typePrestationId: 'h', libelle: '', dureeEstimeeMinutes: '' }
+
+  test('remplit un formulaire vierge, la durée en texte comme le formulaire la tient', () => {
+    assert.deepEqual(preremplir(ChampType, vierge, undefined, Hall), {
+      typePrestationId: 'h', libelle: 'Hall d’entrée', dureeEstimeeMinutes: '20',
+    })
+  })
+
+  test('se raviser remplace ce que le premier choix avait mis', () => {
+    const apresHall = preremplir(ChampType, vierge, undefined, Hall)
+
+    const apresEscaliers = preremplir(ChampType, { ...apresHall, typePrestationId: 'e' }, Hall, Escaliers)
+
+    assert.equal(apresEscaliers.libelle, 'Escaliers et paliers')
+    assert.equal(apresEscaliers.dureeEstimeeMinutes, '30')
+  })
+
+  test('une saisie n’est jamais écrasée, champ par champ', () => {
+    // Le libellé a été retouché après le premier choix, la durée non.
+    const valeurs = { typePrestationId: 'e', libelle: 'Hall + escalier B', dureeEstimeeMinutes: '20' }
+
+    const suivantes = preremplir(ChampType, valeurs, Hall, Escaliers)
+
+    assert.equal(suivantes.libelle, 'Hall + escalier B')
+    assert.equal(suivantes.dureeEstimeeMinutes, '30')
+  })
+
+  test('une prestation enregistrée garde son libellé et sa durée propres', () => {
+    // ⚠️ Le cas de la modification : rien ne vient du type, tout vient du site.
+    const ouverte = { typePrestationId: 'e', libelle: 'Hall côté cour', dureeEstimeeMinutes: '25' }
+
+    assert.deepEqual(preremplir(ChampType, ouverte, Hall, Escaliers), ouverte)
+  })
+
+  test('revenir à « — choisir — » ne vide rien', () => {
+    const remplie = { typePrestationId: '', libelle: 'Hall d’entrée', dureeEstimeeMinutes: '20' }
+
+    assert.deepEqual(preremplir(ChampType, remplie, Hall, undefined), remplie)
+  })
+
+  test('un champ sans préremplissage ne touche à rien', () => {
+    const sansRemplissage: ChampRessource = { ...ChampType, preremplit: undefined }
+
+    assert.deepEqual(preremplir(sansRemplissage, vierge, undefined, Hall), vierge)
+  })
+})
+
+describe('optionsProposees', () => {
+  const Champ: ChampRessource = {
+    nom: 'typePrestationId', libelle: 'Type', type: 'reference', reference: 'typesPrestation', seulementActifs: true,
+  }
+
+  const Options = [
+    { valeur: 'h', libelle: 'Hall d’entrée', actif: true },
+    { valeur: 'v', libelle: 'Vitres', actif: false },
+    { valeur: 'p', libelle: 'Produit sans état' },
+  ]
+
+  test('retire les lignes désactivées, garde celles qui n’ont pas d’état', () => {
+    assert.deepEqual(optionsProposees(Champ, Options, '').map((option) => option.valeur), ['h', 'p'])
+  })
+
+  test('garde la valeur enregistrée, et dit qu’elle est désactivée', () => {
+    // ⚠️ Sans elle, la liste afficherait « — choisir — » sur une prestation qui porte
+    // ce type, et le serveur, lui, garde le lien.
+    assert.deepEqual(optionsProposees(Champ, Options, 'v').map((option) => option.libelle), [
+      'Hall d’entrée', 'Vitres (désactivé)', 'Produit sans état',
+    ])
+  })
+
+  test('un champ qui ne le demande pas propose tout, tel quel', () => {
+    const toutes: ChampRessource = { ...Champ, seulementActifs: undefined }
+
+    assert.deepEqual(optionsProposees(toutes, Options, ''), Options)
   })
 })

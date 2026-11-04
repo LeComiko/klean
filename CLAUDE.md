@@ -1465,6 +1465,15 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   l'étape 20. `descriptions.test.ts` lit désormais `backend/DTOs/*.cs` et compare les
   deux listes ; ajouter une propriété à un `XxxCreateDto` demande donc d'ajouter son
   champ à la description.
+- **Trois propriétés déclaratives étendent le motif sans écrire de page**, depuis
+  l'étape 21 :
+  - `action` sur une description, pour un geste de liste au-delà du CRUD ;
+  - `preremplit` et `seulementActifs` sur un champ de référence.
+
+  Leur logique est dans `valeurs.ts`, leurs invariantes dans `descriptions.test.ts`, qui
+  refuse tout nom de champ qui ne désigne rien. ⚠️ Le préremplissage ne réécrit qu'un
+  champ vide ou encore à la valeur du choix précédent : l'étendre à « toujours » écraserait
+  le libellé propre au site d'une prestation à chaque changement de type.
 - **La logique de conversion sort du composant.** `src/reference/valeurs.ts` porte
   le passage d'une ligne du serveur au formulaire et au corps JSON, parce que c'est
   la seule partie qui écrit des données fausses au lieu d'afficher quelque chose de

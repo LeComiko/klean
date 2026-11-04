@@ -4,7 +4,7 @@ import { describe, test } from 'node:test'
 
 import { Roles } from '../types/auth.ts'
 import {
-  Descriptions, JoursSemaine, descriptionDe, descriptionsLisibles, enfantsDe,
+  Descriptions, JoursSemaine, compteRenduImport, descriptionDe, descriptionsLisibles, enfantsDe,
 } from './descriptions.ts'
 
 /**
@@ -546,3 +546,95 @@ describe('descriptions — parité avec les DTOs du serveur', () => {
   })
 })
 
+
+/**
+ * Les trois ajouts du lot C de l'étape 21 : préremplissage, filtre des désactivés, et
+ * action de liste. Chacun désigne des champs par leur **nom**, et une faute de
+ * frappe ne lèverait rien — un préremplissage qui ne remplit rien, un filtre qui ne
+ * filtre rien.
+ */
+describe('descriptions — préremplissage, désactivés, actions', () => {
+  test('un préremplissage relie des champs qui existent des deux côtés', () => {
+    for (const description of Descriptions) {
+      for (const champ of description.champs) {
+        if (champ.preremplit === undefined) continue
+
+        assert.equal(champ.type, 'reference', `${description.cle}.${champ.nom}`)
+
+        const cible = descriptionDe(champ.reference ?? '')
+        assert.ok(cible, `${description.cle}.${champ.nom} → ${String(champ.reference)}`)
+
+        for (const [ici, laBas] of Object.entries(champ.preremplit)) {
+          assert.ok(description.champs.some((autre) => autre.nom === ici), `${description.cle}.${ici}`)
+          assert.ok(cible.champs.some((autre) => autre.nom === laBas), `${cible.cle}.${laBas}`)
+        }
+      }
+    }
+  })
+
+  test('« seulement actifs » vise une ressource qui a un champ actif', () => {
+    for (const description of Descriptions) {
+      for (const champ of description.champs) {
+        if (champ.seulementActifs !== true) continue
+
+        assert.equal(champ.type, 'reference', `${description.cle}.${champ.nom}`)
+        assert.ok(
+          descriptionDe(champ.reference ?? '')?.champs.some((autre) => autre.nom === 'actif' && autre.type === 'booleen'),
+          `${description.cle}.${champ.nom}`,
+        )
+      }
+    }
+  })
+
+  test('le type d’une prestation remplit son libellé et sa durée, et cache les désactivés', () => {
+    const type = descriptionDe('prestations')?.champs.find((champ) => champ.nom === 'typePrestationId')
+
+    assert.deepEqual(type?.preremplit, { libelle: 'libelle', dureeEstimeeMinutes: 'dureeParDefautMinutes' })
+    assert.equal(type?.seulementActifs, true)
+  })
+
+  test('une action vise une sous-route de sa ressource, et dit son geste', () => {
+    for (const description of Descriptions) {
+      const action = description.action
+
+      if (action === undefined) continue
+
+      assert.ok(action.route.startsWith(`${description.route}/`), action.route)
+      assert.notEqual(action.libelle, '', description.cle)
+      assert.notEqual(action.enCours, '', description.cle)
+      assert.notEqual(action.suggestion, '', description.cle)
+    }
+
+    assert.equal(descriptionDe('typesPrestation')?.action?.route, '/api/types-prestation/importer-liste-type')
+  })
+})
+
+describe('compteRenduImport', () => {
+  test('tout est créé', () => {
+    assert.equal(compteRenduImport({ crees: ['Hall', 'Parking'], dejaPresents: [] }), '2 types ajoutés au catalogue.')
+  })
+
+  test('une partie existait : elle est nommée, et dite intacte', () => {
+    assert.equal(
+      compteRenduImport({ crees: ['Parking'], dejaPresents: ['Hall', 'Ascenseur'] }),
+      '1 type ajouté au catalogue. 2 déjà présents, laissés tels quels : Hall, Ascenseur.',
+    )
+  })
+
+  test('rien n’est créé : la correction de l’utilisateur a tenu', () => {
+    assert.equal(
+      compteRenduImport({ crees: [], dejaPresents: ['Hall', 'Parking'] }),
+      'Aucun type ajouté : les 2 de la liste type sont déjà au catalogue, laissés tels quels.',
+    )
+    assert.equal(
+      compteRenduImport({ crees: [], dejaPresents: ['Hall'] }),
+      'Aucun type ajouté : celui de la liste type est déjà au catalogue, laissé tel quel.',
+    )
+  })
+
+  test('une réponse illisible ne fait pas mentir l’écran', () => {
+    for (const illisible of [null, 'texte', {}, { crees: [1], dejaPresents: [] }]) {
+      assert.equal(compteRenduImport(illisible), 'Liste type importée.')
+    }
+  })
+})

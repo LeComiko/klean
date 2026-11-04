@@ -329,6 +329,20 @@ const Prestations: DescriptionRessource = {
       requis: true,
       aide: 'Les contrats sont désignés par leur fréquence. Partir du contrat lui-même évite ce choix.',
     },
+    {
+      // Avant le libellé et la durée, qu'il remplit : on choisit le type, puis on lit
+      // et on corrige ce qu'il a proposé. ⚠️ Décrit même vide, pour que le PUT le
+      // renvoie : sans lui, chaque enregistrement retirerait son type (CLAUDE.md §11).
+      nom: 'typePrestationId',
+      libelle: 'Type',
+      type: 'reference',
+      reference: 'typesPrestation',
+      preremplit: { libelle: 'libelle', dureeEstimeeMinutes: 'dureeParDefautMinutes' },
+      // Le serveur refuse un type désactivé qu'on choisit (SPEC.md, étape 21) : ne
+      // pas le proposer évite de faire saisir ce qu'il rejette.
+      seulementActifs: true,
+      aide: 'Facultatif. Remplit le libellé et la durée, qui restent modifiables pour ce site.',
+    },
     { nom: 'libelle', libelle: 'Libellé', type: 'texte', requis: true, longueurMax: 200 },
     {
       nom: 'dureeEstimeeMinutes',
@@ -363,16 +377,6 @@ const Prestations: DescriptionRessource = {
       type: 'reference',
       reference: 'agents',
       aide: 'Affecté par la génération s’il est disponible ce jour-là. Sinon la vacation reste à pourvoir.',
-    },
-    {
-      // ⚠️ Décrit dès le lot A de l'étape 21 pour que le PUT le renvoie : sans lui,
-      // chaque enregistrement d'une prestation lui retirerait son type (CLAUDE.md §11).
-      // Le préremplissage du libellé et de la durée vient au lot C.
-      nom: 'typePrestationId',
-      libelle: 'Type',
-      type: 'reference',
-      reference: 'typesPrestation',
-      aide: 'Facultatif. Le type du catalogue dont elle relève ; le libellé ci-dessus reste propre à ce site.',
     },
   ],
 
@@ -434,6 +438,56 @@ const TypesPrestation: DescriptionRessource = {
 
   rolesLecture: RolesInternes,
   rolesEcriture: EcritureReference,
+
+  action: {
+    libelle: 'Importer la liste type',
+    enCours: 'Import…',
+    route: '/api/types-prestation/importer-liste-type',
+    suggestion: '« Importer la liste type » y ajoute d’un geste dix-sept prestations courantes, à corriger ensuite.',
+    compteRendu: compteRenduImport,
+  },
+}
+
+/**
+ * Le compte rendu de l'import, en une phrase.
+ *
+ * ⚠️ Il nomme les types **laissés tels quels**, et ce n'est pas du remplissage : qui
+ * rejoue l'import après avoir corrigé une durée doit lire que sa correction a tenu.
+ * « 0 type ajouté » seul ne le lui dirait pas.
+ */
+export function compteRenduImport(reponse: unknown): string {
+  const crees = listeDeTextes(reponse, 'crees')
+  const presents = listeDeTextes(reponse, 'dejaPresents')
+
+  if (crees === undefined || presents === undefined) return 'Liste type importée.'
+
+  const n = presents.length
+
+  if (crees.length === 0) {
+    return `Aucun type ajouté : ${n > 1 ? `les ${String(n)}` : 'celui'} de la liste type `
+      + `${n > 1 ? 'sont' : 'est'} déjà au catalogue, laissé${pluriel(n)} tel${pluriel(n)} quel${pluriel(n)}.`
+  }
+
+  const ajoutes = `${String(crees.length)} type${pluriel(crees.length)} ajouté${pluriel(crees.length)} au catalogue.`
+
+  if (n === 0) return ajoutes
+
+  return `${ajoutes} ${String(n)} déjà présent${pluriel(n)}, laissé${pluriel(n)} `
+    + `tel${pluriel(n)} quel${pluriel(n)} : ${presents.join(', ')}.`
+}
+
+function pluriel(nombre: number): string {
+  return nombre > 1 ? 's' : ''
+}
+
+function listeDeTextes(reponse: unknown, cle: string): string[] | undefined {
+  if (typeof reponse !== 'object' || reponse === null) return undefined
+
+  const valeur = (reponse as Record<string, unknown>)[cle]
+
+  return Array.isArray(valeur) && valeur.every((element) => typeof element === 'string')
+    ? valeur
+    : undefined
 }
 
 const Absences: DescriptionRessource = {

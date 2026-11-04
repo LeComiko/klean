@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 
 import {
   creerRessource,
+  executerAction,
   listerRessource,
   listerComptes,
   listerToutPourChoix,
@@ -134,6 +135,8 @@ function EcranReference({
   const [aConfirmer, setAConfirmer] = useState<string | null>(null)
   const [suppressionEnCours, setSuppressionEnCours] = useState<string | null>(null)
 
+  const [actionEnCours, setActionEnCours] = useState(false)
+
   const [annonce, setAnnonce] = useState<string | null>(null)
   const [alerte, setAlerte] = useState<string | null>(null)
 
@@ -202,6 +205,9 @@ function EcranReference({
               options: recue.elements.map((element) => ({
                 valeur: element.id,
                 libelle: texteDe(element[cible.etiquette]) ?? element.id,
+                // Une ressource sans `actif` reste toujours proposée.
+                actif: element.actif !== false,
+                ligne: element,
               })),
               tronquee: recue.total > recue.elements.length,
             },
@@ -353,6 +359,30 @@ function EcranReference({
     }
   }
 
+  /**
+   * ⚠️ Le compte rendu passe par l'annonce, comme une création : c'est la seule zone
+   * lue par un lecteur d'écran sans y déplacer le focus. Un refus passe par l'alerte,
+   * avec le message du serveur.
+   */
+  async function agir() {
+    const action = description.action
+
+    if (action === undefined) return
+
+    setActionEnCours(true)
+    setAnnonce(null)
+    setAlerte(null)
+
+    try {
+      setAnnonce(action.compteRendu(await executerAction(action.route)))
+      setRechargement((tour) => tour + 1)
+    } catch (echec: unknown) {
+      setAlerte(messageDe(echec, `${action.libelle} : échec.`))
+    } finally {
+      setActionEnCours(false)
+    }
+  }
+
   async function supprimer(ligne: Ressource) {
     setSuppressionEnCours(ligne.id)
     setAlerte(null)
@@ -419,17 +449,29 @@ function EcranReference({
         sousTitre={description.sousTitre}
         actions={
           ecriture ? (
-            <button
-              className="reference__nouveau"
-              type="button"
-              onClick={() => {
-                setEdition({ mode: 'creation' })
-                setErreurFormulaire(null)
-                setAnnonce(null)
-              }}
-            >
-              {nouveau(description.singulier, description.genre)}
-            </button>
+            <>
+              {description.action !== undefined && (
+                <button
+                  className="reference__action"
+                  type="button"
+                  disabled={actionEnCours}
+                  onClick={() => void agir()}
+                >
+                  {actionEnCours ? description.action.enCours : description.action.libelle}
+                </button>
+              )}
+              <button
+                className="reference__nouveau"
+                type="button"
+                onClick={() => {
+                  setEdition({ mode: 'creation' })
+                  setErreurFormulaire(null)
+                  setAnnonce(null)
+                }}
+              >
+                {nouveau(description.singulier, description.genre)}
+              </button>
+            </>
           ) : undefined
         }
       />
@@ -562,7 +604,11 @@ function messageVide(
 
   const ouvre = `Le bouton « ${nouveau(description.singulier, description.genre)} » ouvre le formulaire`
 
-  return filtre && parente !== undefined
-    ? `${quoi}. ${ouvre}, avec ${designer(parente.singulier, parente.genre)} déjà choisi.`
-    : `${quoi}. ${ouvre}.`
+  if (filtre && parente !== undefined) {
+    return `${quoi}. ${ouvre}, avec ${designer(parente.singulier, parente.genre)} déjà choisi.`
+  }
+
+  return description.action === undefined
+    ? `${quoi}. ${ouvre}.`
+    : `${quoi}. ${ouvre}. ${description.action.suggestion}`
 }

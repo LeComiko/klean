@@ -26,6 +26,30 @@
   background: var(--brand-strong);
 }
 
+/* Le geste secondaire de l'en-tête : bordé, pour que « Nouveau … » reste le seul
+   bouton plein de l'écran. Mêmes valeurs que l'annulation du formulaire. */
+.reference__action {
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-4);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.reference__action:hover:not(:disabled) {
+  background: var(--brand-tint);
+  border-color: var(--brand);
+}
+
+.reference__action:disabled {
+  color: var(--texte-2);
+  border-color: var(--border);
+  cursor: progress;
+}
+
 /* <output> porte role="status" de façon implicite : l'annonce est lue par un
    lecteur d'écran sans qu'on ajoute d'attribut, et display: block la sort du
    flux en ligne. */
@@ -117,7 +141,8 @@
 }
 
 @media (max-width: 900px) {
-  .reference__nouveau {
+  .reference__nouveau,
+  .reference__action {
     height: var(--cible-tactile);
     font-size: var(--corps-mobile-taille);
   }

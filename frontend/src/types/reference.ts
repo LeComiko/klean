@@ -111,6 +111,26 @@ export interface ChampRessource {
   longueurMax?: number
 
   /**
+   * Pour `reference` : les champs de **ce** formulaire que le choix d'une ligne
+   * remplit, en `{ champCible: proprieteDeLaLigneChoisie }`.
+   *
+   * Le cas qui l'a fait naître : choisir « Hall d'entrée » dans le catalogue remplit le
+   * libellé et la durée de la prestation (SPEC.md, étape 21). Un champ n'est rempli
+   * que s'il est **vide ou encore à la valeur du choix précédent** — voir `preremplir`
+   * dans `valeurs.ts` : un libellé propre au site n'est jamais écrasé.
+   */
+  preremplit?: Readonly<Record<string, string>>
+
+  /**
+   * Pour `reference` : ne proposer que les lignes dont `actif` n'est pas `false`.
+   *
+   * ⚠️ Sauf la valeur **déjà enregistrée**, gardée et dite « (désactivé) ». La
+   * retirer aussi afficherait « — choisir — » sur une prestation qui porte un type :
+   * l'écran mentirait, et le serveur, lui, garde le lien.
+   */
+  seulementActifs?: boolean
+
+  /**
    * Condition de **disparition** du champ : il n'est ni affiché ni envoyé quand le
    * champ désigné porte l'une de ces valeurs.
    *
@@ -219,6 +239,28 @@ export interface DescriptionRessource {
   rolesEcriture: readonly string[]
 
   parent?: ParenteRessource
+
+  /** Un geste de liste au-delà du CRUD, offert à qui écrit. */
+  action?: ActionRessource
+}
+
+/**
+ * Un `POST` sans corps sur une route de la ressource, dont la réponse se résume en une
+ * phrase. Aujourd'hui l'import de la liste type du catalogue, seul de son espèce.
+ *
+ * ⚠️ Offert aux rôles `rolesEcriture` de la description, sans liste propre : une
+ * action ouverte à d'autres rôles que l'écriture devrait le dire, et ce champ ne le
+ * permet pas à dessein.
+ */
+export interface ActionRessource {
+  libelle: string
+  /** Libellé du bouton pendant l'appel. */
+  enCours: string
+  route: string
+  /** Phrase ajoutée au message d'une liste vide, qui nomme le geste. */
+  suggestion: string
+  /** La réponse du serveur, en une phrase lisible. */
+  compteRendu: (reponse: unknown) => string
 }
 
 /*

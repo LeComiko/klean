@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
-import { masque } from '../reference/valeurs'
-import type { ValeursFormulaire } from '../reference/valeurs'
+import { masque, optionsProposees, preremplir } from '../reference/valeurs'
+import type { Ligne, ValeursFormulaire } from '../reference/valeurs'
 import type { ChampRessource } from '../types/reference'
 import './FormulaireRessource.css'
 
@@ -9,6 +9,10 @@ import './FormulaireRessource.css'
 export interface OptionReference {
   valeur: string
   libelle: string
+  /** `false` pour une ligne désactivée ; absent pour une ressource qui n'en a pas. */
+  actif?: boolean
+  /** La ligne entière, pour les champs qui `preremplit`. */
+  ligne?: Ligne
 }
 
 interface Proprietes {
@@ -65,7 +69,19 @@ export function FormulaireRessource({
   const [valeurs, setValeurs] = useState<ValeursFormulaire>(depart)
 
   function changer(nom: string, valeur: ValeursFormulaire[string]) {
-    setValeurs((precedentes) => ({ ...precedentes, [nom]: valeur }))
+    const champ = champs.find((candidat) => candidat.nom === nom)
+
+    setValeurs((precedentes) => {
+      const suivantes = { ...precedentes, [nom]: valeur }
+
+      if (champ?.preremplit === undefined) return suivantes
+
+      return preremplir(champ, suivantes, ligneDe(nom, precedentes[nom]), ligneDe(nom, valeur))
+    })
+  }
+
+  function ligneDe(nom: string, valeur: ValeursFormulaire[string] | undefined): Ligne | undefined {
+    return options[nom]?.find((option) => option.valeur === valeur)?.ligne
   }
 
   return (
@@ -126,7 +142,7 @@ export function FormulaireRessource({
               key={champ.nom}
               champ={champ}
               valeur={valeurs[champ.nom] ?? ''}
-              options={options[champ.nom] ?? []}
+              options={optionsProposees(champ, options[champ.nom] ?? [], depart[champ.nom])}
               tronquee={optionsTronquees[champ.nom] === true}
               lectureSeule={lectureSeule}
               onChanger={changer}

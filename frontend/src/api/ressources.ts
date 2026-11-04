@@ -98,6 +98,14 @@ export function creerRessource<T>(route: string, corps: unknown): Promise<T> {
 }
 
 /**
+ * Un geste de liste au-delà du CRUD : un `POST` sans corps, dont la réponse est rendue
+ * telle quelle à la description qui sait la lire (`ActionRessource.compteRendu`).
+ */
+export function executerAction(route: string): Promise<unknown> {
+  return api.post<unknown>(route)
+}
+
+/**
  * Modification. Le serveur répond 204 sans corps sur les onze ressources : le
  * `PUT` ne rend donc rien, et l'appelant recharge la liste.
  */

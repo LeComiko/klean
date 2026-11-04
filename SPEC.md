@@ -2029,6 +2029,45 @@ Reste au lot C :
 - le préremplissage du libellé et de la durée dans le formulaire des prestations ;
 - le retrait des types désactivés de la liste déroulante.
 
+**Lot C — fait le 4 novembre 2026**
+
+Trois ajouts **déclaratifs** au motif liste-et-formulaire, et aucune ligne propre au
+catalogue dans `Reference.tsx` : le jour où le stock aura besoin d'un préremplissage ou
+d'un geste de liste, il les déclarera.
+
+- **`action`** sur une description : un `POST` sans corps, offert à qui écrit, et dont
+  la réponse se résume en une phrase. Le catalogue déclare « Importer la liste type ».
+  - Le compte rendu passe par l'annonce, comme une création.
+  - Il **nomme les types laissés tels quels** : qui rejoue l'import après avoir corrigé
+    une durée doit lire que sa correction a tenu.
+  - Le message de liste vide nomme le geste.
+- **`preremplit`** sur un champ de référence : choisir « Hall d'entrée » remplit le
+  libellé et la durée. Un champ n'est réécrit que s'il est **vide**, ou s'il porte
+  encore la valeur que le **choix précédent** y avait mise.
+  - Le premier bras permet de se raviser : « Hall » puis « Escaliers » remplace bien.
+  - Le second protège la saisie : un libellé propre au site, tapé ou déjà enregistré,
+    n'est jamais écrasé.
+  - Revenir à « — choisir — » ne vide rien.
+- **`seulementActifs`** : les types désactivés sortent de la liste déroulante, **sauf**
+  celui que la prestation porte déjà, gardé et dit « (désactivé) ». Le retirer aussi
+  afficherait « — choisir — » sur une prestation qui a un type, alors que le serveur
+  garde le lien. La valeur gardée est celle de l'ouverture : qui change de type puis se
+  ravise peut y revenir.
+- Le champ « Type » passe **avant** le libellé et la durée : on choisit, puis on lit ce
+  qui a été proposé.
+- Tests : `preremplir`, `optionsProposees` et `compteRenduImport` sont extraits et
+  éprouvés, plus trois invariantes de structure. Un préremplissage, un filtre ou une
+  action qui désigne un champ inexistant échoue à la série au lieu de ne rien faire.
+  Sept sabotages, tous rouges.
+- **Vérifié dans le navigateur, en administrateur** :
+  - l'import, puis son rejeu ;
+  - les quatre cas du préremplissage ;
+  - la disparition d'un type désactivé de la liste.
+
+  ⚠️ **Non vérifié à l'écran** : la valeur désactivée gardée sur une prestation
+  existante. La base de développement n'a aucune prestation. Le cas est couvert par la
+  série de `optionsProposees`, pas par le câblage.
+
 ---
 
 # Suite — non planifié
