@@ -1397,6 +1397,15 @@ parallèles visant la même base produiraient exactement ce symptôme. Pour s'en
 vider `klean_test` entièrement, `AspNetUsers` et `Entreprises` comprises, et laisser la
 fixture ré-amorcer.
 
+**`dotnet test` en français met une espace insécable avant ses deux-points.** La ligne de
+bilan s'écrit « échec : 0 » et « total : 476 » avec une espace **insécable** avant « : ».
+Un `grep "total :"` ou `grep "échec :"` tapé au clavier ne la trouve donc jamais, sans
+erreur. Le 29 octobre, une série saine ainsi filtrée n'a rien affiché ; quatre lignes
+« Échoué » venues des sabotages lancés dans la même commande ont été prises pour
+la sienne, et un « échec intermittent » a été cherché pendant dix-sept passages. Il
+n'existait pas : trouvé le 4 novembre en relisant la commande. Filtrer sur `chec` ou
+`total`, sans le deux-points, et lancer une série saine **seule** dans sa commande.
+
 **Sur un parcours authentifié, un 401 n'est pas un refus : c'est une déconnexion.**
 `api/client.ts` traite tout 401 comme une session morte — il rafraîchit, rejoue, puis
 purge la session et prévient ses abonnés. Un endpoint authentifié qui répond 401 pour
