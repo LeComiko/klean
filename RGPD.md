@@ -260,7 +260,7 @@ est la dernière : une durée sans mécanisme est une promesse que personne ne t
 | Comptes (`AspNetUsers`) | désactivation à la sortie, effacement à 5 ans | un compte désactivé reste nécessaire pour attribuer les lignes du journal | 📋 geste manuel par `POST /api/auth/comptes/{id}/anonymiser` (§9.3) |
 | Jetons de rafraîchissement | **30 jours après révocation ou expiration** | la fenêtre de diagnostic d'un rejeu ; au-delà, seule l'adresse IP survit, sans usage | ✅ `purge-jetons-rafraichissement.sql` |
 | Journal d'accès | **12 mois** | un journal RGPD est lui-même une donnée personnelle | ✅ `purge-journal-acces.sql` |
-| Mouvements de stock et leur auteur | 5 ans, comme les interventions | l'historique qui explique une quantité ; l'auteur suit son compte, pseudonymisé à la sortie | ⚠️ **aucun encore** — écrit à l'étape 22, à ajouter à `conservation-donnees-metier.sql` avant une instance réelle |
+| Mouvements de stock et leur auteur | 5 ans, comme les interventions | l'historique qui explique une quantité ; l'auteur suit son compte, pseudonymisé à la sortie | 📋 `conservation-donnees-metier.sql` §8 — purger un mouvement ne change aucune quantité, et son `DELETE` passe **avant** celui des sites qu'il cite |
 
 **Lire la dernière colonne avec attention : 📋 n'est pas ✅.** Un script marqué 📋
 **rapporte** ce qui est hors délai et porte son `DELETE` **en commentaire**. Il ne
@@ -727,7 +727,7 @@ fichier, remettre la note du §7, conclure les contrats de l'article 28 avec l'h
 le fournisseur SMTP et le stockage des sauvegardes, fixer la durée de conservation de
 ces sauvegardes, tenir l'AIPD du §9.6, désigner un point de contact.
 
-**Par le logiciel** — état au 28 octobre 2026, dans l'ordre de gravité où les écarts ont
+**Par le logiciel** — état au 4 novembre 2026, dans l'ordre de gravité où les écarts ont
 été relevés :
 
 | Écart | État |
@@ -740,11 +740,12 @@ ces sauvegardes, tenir l'AIPD du §9.6, désigner un point de contact.
 | §9.3 — aucun effacement pour un compte sans fiche agent | ✅ `POST /api/auth/comptes/{id}/anonymiser` |
 | §9.4 — aucun export ni portabilité | ✅ `GET /api/agents/{id}/dossier` |
 | §9.7 — sites et clients sans contrat ni date | ✅ `DateCreation`, migration `DateCreationSurSitesEtClients` |
+| §5 — les mouvements de stock et leur auteur, écrits à l'étape 22 sans conservation | 📋 `conservation-donnees-metier.sql` §8, rapport avec `DELETE` commenté |
 
 **Aucun écart ne reste ouvert côté logiciel.** Ce qui reste est à l'exploitant :
 valider les durées, dont celle des prospects (§9.7), et décommenter les purges.
 
-⚠️ **Deux des sept corrections sont des rapports, pas des purges**, et il ne faut pas lire
+⚠️ **Trois des neuf corrections sont des rapports, pas des purges**, et il ne faut pas lire
 le tableau trop vite : `conservation-donnees-metier.sql` et
 `degradation-absences-maladie.sql` portent leurs `DELETE` et `UPDATE` en commentaire. Ils
 attendent la validation juridique des durées du §5, qui appartient à l'exploitant.

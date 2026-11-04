@@ -2220,7 +2220,11 @@ lignes existantes, qu'aucune n'a aujourd'hui.
 - `conservation-donnees-metier.sql` lit `SiteId` et les mouvements ; il a été rejoué sur
   `klean_test`.
 - ⚠️ **Écart ouvert, dit dans `RGPD.md` §5** : les mouvements portent leur auteur, et
-  aucun script n'en gère encore la conservation.
+  aucun script n'en gère encore la conservation. **Fermé après le lot C** :
+  `conservation-donnees-metier.sql` §8 rapporte les mouvements de plus de 5 ans et
+  les auteurs encore identifiables, et porte leur `DELETE` en commentaire, placé
+  **avant** celui des sites. Éprouvé dans une transaction annulée : deux mouvements
+  vieillis de six ans ont été supprimés, et le stock n'a pas changé.
 
 **Lot B — fait le 4 novembre 2026**
 

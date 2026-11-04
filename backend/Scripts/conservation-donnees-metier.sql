@@ -13,6 +13,7 @@
 --                                   à défaut de contrat, 5 ans après la création
 --   Agents ........................ 5 ans après la fin du contrat de travail,
 --                                   et par PSEUDONYMISATION, pas par suppression
+--   Mouvements de stock ........... 5 ans après la date du mouvement
 --
 --     psql -d klean -f backend/Scripts/conservation-donnees-metier.sql
 --
@@ -223,6 +224,36 @@ FROM "Agents" a
 WHERE a."DateAnonymisation" IS NOT NULL
   AND a."DateAnonymisation" < now() - interval '5 years';
 
+\echo ''
+\echo '=== 8. Mouvements de stock au-delà de 5 ans ==='
+
+-- La seule donnée personnelle d'un mouvement est son auteur (`AuteurId`, RGPD.md §3) :
+-- qui a sorti, transféré, compté quoi, et quand. L'identifiant d'un compte, sans clé
+-- étrangère ; le nom se lit sur `AspNetUsers`, et suit donc le compte — pseudonymisé
+-- au départ de la personne par `POST /api/auth/comptes/{id}/anonymiser`.
+--
+-- ⚠️ Purger un mouvement ne change AUCUNE quantité. `Stocks.Quantite` est tenue par
+-- le service à chaque mouvement, elle n'est pas recalculée depuis l'historique : ce
+-- qui disparaît est l'explication des quantités d'il y a cinq ans, pas les quantités.
+-- Un inventaire récent reste le point de départ lisible.
+--
+-- La dernière colonne compte les auteurs de ces mouvements dont le compte n'a jamais
+-- été pseudonymisé : ce sont les mouvements qui désignent encore quelqu'un par son
+-- nom, à travers le compte.
+SELECT
+    m."Nature"                                         AS nature,
+    count(*)                                           AS mouvements_a_purger,
+    min(m."DateMouvement")                             AS plus_ancien,
+    count(DISTINCT m."AuteurId") FILTER (
+        WHERE EXISTS (
+            SELECT 1 FROM "AspNetUsers" u
+            WHERE u."Id" = m."AuteurId" AND u."DateAnonymisation" IS NULL)
+    )                                                  AS auteurs_encore_identifiables
+FROM "MouvementsStock" m
+WHERE m."DateMouvement" < now() - interval '5 years'
+GROUP BY 1
+ORDER BY 1;
+
 -- ---------------------------------------------------------------------------
 -- La purge, commentée. L'ORDRE EST LA MOITIÉ DU TRAVAIL.
 -- ---------------------------------------------------------------------------
@@ -265,7 +296,13 @@ WHERE a."DateAnonymisation" IS NOT NULL
 -- WHERE c."DateFin" IS NOT NULL AND c."DateFin" < now() - interval '5 years'
 --   AND NOT EXISTS (SELECT 1 FROM "Prestations" p WHERE p."ContratId" = c."Id");
 --
--- -- 6. Sites sans contrat, créés il y a plus de 5 ans, sans stock ni mouvement rattaché
+-- -- 6. Mouvements de stock (RGPD.md §5)
+-- --    ⚠️ AVANT les sites : les quatre lieux d'un mouvement sont des clés en
+-- --    `Restrict`, et un site cité par un mouvement n'est pas supprimable. Aucune clé
+-- --    ne vise un mouvement, rien ne le bloque lui-même. Aucune quantité ne change.
+-- DELETE FROM "MouvementsStock" WHERE "DateMouvement" < now() - interval '5 years';
+--
+-- -- 7. Sites sans contrat, créés il y a plus de 5 ans, sans stock ni mouvement rattaché
 -- --    Couvre d'un même geste le site dont les contrats viennent d'être purgés par
 -- --    le DELETE 5 et le prospect jamais signé. `DateCreation` les distingue d'un
 -- --    site saisi hier — c'est tout l'objet de la colonne (RGPD.md §9.7).
@@ -277,10 +314,10 @@ WHERE a."DateAnonymisation" IS NOT NULL
 --       SELECT 1 FROM "MouvementsStock" m
 --       WHERE m."OrigineSiteId" = s."Id" OR m."DestinationSiteId" = s."Id");
 --
--- -- 7. Clients sans site, créés il y a plus de 5 ans, sans compte rattaché
+-- -- 8. Clients sans site, créés il y a plus de 5 ans, sans compte rattaché
 -- DELETE FROM "Clients" cl
 -- WHERE cl."DateCreation" < now() - interval '5 years'
 --   AND NOT EXISTS (SELECT 1 FROM "Sites" s WHERE s."ClientId" = cl."Id")
 --   AND NOT EXISTS (SELECT 1 FROM "AspNetUsers" u WHERE u."ClientId" = cl."Id");
 --
--- -- 8. Agents : AUCUN DELETE. Voir la section 6.
+-- -- 9. Agents : AUCUN DELETE. Voir la section 6.
