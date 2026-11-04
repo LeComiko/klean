@@ -76,6 +76,16 @@ export interface ChampRessource {
    */
   choix?: readonly string[]
 
+  /**
+   * Pour `choix` : le mot affiché pour chaque valeur, dans la liste comme dans le tableau.
+   * La valeur envoyée reste le nom exact de l'énumération du serveur, qui refuse tout
+   * autre texte ; « Congé » s'affiche, `Conge` part.
+   *
+   * ⚠️ Une clé par valeur de `choix`, ni plus ni moins : une valeur sans libellé
+   * s'afficherait en nom brut, sans erreur. `descriptions.test.ts` le garde.
+   */
+  libelles?: Readonly<Record<string, string>>
+
   /** Pour `reference` : la clé de la description visée. */
   reference?: string
 

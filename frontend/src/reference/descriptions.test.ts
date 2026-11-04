@@ -99,6 +99,25 @@ describe('descriptions — structure', () => {
     }
   })
 
+  test('un champ de choix nomme chacune de ses valeurs, et rien d’autre', () => {
+    // Une valeur sans libellé s'afficherait en nom brut — « Indisponibilite » — sans
+    // aucune erreur ; un libellé sans valeur serait une faute de frappe muette.
+    for (const description of Descriptions) {
+      for (const champ of description.champs) {
+        if (champ.type !== 'choix') {
+          assert.equal(champ.libelles, undefined, `${description.cle} → ${champ.nom}`)
+          continue
+        }
+
+        assert.deepEqual(
+          Object.keys(champ.libelles ?? {}).toSorted(),
+          [...(champ.choix ?? [])].toSorted(),
+          `${description.cle} → ${champ.nom}`,
+        )
+      }
+    }
+  })
+
   test('un champ de référence vise une description existante', () => {
     for (const description of Descriptions) {
       for (const champ of description.champs) {

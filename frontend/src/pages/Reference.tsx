@@ -30,11 +30,11 @@ import {
   departCreation,
   departOuverture,
   designer,
+  etiquetteDe as etiquetteDeLigne,
   filtreDe,
   majuscule,
   nouveau,
   rendu,
-  texteDe,
   tousLes,
 } from '../reference/valeurs'
 import { aUnRole } from '../types/auth'
@@ -206,7 +206,7 @@ function EcranReference({
             [parente]: {
               options: recue.elements.map((element) => ({
                 valeur: element.id,
-                libelle: texteDe(element[cible.etiquette]) ?? element.id,
+                libelle: etiquetteDeLigne(cible, element) ?? element.id,
                 // Une ressource sans `actif` reste toujours proposée.
                 actif: element.actif !== false,
                 ligne: element,
@@ -305,7 +305,7 @@ function EcranReference({
   }
 
   function etiquetteDe(ligne: Ressource): string {
-    return texteDe(ligne[description.etiquette]) ?? description.singulier
+    return etiquetteDeLigne(description, ligne) ?? description.singulier
   }
 
   /**

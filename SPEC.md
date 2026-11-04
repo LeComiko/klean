@@ -2329,10 +2329,13 @@ Prévision.
     et son écart s'inscrit ;
   - la descente depuis le catalogue fonctionne.
   - Un défaut vu et corrigé : la nature d'un mouvement se coupait au milieu du mot.
-- **Limites vues, laissées en l'état** : le moteur des écrans de référence affiche les
-  nombres avec un point (« 0.5 ») et les énumérations par leur nom brut (« Depot »),
-  comme partout ailleurs. L'auteur d'un mouvement n'est pas affiché : la route des
-  comptes est réservée à l'administrateur.
+- **Limites vues** : le moteur des écrans de référence affichait les nombres avec un
+  point (« 0.5 ») et les énumérations par leur nom brut (« Depot »). **Corrigé juste
+  après** : un champ `choix` porte ses `libelles` — « Congé » s'affiche, `Conge` part —,
+  une invariante exige un libellé par valeur et rien de plus, et `rendu` comme
+  `etiquetteDe` écrivent les nombres à la virgule. Six sabotages, tous rouges.
+  L'auteur d'un mouvement n'est pas affiché : la route des comptes est réservée à
+  l'administrateur.
 
 ---
 

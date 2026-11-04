@@ -12,7 +12,9 @@ import {
   departCreation,
   departOuverture,
   designer,
+  etiquetteDe,
   filtreDe,
+  formaterNombre,
   majuscule,
   masque,
   nouveau,
@@ -43,6 +45,14 @@ const Champs: readonly ChampRessource[] = [
   { nom: 'archive', libelle: 'Archivé', type: 'booleen' },
   { nom: 'clientId', libelle: 'Client', type: 'reference', reference: 'clients', requis: true },
   { nom: 'consignes', libelle: 'Consignes', type: 'texteLong' },
+  {
+    nom: 'type',
+    libelle: 'Type',
+    type: 'choix',
+    choix: ['Conge', 'Indisponibilite', 'Nouveau'],
+    // `Nouveau` sans libellé à dessein : la valeur doit passer telle quelle, pas vide.
+    libelles: { Conge: 'Congé', Indisponibilite: 'Indisponibilité' },
+  },
 ]
 
 /**
@@ -264,6 +274,25 @@ describe('rendu', () => {
 
   test('un zéro n’est pas un vide', () => {
     assert.equal(cellule({ altitude: 0 }, { nom: 'altitude', libelle: 'Altitude' }), '0')
+  })
+
+  test('un choix s’affiche par son mot, et la valeur du serveur ne se voit pas', () => {
+    // « Conge » à l'écran, sous un formulaire qui propose « Congé » : la même absence,
+    // deux orthographes. Le libellé est appliqué à l'affichage seulement — `corpsDe`
+    // envoie toujours le nom exact, que le serveur exige.
+    const colonne: ColonneRessource = { nom: 'type', libelle: 'Type' }
+
+    assert.equal(cellule({ type: 'Conge' }, colonne), 'Congé')
+    assert.equal(cellule({ type: 'Indisponibilite' }, colonne), 'Indisponibilité')
+    assert.equal(cellule({ type: 'Nouveau' }, colonne), 'Nouveau')
+    assert.deepEqual(corpsDe(Champs.filter((champ) => champ.nom === 'type'), { type: 'Conge' }), { type: 'Conge' })
+  })
+
+  test('un nombre s’écrit à la virgule', () => {
+    assert.equal(cellule({ latitude: 48.85 }, { nom: 'latitude', libelle: 'Latitude' }), '48,85')
+    assert.equal(cellule({ altitude: -0.5 }, { nom: 'altitude', libelle: 'Altitude' }), '-0,5')
+    assert.equal(cellule({ altitude: 120 }, { nom: 'altitude', libelle: 'Altitude' }), '120')
+    assert.equal(formaterNombre(0.25), '0,25')
   })
 
   test('un booléen se dit en français', () => {
@@ -670,5 +699,40 @@ describe('optionsProposees', () => {
     const toutes: ChampRessource = { ...Champ, seulementActifs: undefined }
 
     assert.deepEqual(optionsProposees(toutes, Options, ''), Options)
+  })
+})
+
+describe('etiquetteDe', () => {
+  function description(etiquette: string): DescriptionRessource {
+    return {
+      cle: 'essais',
+      chemin: '/essais',
+      route: '/api/essais',
+      libelle: 'Essais',
+      singulier: 'essai',
+      genre: 'masculin',
+      sousTitre: '',
+      etiquette,
+      colonnes: [],
+      champs: Champs,
+      rolesLecture: [],
+      rolesEcriture: [],
+    }
+  }
+
+  test('le nom d’une ligne passe par les mêmes libellés que le tableau', () => {
+    // Sinon : « Supprimer « Conge » ? » sous une colonne qui affiche « Congé ».
+    assert.equal(etiquetteDe(description('type'), { type: 'Conge' }), 'Congé')
+  })
+
+  test('un nombre se nomme à la virgule', () => {
+    // Le cas réel : une consommation se nomme par sa quantité par passage.
+    assert.equal(etiquetteDe(description('altitude'), { altitude: 0.5 }), '0,5')
+  })
+
+  test('un texte reste tel quel, une valeur absente ne nomme rien', () => {
+    assert.equal(etiquetteDe(description('nom'), { nom: 'Bellevue' }), 'Bellevue')
+    assert.equal(etiquetteDe(description('nom'), {}), undefined)
+    assert.equal(etiquetteDe(description('type'), { type: '' }), undefined)
   })
 })

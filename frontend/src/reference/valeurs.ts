@@ -31,6 +31,37 @@ export type Ligne = Record<string, unknown>
 /** Marque d'une valeur absente dans une cellule. */
 export const Vide = '—'
 
+/**
+ * Un nombre à la virgule : `0.5` → `0,5`. Le domaine est francophone, et un point
+ * décimal se lit comme un séparateur de milliers. Aucun regroupement : les colonnes de
+ * chiffres sont en chasse fixe, et une espace insécable de plus les désalignerait.
+ */
+export function formaterNombre(nombre: number): string {
+  return String(nombre).replace('.', ',')
+}
+
+/** Le mot affiché pour une valeur de choix, ou la valeur elle-même faute de libellé. */
+export function libelleDeChoix(champ: ChampRessource | undefined, valeur: string): string {
+  return champ?.libelles?.[valeur] ?? valeur
+}
+
+/**
+ * Le nom d'une ligne : dans une confirmation, une annonce, et dans la liste déroulante
+ * d'une ressource enfant. Passé par les mêmes libellés que le tableau — sans quoi on
+ * lirait « Supprimer « Conge » ? » sous une colonne qui affiche « Congé ».
+ */
+export function etiquetteDe(description: DescriptionRessource, ligne: Ligne): string | undefined {
+  const valeur = ligne[description.etiquette]
+  const champ = description.champs.find((candidat) => candidat.nom === description.etiquette)
+
+  if (typeof valeur === 'number') return formaterNombre(valeur)
+  if (champ?.type === 'choix' && typeof valeur === 'string' && valeur !== '') {
+    return libelleDeChoix(champ, valeur)
+  }
+
+  return texteDe(valeur)
+}
+
 /** Valeur d'affichage d'une propriété dont le type n'est pas connu à la compilation. */
 export function texteDe(valeur: unknown): string | undefined {
   if (typeof valeur === 'string' && valeur !== '') return valeur
@@ -246,6 +277,10 @@ export function rendu(
   if (champ?.type === 'date' && typeof valeur === 'string') {
     return formaterDateLongue(depuisChaineIso(jourIso(valeur)))
   }
+
+  if (champ?.type === 'choix' && typeof valeur === 'string') return libelleDeChoix(champ, valeur)
+
+  if (typeof valeur === 'number') return formaterNombre(valeur)
 
   return String(valeur)
 }

@@ -48,6 +48,23 @@ const TypesDeClient = [
 /** `TypeAbsence`, miroir de `backend/Models/TypeAbsence.cs`. */
 const TypesDAbsence = ['Maladie', 'Conge', 'Indisponibilite', 'Retard', 'Autre'] as const
 
+/** Les mots affichés pour `TypeClient` ; la valeur envoyée reste le nom de l'énumération. */
+const LibellesTypeClient: Readonly<Record<(typeof TypesDeClient)[number], string>> = {
+  EntrepriseCliente: 'Entreprise cliente',
+  Syndic: 'Syndic',
+  GestionnaireImmobilier: 'Gestionnaire immobilier',
+  Copropriete: 'Copropriété',
+  Autre: 'Autre',
+}
+
+const LibellesTypeAbsence: Readonly<Record<(typeof TypesDAbsence)[number], string>> = {
+  Maladie: 'Maladie',
+  Conge: 'Congé',
+  Indisponibilite: 'Indisponibilité',
+  Retard: 'Retard',
+  Autre: 'Autre',
+}
+
 /**
  * Les types d'absence dont le motif ne doit **jamais** être recueilli.
  *
@@ -89,7 +106,7 @@ const Clients: DescriptionRessource = {
 
   champs: [
     { nom: 'nom', libelle: 'Nom', type: 'texte', requis: true, longueurMax: 200 },
-    { nom: 'type', libelle: 'Type', type: 'choix', requis: true, choix: TypesDeClient },
+    { nom: 'type', libelle: 'Type', type: 'choix', requis: true, choix: TypesDeClient, libelles: LibellesTypeClient },
     { nom: 'adresse', libelle: 'Adresse', type: 'texte', longueurMax: 200 },
     { nom: 'codePostal', libelle: 'Code postal', type: 'texte', longueurMax: 10 },
     { nom: 'ville', libelle: 'Ville', type: 'texte', longueurMax: 100 },
@@ -513,7 +530,7 @@ const Absences: DescriptionRessource = {
 
   champs: [
     { nom: 'agentId', libelle: 'Agent', type: 'reference', reference: 'agents', requis: true },
-    { nom: 'type', libelle: 'Type', type: 'choix', requis: true, choix: TypesDAbsence },
+    { nom: 'type', libelle: 'Type', type: 'choix', requis: true, choix: TypesDAbsence, libelles: LibellesTypeAbsence },
     {
       nom: 'dateDebut',
       libelle: 'Du',
@@ -607,6 +624,11 @@ const Produits: DescriptionRessource = {
 /** `TypeEmplacement`, miroir de `backend/Models/Emplacement.cs`. Le site n'en est pas un. */
 const TypesDEmplacement = ['Depot', 'Vehicule'] as const
 
+const LibellesTypeEmplacement: Readonly<Record<(typeof TypesDEmplacement)[number], string>> = {
+  Depot: 'Dépôt',
+  Vehicule: 'Véhicule',
+}
+
 /**
  * Dépôts et véhicules (SPEC.md, étape 22). Écrits par l'exploitation, comme les
  * mouvements qui les visent.
@@ -640,7 +662,7 @@ const Emplacements: DescriptionRessource = {
       // où le nom se choisit.
       aide: 'Un véhicule se nomme par sa plaque ou son modèle, jamais par son conducteur.',
     },
-    { nom: 'type', libelle: 'Type', type: 'choix', requis: true, choix: TypesDEmplacement },
+    { nom: 'type', libelle: 'Type', type: 'choix', requis: true, choix: TypesDEmplacement, libelles: LibellesTypeEmplacement },
     {
       nom: 'actif',
       libelle: 'Actif',

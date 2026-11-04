@@ -250,8 +250,9 @@ function Champ({ champ, valeur, options, tronquee, lectureSeule, onChanger }: Pr
         >
           <option value="">— choisir —</option>
           {(champ.choix ?? []).map((choix) => (
+            // Le mot à l'écran, le nom exact de l'énumération à l'envoi.
             <option key={choix} value={choix}>
-              {choix}
+              {champ.libelles?.[choix] ?? choix}
             </option>
           ))}
         </select>
