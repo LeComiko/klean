@@ -593,6 +593,19 @@ describe('descriptions — préremplissage, désactivés, actions', () => {
     assert.equal(type?.seulementActifs, true)
   })
 
+  test('une route de choix est une sous-route de sa ressource', () => {
+    for (const description of Descriptions) {
+      if (description.routeChoix === undefined) continue
+
+      assert.ok(description.routeChoix.startsWith(`${description.route}/`), description.routeChoix)
+      assert.equal(description.routeChoix.includes('?'), false, description.routeChoix)
+    }
+
+    // ⚠️ Les agents portent l'adresse et les coordonnées du domicile : leurs listes
+    // déroulantes ne doivent jamais retomber sur la route complète.
+    assert.equal(descriptionDe('agents')?.routeChoix, '/api/agents/choix')
+  })
+
   test('une action vise une sous-route de sa ressource, et dit son geste', () => {
     for (const description of Descriptions) {
       const action = description.action

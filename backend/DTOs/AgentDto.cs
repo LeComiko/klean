@@ -85,3 +85,22 @@ public class ChefEquipeDto
     public string Prenom { get; set; } = string.Empty;
     public bool Actif { get; set; }
 }
+
+/// <summary>
+/// Un agent dans une liste déroulante — <c>GET /api/agents/choix</c>.
+///
+/// ⚠️ C'est toute la raison de la route : remplir le choix du titulaire d'une prestation
+/// envoyait au navigateur l'adresse et les <b>coordonnées du domicile</b> de chaque agent,
+/// par <see cref="AgentDto"/>, pour n'en afficher que le nom. Une propriété ajoutée ici
+/// sortira à chaque ouverture des écrans de prestations et d'absences : la minimisation
+/// se garde par le test qui lit la réponse brute.
+/// </summary>
+public class AgentChoixDto
+{
+    public Guid Id { get; set; }
+    public string Nom { get; set; } = string.Empty;
+    public string Prenom { get; set; } = string.Empty;
+
+    /// <summary>Un titulaire désactivé reste porté par ses prestations : l'écran le dit.</summary>
+    public bool Actif { get; set; }
+}

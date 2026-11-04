@@ -68,6 +68,39 @@ public class AgentsController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Les agents, réduits à ce qu'une liste déroulante affiche (SPEC.md, étape 20).
+    ///
+    /// Mêmes rôles, même tri, même pagination que <see cref="Lister"/>, et même frontière :
+    /// le filtre global des agents s'applique, donc un chef d'équipe ne choisit que dans
+    /// son équipe. Journalisée à part, en <see cref="RessourceAccedee.ChoixAgents"/>.
+    /// </summary>
+    [JournaliserAcces(RessourceAccedee.ChoixAgents, NatureAcces.Liste)]
+    [Authorize(Roles = RolesKlean.Interne)]
+    [HttpGet("choix")]
+    public async Task<ActionResult<PageDto<AgentChoixDto>>> Choix([FromQuery] PaginationDto pagination)
+    {
+        var requete = _db.Agents
+            .AsNoTracking()
+            .OrderBy(a => a.Nom).ThenBy(a => a.Prenom);
+
+        var total = await requete.CountAsync();
+
+        var agents = await requete
+            .Skip(pagination.ANegliger)
+            .Take(pagination.Taille)
+            .Select(a => new AgentChoixDto { Id = a.Id, Nom = a.Nom, Prenom = a.Prenom, Actif = a.Actif })
+            .ToListAsync();
+
+        return Ok(new PageDto<AgentChoixDto>
+        {
+            Elements = agents,
+            Total = total,
+            Page = pagination.Page,
+            Taille = pagination.Taille
+        });
+    }
+
     [JournaliserAcces(RessourceAccedee.Agent, NatureAcces.Lecture)]
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet("{id:guid}")]

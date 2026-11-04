@@ -185,6 +185,7 @@ public class AutorisationsTests : IAsyncLifetime
     [InlineData("/api/clients")]
     [InlineData("/api/sites")]
     [InlineData("/api/agents")]
+    [InlineData("/api/agents/choix")]
     [InlineData("/api/absences")]
     [InlineData("/api/entreprises")]
     public async Task Agent_n_a_acces_a_rien_d_autre(string route)
@@ -243,6 +244,7 @@ public class AutorisationsTests : IAsyncLifetime
     [InlineData("/api/prestations")]
     [InlineData("/api/interventions")]
     [InlineData("/api/agents")]
+    [InlineData("/api/agents/choix")]
     [InlineData("/api/absences")]
     public async Task ClientSyndic_n_atteint_pas_le_reste_du_systeme(string route)
     {

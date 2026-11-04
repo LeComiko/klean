@@ -107,6 +107,17 @@ public class FrontiereChefEquipeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Le_choix_des_agents_du_chef_ne_porte_que_son_equipe()
+    {
+        // La liste déroulante du titulaire : un nom d'une autre équipe y fuirait sans
+        // qu'aucune fiche soit lue.
+        Assert.Equal(
+            new[] { _a1, _a2 }.Order(),
+            (await _chefA.ListerAsync<AgentChoixDto>("/api/agents/choix")).Select(a => a.Id).Order());
+        Assert.Equal(4, (await _admin.ListerAsync<AgentChoixDto>("/api/agents/choix")).Count);
+    }
+
+    [Fact]
     public async Task L_agent_d_une_autre_equipe_est_introuvable()
     {
         Assert.Equal(HttpStatusCode.NotFound, (await _chefA.GetAsync($"/api/agents/{_b1}")).StatusCode);

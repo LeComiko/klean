@@ -1871,6 +1871,29 @@ une ligne « Agent / Liste » dans le journal d'accès, comme l'écran des absen
 faisait déjà. Une route de choix qui ne rendrait que l'identifiant et le nom allégerait
 le journal comme la réponse. Ce n'est pas fait.
 
+**Fermé le 4 novembre 2026.** `GET /api/agents/choix` rend l'identifiant, le nom, le
+prénom et l'état actif, sous les mêmes rôles, le même tri, la même pagination et la même
+frontière du chef d'équipe que `GET /api/agents`.
+- Les écrans des prestations et des absences la chargent par `routeChoix`, déclarée
+  sur la description des agents. Ils ne reçoivent plus ni l'adresse ni les coordonnées
+  du domicile.
+- **Journalisée à part**, en `ChoixAgents / Liste`, réponse retenue parmi trois. Une
+  ligne `Agent` aurait noyé les lectures de fiches ; une exemption aurait laissé sortir
+  des noms sans trace, à l'inverse de la liste des chefs.
+- Tests :
+  - la réponse brute ne contient aucun champ du domicile ;
+  - la ligne de journal est la sienne ;
+  - un chef ne voit que son équipe ;
+  - `Agent` et `ClientSyndic` reçoivent un 403 ;
+  - treize actions journalisées.
+- Quatre sabotages, tous rouges. ⚠️ Le premier est d'abord resté vert : son motif visait
+  la première classe du fichier finissant par `Actif`, `ChefEquipeDto`, et le sabotage ne
+  testait donc rien. Rejoué sur `AgentChoixDto`, en y ajoutant la latitude du domicile,
+  il rougit.
+- Vérifié dans le navigateur : les deux écrans appellent `/api/agents/choix` et plus
+  `/api/agents`, et le journal consigne `ChoixAgents`. La base de développement n'a aucun
+  agent : les noms dans la liste n'ont pas pu être vus à l'écran.
+
 Non éprouvé dans un navigateur : cela demande une session sur la base de
 développement. Les corps envoyés sont ceux que `valeurs.test.ts` fixe, et ce sont les
 formes que `RecurrenceTests` et `GenerationTests` acceptent côté serveur.

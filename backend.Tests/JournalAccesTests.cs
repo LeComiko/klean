@@ -150,7 +150,7 @@ public class JournalAccesTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Les_douze_actions_journalisees_sont_celles_attendues()
+    public void Les_treize_actions_journalisees_sont_celles_attendues()
     {
         // Le miroir du test précédent : il garde l'absence d'oubli, celui-ci garde
         // l'absence d'excès. Journaliser une action qui ne divulgue rien gonflerait le
@@ -170,6 +170,7 @@ public class JournalAccesTests : IAsyncLifetime
                 "AbsencesController.Obtenir",
                 "AgentsController.Anonymiser",
                 "AgentsController.ChefsEquipe",
+                "AgentsController.Choix",
                 "AgentsController.Dossier",
                 "AgentsController.Lister",
                 "AgentsController.Obtenir",
@@ -245,6 +246,33 @@ public class JournalAccesTests : IAsyncLifetime
     // ---------------------------------------------------------------------------
     // Le comportement
     // ---------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Le_choix_des_agents_ne_rend_que_le_nom_et_laisse_sa_propre_ligne()
+    {
+        await CreerAgents(3);
+
+        var avant = await Journal();
+        var reponse = await _client.GetAsync("/api/agents/choix");
+        var apres = await Journal();
+
+        // ⚠️ Sur le corps brut : une propriété ajoutée demain au DTO n'apparaîtrait dans
+        // aucune assertion typée, et partirait pourtant à chaque ouverture d'écran.
+        var corps = await reponse.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, reponse.StatusCode);
+        foreach (var interdit in new[] { "adresse", "latitude", "longitude", "email", "telephone", "chefEquipeId", "dateEmbauche" })
+        {
+            Assert.DoesNotContain($"\"{interdit}\"", corps, StringComparison.OrdinalIgnoreCase);
+        }
+        Assert.Contains("\"prenom\"", corps);
+
+        // Sa ligne à elle, pas celle d'une lecture de fiches.
+        var nouvelles = Nouvelles(avant, apres);
+        Assert.Single(nouvelles);
+        Assert.Equal(nameof(RessourceAccedee.ChoixAgents), nouvelles[0].Ressource);
+        Assert.Equal(nameof(NatureAcces.Liste), nouvelles[0].Nature);
+        Assert.Equal(3, nouvelles[0].Lignes);
+    }
 
     [Fact]
     public async Task Lister_les_agents_laisse_une_ligne_et_une_seule()

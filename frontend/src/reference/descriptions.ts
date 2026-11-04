@@ -184,6 +184,9 @@ const Agents: DescriptionRessource = {
   cle: 'agents',
   chemin: '/agents',
   route: '/api/agents',
+  // Ce que chargent les écrans des prestations et des absences pour leurs listes
+  // déroulantes : le nom, sans l'adresse ni les coordonnées du domicile.
+  routeChoix: '/api/agents/choix',
   libelle: 'Agents',
   singulier: 'agent',
   genre: 'masculin',

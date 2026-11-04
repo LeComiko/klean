@@ -46,7 +46,19 @@ public enum RessourceAccedee
     /// rend que l'identité de l'appelant lui-même, et un journal de « qui a lu son propre
     /// nom » est du bruit.
     /// </summary>
-    Compte
+    Compte,
+
+    /// <summary>
+    /// Nom et prénom des agents, sans rien d'autre — <c>GET /api/agents/choix</c>, qui
+    /// remplit les listes déroulantes des prestations et des absences (étape 20).
+    ///
+    /// Distinct de <see cref="Agent"/> à dessein. Ouvrir l'écran des prestations n'est
+    /// pas lire des fiches, et confondre les deux noierait les vraies lectures dans une
+    /// ligne par ouverture d'écran. Distinct, le bruit se <b>filtre</b> ; exempté, il
+    /// disparaîtrait avec la trace, alors que la liste des chefs, qui ne rend elle aussi
+    /// que des noms, est journalisée.
+    /// </summary>
+    ChoixAgents
 }
 
 /// <summary>Nature de l'accès.</summary>

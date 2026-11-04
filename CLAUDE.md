@@ -552,7 +552,7 @@ d'écrire du code ici :
 - **Un seul mécanisme de conservation existe** — la purge du journal. Les neuf autres
   durées sont déclaratives, et c'est inscrit noir sur blanc plutôt que supposé.
 
-**Dix lectures sont journalisées, et deux ne s'en doutaient pas.** C'est le fait
+**Onze lectures sont journalisées, et deux ne s'en doutaient pas.** C'est le fait
 central de ce mécanisme : chercher « les routes `/api/agents` et `/api/absences` »
 donne un journal qui a l'air complet et qui a deux trous.
 
@@ -566,6 +566,16 @@ donne un journal qui a l'air complet et qui a deux trous.
 | `GET /api/journal-acces` | `JournalAcces` | le journal lui-même |
 | `GET /api/agents/{id}/dossier` | `Agent` | **tout**, en une réponse — nature `Export` |
 | `GET /api/agents/chefs-equipe` | `Compte` | nom et prénom des chefs d'équipe — la seule liste de comptes |
+| `GET /api/agents/choix` | `ChoixAgents` | nom et prénom des agents, pour les listes déroulantes |
+
+⚠️ **`ChoixAgents` est une ressource à part, et ni une exemption ni une ligne `Agent`.**
+Les écrans des prestations et des absences la chargent à chaque ouverture : journalisée
+en `Agent`, elle noierait les vraies lectures de fiches ; exemptée, des noms de collègues
+sortiraient sans trace, alors que la liste des chefs, qui ne rend que des noms elle aussi,
+est journalisée. Distincte, le bruit se filtre. Elle existe pour la **minimisation** :
+ces écrans recevaient l'adresse et les coordonnées du domicile de chaque agent par
+`GET /api/agents`, pour n'afficher qu'un nom. Une ressource qui porte des données
+personnelles au-delà de son étiquette déclare sa `routeChoix` (§11).
 
 `CandidatDto` expose `DistanceKm`, dérivée des coordonnées du domicile — exactement
 la donnée que `SPEC.md` signale comme relevant de la doctrine CNIL. Et
@@ -634,7 +644,7 @@ est consignée dans le test, pas tranchée. Et `ProduitDto` montre le prix de la
 `ClientDto`. Une règle grossière dont chaque exception est écrite vaut mieux qu'une
 règle fine qui laisse passer en silence.
 
-Un second test garde l'excès symétrique — les douze actions journalisées sont
+Un second test garde l'excès symétrique — les treize actions journalisées sont
 exactement celles attendues, parce qu'un journal bruyant ne se lit plus.
 
 **`Divulgation` et `Compter` sont `public`, pour être éprouvées directement.** Même
@@ -645,9 +655,9 @@ qu'aucune action ne produit aujourd'hui — notamment qu'une `string`, étant un
 `IEnumerable<char>`, vaut **une** ligne et non cent trente-quatre. Trois sabotages y
 sont restés verts avant que ces tests existent.
 
-**Coût assumé** : une insertion synchrone par lecture sur ces dix endpoints.
+**Coût assumé** : une insertion synchrone par lecture sur ces onze endpoints.
 
-⚠️ **Douze attributs pour dix lectures** : les deux autres sont les deux `Anonymiser`, de
+⚠️ **Treize attributs pour onze lectures** : les deux autres sont les deux `Anonymiser`, de
 l'agent et du compte, qui ne sont pas des lectures mais des **écritures irréversibles** —
 nature `Anonymisation`. Et
 `Dossier` porte la nature `Export` plutôt que `Lecture`, parce que sortir le dossier
@@ -1465,9 +1475,10 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   l'étape 20. `descriptions.test.ts` lit désormais `backend/DTOs/*.cs` et compare les
   deux listes ; ajouter une propriété à un `XxxCreateDto` demande donc d'ajouter son
   champ à la description.
-- **Trois propriétés déclaratives étendent le motif sans écrire de page**, depuis
-  l'étape 21 :
+- **Quatre propriétés déclaratives étendent le motif sans écrire de page** :
   - `action` sur une description, pour un geste de liste au-delà du CRUD ;
+  - `routeChoix` sur une description, pour remplir les listes déroulantes des
+    ressources enfants sans charger la ressource entière (§7 bis, `ChoixAgents`) ;
   - `preremplit` et `seulementActifs` sur un champ de référence.
 
   Leur logique est dans `valeurs.ts`, leurs invariantes dans `descriptions.test.ts`, qui

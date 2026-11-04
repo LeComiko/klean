@@ -195,6 +195,17 @@ export interface DescriptionRessource {
   /** Route de l'API, sans identifiant ni chaîne de requête. */
   route: string
 
+  /**
+   * Route qui remplit les listes déroulantes des ressources **enfants**, si elle
+   * diffère de `route`. Elle doit rendre l'`id` et l'`etiquette`, paginée comme `route`.
+   *
+   * ⚠️ Le cas qui l'a fait naître : choisir le titulaire d'une prestation chargeait
+   * `/api/agents`, donc l'adresse et les coordonnées du domicile de chaque agent, pour
+   * n'en afficher que le nom (SPEC.md, étape 20). Une ressource qui porte des données
+   * personnelles au-delà de son étiquette devrait en déclarer une.
+   */
+  routeChoix?: string
+
   libelle: string
 
   /**

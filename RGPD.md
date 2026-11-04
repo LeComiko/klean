@@ -178,7 +178,7 @@ Les treize tables du modèle, plus les tables d'Identity. « DP » = donnée per
 | Table | Colonnes porteuses de DP | Catégorie | Sort par |
 |---|---|---|---|
 | `Entreprises` | `RaisonSociale`, `Siret` | personne morale — pas une DP | `GET /api/entreprises` |
-| `Agents` | `Nom`, `Prenom`, `Email`, `Telephone`, `Adresse`, **`Latitude`**, **`Longitude`**, `DateEmbauche`, `ChefEquipeId` | identité, **localisation du domicile**, lien hiérarchique | `/api/agents`, et **`/api/planning`** et les deux routes de candidats |
+| `Agents` | `Nom`, `Prenom`, `Email`, `Telephone`, `Adresse`, **`Latitude`**, **`Longitude`**, `DateEmbauche`, `ChefEquipeId` | identité, **localisation du domicile**, lien hiérarchique | `/api/agents`, et **`/api/planning`** et les deux routes de candidats ; nom et prénom seuls par `/api/agents/choix`, pour les listes déroulantes (journalisée en `ChoixAgents`) |
 | `Absences` | `AgentId`, `Type`, dates, `Motif` | **art. 9 quand `Type = Maladie`** | `/api/absences`, et la cause « Agent absent » du planning |
 | `Interventions` | `AgentId`, `DatePrevue`, `HeurePrevue`, `Statut` | activité professionnelle | `/api/interventions`, `/api/planning` |
 | `Remplacements` | `AgentRemplacantId`, `Score` | **évaluation** d'une personne | `/api/remplacements` |

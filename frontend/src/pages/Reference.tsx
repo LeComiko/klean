@@ -197,7 +197,7 @@ function EcranReference({
 
       if (cible === undefined) continue
 
-      listerToutPourChoix<Ressource>(cible.route, controleur.signal)
+      listerToutPourChoix<Ressource>(cible.routeChoix ?? cible.route, controleur.signal)
         .then((recue) => {
           setChoix((precedent) => ({
             ...precedent,
