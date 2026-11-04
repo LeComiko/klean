@@ -30,5 +30,12 @@ public class Produit
     /// <summary>Quantité sous laquelle le produit est signalé en alerte.</summary>
     public decimal SeuilAlerte { get; set; }
 
+    /// <summary>
+    /// Un produit désactivé ne reçoit plus d'entrée ; ce qui en reste peut encore sortir,
+    /// circuler et se compter. C'est la façon de retirer un produit qui a servi : sa
+    /// suppression est refusée dès qu'un mouvement le cite (SPEC.md, étape 22).
+    /// </summary>
+    public bool Actif { get; set; } = true;
+
     public ICollection<Stock> Stocks { get; set; } = new List<Stock>();
 }

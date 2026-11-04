@@ -94,13 +94,14 @@ KLEAN/
 ├── .env.example         le seul endroit où un exploitant écrit un secret
 ├── backend/
 │   ├── Dockerfile       l'API ET son bundle de migration, une seule image
-│   ├── Models/          12 entités métier + AccesJournalise + Utilisateur
+│   ├── Models/          14 entités métier + AccesJournalise + Utilisateur
 │   │                    + RolesKlean
 │   ├── Data/            KleanDbContext (filtres multi-tenant)
 │   ├── DTOs/            un fichier par entité, XxxDto + XxxCreateDto
 │   ├── Controllers/     un par entité + Auth + Planning
 │   ├── Services/        AffectationService, RemplacementService,
 │   │                    PlanningService, ServiceGeneration, JoursFeries,
+│   │                    ServiceStock,
 │   │                    JwtService, ServiceSession,
 │   │                    AmorcageService, TenantContext, LimiteurDebit,
 │   │                    ServiceCourrielSmtp, DescripteurErreursFrancais,
@@ -145,20 +146,22 @@ répond 403, un jeton mal orthographié qu'aucun navigateur ne signale.
 
 ## 5. Modèle de données
 
-Douze entités métier, toutes avec un `Id` de type `Guid` généré côté
-application et une colonne `EntrepriseId` (dénormalisée, voir §7). La douzième,
-`TypePrestation`, est le catalogue de l'étape 21.
+Quatorze entités métier, toutes avec un `Id` de type `Guid` généré côté
+application et une colonne `EntrepriseId` (dénormalisée, voir §7). `TypePrestation` est
+le catalogue de l'étape 21 ; `Emplacement` et `MouvementStock` sont le stock de
+l'étape 22.
 
-Une treizième entité existe et n'est **pas** métier : `AccesJournalise`, le journal
+Une quinzième entité existe et n'est **pas** métier : `AccesJournalise`, le journal
 d'accès aux données personnelles de §7 bis. Elle suit les mêmes règles — `Guid`
 applicatif, `EntrepriseId` dénormalisé, filtre global — mais elle ne décrit rien du
-nettoyage de bureaux : elle rend compte de l'usage des douze autres.
+nettoyage de bureaux : elle rend compte de l'usage des quatorze autres.
 
 ```
 Entreprise ─┬─ Client ─── Site ─── Contrat ─── Prestation ─── Intervention
             ├─ TypePrestation ────────────────────┘                 │
             ├─ Agent ─── Absence                                    │
-            └─ Produit ─── Stock                    Remplacement ───┘
+            ├─ Emplacement ─┐                       Remplacement ───┘
+            └─ Produit ─────┴─ Stock, MouvementStock — lieu : emplacement ou site
 ```
 
 | Entité | Champs notables |
@@ -173,8 +176,10 @@ Entreprise ─┬─ Client ─── Site ─── Contrat ─── Prestatio
 | Intervention | DatePrevue, HeurePrevue (TimeSpan), AgentId (nullable), Statut (enum) |
 | Absence | Type (enum), DateDebut, DateFin, Motif |
 | Remplacement | Statut (enum), Score (nullable), AgentRemplacantId (nullable) |
-| Produit | Unite, SeuilAlerte |
-| Stock | TypeEmplacement (enum), EmplacementId (sans clé étrangère, voulu) |
+| Produit | Unite, SeuilAlerte, Actif |
+| Emplacement | Nom, Type (enum `TypeEmplacement`), Actif — dépôt ou véhicule ; le site n'en est pas un |
+| Stock | EmplacementId **ou** SiteId, deux clés `Restrict`, l'une exactement ; Quantite, jamais saisie, jamais négative |
+| MouvementStock | Nature (enum), origine et destination (emplacement ou site), Quantite, Ecart (inventaire), DateMouvement, AuteurId — ni modifiable ni supprimable |
 
 Enums :
 - `TypeClient` : EntrepriseCliente, Syndic, GestionnaireImmobilier,
@@ -182,12 +187,20 @@ Enums :
 - `StatutIntervention` : Planifiee, EnCours, Terminee, NonCertifiee, Annulee
 - `TypeAbsence` : Maladie, Conge, Indisponibilite, Retard, Autre
 - `StatutRemplacement` : Recherche, Propose, Accepte, Refuse, Annule
-- `TypeEmplacement` : Depot, Vehicule, Site
+- `TypeEmplacement` : Depot, Vehicule — `Site` en est sorti à l'étape 22, le site
+  étant visé par sa propre clé
+- `NatureMouvement` : Entree, Sortie, Transfert, Inventaire
 - `JoursSemaine`, **à drapeaux** : Aucun, Lundi … Dimanche
 
 Tous les enums sont stockés **en texte** via `HasConversion<string>()`.
 Les DTOs les exposent en `string` et utilisent `Enum.TryParse` avec un
 `BadRequest` explicite si la valeur est invalide.
+
+⚠️ **`Enum.TryParse` accepte un nombre** : « 0 » y vaut la première valeur. Les deux
+énumérations de l'étape 22, `TypeEmplacement` et `NatureMouvement`, sont donc lues par
+leurs **noms exacts** (`Enum.GetNames<T>().Contains`) : une entrée de stock que personne
+n'a choisie ne passe pas. Les plus anciennes gardent `Enum.TryParse`, et ne sont pas
+reprises sans motif.
 
 ⚠️ **`JoursSemaine` fait exception sur deux points.** Le DTO l'expose en **tableau**
 de noms — `["Lundi", "Jeudi"]`, ce que cochent des cases —, et il est lu par
@@ -427,7 +440,7 @@ Mécanisme en trois parties, toutes nécessaires :
    utilisé par l'amorçage qui doit créer la première entreprise avant
    qu'aucun tenant n'existe.
 
-2. **Filtres globaux EF Core**, **treize** au total :
+2. **Filtres globaux EF Core**, **quinze** au total :
    ```csharp
    modelBuilder.Entity<X>().HasQueryFilter(e =>
        !TenantFiltrageActif || TenantEntrepriseId == null
@@ -436,7 +449,7 @@ Mécanisme en trois parties, toutes nécessaires :
    où `TenantFiltrageActif` et `TenantEntrepriseId` sont des **propriétés
    privées d'instance du DbContext**. Voir le piège §10.
 
-   Onze filtres sur les entités métier portant `EntrepriseId`, un douzième sur
+   Treize filtres sur les entités métier portant `EntrepriseId`, un quatorzième sur
    `AccesJournalise` (§7 bis), **plus un sur `Entreprise` elle-même**, sur son
    propre `Id`. Depuis l'étape 21, `IsolationTests` refuse toute entité portant
    `EntrepriseId` sans filtre : une entité oubliée ne casse rien de visible, elle se lit
@@ -486,9 +499,9 @@ Mécanisme en trois parties, toutes nécessaires :
    relire ; l'écriture inter-tenant passait. Ne jamais conditionner cette
    affectation.
 
-`EntrepriseId` est **dénormalisé** sur les sept entités qui ne l'ont pas
+`EntrepriseId` est **dénormalisé** sur les huit entités qui ne l'ont pas
 naturellement (Site, Contrat, Prestation, Intervention, Absence,
-Remplacement, Stock). Choix assumé : évite trois jointures par ligne sur la
+Remplacement, Stock, MouvementStock). Choix assumé : évite trois jointures par ligne sur la
 vue planning. La cohérence est garantie applicativement, sans clé étrangère.
 
 ### L'équipe d'un chef — quatrième axe
@@ -627,7 +640,7 @@ d'autrui — une recherche par POST, un export — échapperait au filet.
 
 ⚠️ La règle est **structurelle et à défaut fermé** : un DTO créé demain avec un `Nom`
 tombe dans le filet sans que personne y pense, et s'en dispenser demande de l'inscrire
-dans une liste d'exemptions motivées. Quatre y figurent aujourd'hui, et leurs raisons
+dans une liste d'exemptions motivées. Cinq y figurent aujourd'hui, et leurs raisons
 diffèrent :
 
 | Exempté | Raison |
@@ -635,6 +648,7 @@ diffèrent :
 | `ClientDto`, `SiteDto` | coordonnées d'une **personne morale** — entreprise, syndic, copropriété |
 | `ProfilDto` | l'identité de **l'appelant lui-même** ; un journal de « qui a lu son propre nom » est du bruit |
 | `ProduitDto` | le `Nom` d'un produit est « Détergent sols » |
+| `EmplacementDto` | le `Nom` d'un dépôt ou d'un véhicule ; nommer par la plaque, jamais par le conducteur, est à dire à l'écran |
 
 ⚠️ `ClientDto` reste discutable : le contact d'une petite copropriété est souvent une
 personne physique. La question appartient au lot de la cartographie des données ; elle
@@ -1029,6 +1043,32 @@ Pas de mode « remplacement automatique » : sans notifications ni application
 agent, il n'y a personne à contacter.
 
 ---
+
+## 9 bis. Stock
+
+Numérotée « bis » pour la même raison que §6 bis. Les arbitrages et leurs motifs sont
+dans `SPEC.md`, étape 22.
+
+**Une quantité ne change que par un mouvement.** `ServiceStock.EnregistrerAsync` est la
+seule écriture de `Stock.Quantite` : `/api/stocks` est en lecture seule, et
+`/api/mouvements-stock` n'a ni `PUT` ni `DELETE`. Une erreur se corrige par un mouvement
+de plus, en général un inventaire. Quatre choses à savoir avant d'y toucher :
+
+- ⚠️ **Un mouvement refusé n'écrit rien**, ni le mouvement ni une quantité. Tout se joue
+  dans une transaction, et une ligne de stock créée pour la destination n'est
+  enregistrée qu'avec le mouvement qui la justifie.
+- ⚠️ **Un verrou consultatif par entreprise sérialise les mouvements**, espace 22, forme
+  à deux entiers. Sans lui, deux sorties simultanées liraient la même quantité, et la
+  seconde écraserait la première. La contrainte « quantité ≥ 0 » ne le remplace pas :
+  elle voit un nombre négatif, pas une écriture perdue.
+- **Trois gardes de base sous le service** : un lieu et un seul par stock, une quantité
+  jamais négative, une ligne par produit et par lieu. `StockTests` les éprouve par SQL
+  direct, sous le contrôleur.
+- **Rien ne se supprime dès qu'un mouvement le cite** : ni produit, ni emplacement, ni
+  site. Produit et emplacement se **désactivent** — ils ne reçoivent plus rien, et ce
+  qu'ils portent peut encore sortir. Un site n'a pas d'état actif ; sans contrat, il ne
+  génère plus rien, et le refus le dit plutôt que de promettre une sortie qui ne
+  débloquerait rien.
 
 ## 10. Pièges connus
 

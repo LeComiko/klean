@@ -186,7 +186,8 @@ Les treize tables du modèle, plus les tables d'Identity. « DP » = donnée per
 | `Sites` | `Adresse`, coordonnées, **`Consignes`** | lieu, et DP par accident dans les consignes | `/api/sites` |
 | `Contrats` | aucune | — | `/api/contrats` |
 | `Prestations` | `AgentTitulaireId` — `Libelle` est un intitulé de prestation | affectation habituelle d'un salarié à un site, à une heure | `/api/prestations`, et le dossier de l'agent |
-| `Produits`, `Stocks` | aucune | — | — |
+| `Produits`, `Stocks`, `Emplacements` | aucune — un véhicule est nommé par sa plaque ou son modèle, jamais par son conducteur | — | — |
+| `MouvementsStock` | **`AuteurId`**, `DateMouvement` | trace d'activité d'un utilisateur : qui a sorti, transféré, compté quoi, et quand | `/api/mouvements-stock` — l'identifiant seulement, jamais le nom, donc hors du journal d'accès (§7 bis de `CLAUDE.md`) |
 | `TypesPrestation` | aucune — un libellé de catalogue et une durée | — | `/api/types-prestation` |
 | `AccesJournalises` | `UtilisateurId`, `CibleId`, `Horodatage` | trace d'activité d'un utilisateur | `/api/journal-acces` |
 | `AspNetUsers` | `Email`, `UserName`, `PhoneNumber`, `Nom`, `Prenom`, `PasswordHash`, verrouillage, `DateAnonymisation` | identité et **secret d'authentification** | `/api/auth/moi`, et nom et prénom des chefs d'équipe par `/api/agents/chefs-equipe` (administrateur, journalisée) |
@@ -258,6 +259,7 @@ est la dernière : une durée sans mécanisme est une promesse que personne ne t
 | Comptes (`AspNetUsers`) | désactivation à la sortie, effacement à 5 ans | un compte désactivé reste nécessaire pour attribuer les lignes du journal | 📋 geste manuel par `POST /api/auth/comptes/{id}/anonymiser` (§9.3) |
 | Jetons de rafraîchissement | **30 jours après révocation ou expiration** | la fenêtre de diagnostic d'un rejeu ; au-delà, seule l'adresse IP survit, sans usage | ✅ `purge-jetons-rafraichissement.sql` |
 | Journal d'accès | **12 mois** | un journal RGPD est lui-même une donnée personnelle | ✅ `purge-journal-acces.sql` |
+| Mouvements de stock et leur auteur | 5 ans, comme les interventions | l'historique qui explique une quantité ; l'auteur suit son compte, pseudonymisé à la sortie | ⚠️ **aucun encore** — écrit à l'étape 22, à ajouter à `conservation-donnees-metier.sql` avant une instance réelle |
 
 **Lire la dernière colonne avec attention : 📋 n'est pas ✅.** Un script marqué 📋
 **rapporte** ce qui est hors délai et porte son `DELETE` **en commentaire**. Il ne
@@ -673,6 +675,10 @@ Trois choses à savoir sur cette correction :
   n'est pas supprimé, et un client rattaché à un compte `ClientSyndic`
   (`AspNetUsers.ClientId`) non plus, ce compte devant d'abord être pseudonymisé.
   Vérifiées dans une transaction annulée.
+  Depuis l'étape 22, le lien du stock au site est une vraie clé étrangère,
+  `Stocks.SiteId`, et les mouvements en portent deux de plus : la base protège ce lien,
+  et la garde du script ne sert plus qu'à ne pas compter comme supprimable ce que le
+  `DELETE` refuserait.
 - **Un prospect jamais signé suit la même règle de 5 ans.** Pour la prospection pure, le
   référentiel de la CNIL sur la gestion commerciale retient plutôt **3 ans** après le
   dernier contact. C'est une durée de §5 de plus à faire valider par l'exploitant.

@@ -556,6 +556,7 @@ const Produits: DescriptionRessource = {
     { nom: 'reference', libelle: 'Référence' },
     { nom: 'unite', libelle: 'Unité' },
     { nom: 'seuilAlerte', libelle: 'Seuil d’alerte', chiffres: true },
+    { nom: 'actif', libelle: 'Actif' },
   ],
 
   champs: [
@@ -587,6 +588,15 @@ const Produits: DescriptionRessource = {
       max: 999999.99,
       pas: 0.01,
       aide: 'Quantité en dessous de laquelle le stock est signalé comme bas.',
+    },
+    {
+      nom: 'actif',
+      libelle: 'Actif',
+      type: 'booleen',
+      defaut: true,
+      // Décrire l'effet : c'est la seule façon de retirer un produit qui a servi, sa
+      // suppression étant refusée dès qu'un mouvement de stock le cite (SPEC.md, étape 22).
+      aide: 'Décoché, le produit ne rentre plus en stock ; ce qui en reste peut encore sortir.',
     },
   ],
 

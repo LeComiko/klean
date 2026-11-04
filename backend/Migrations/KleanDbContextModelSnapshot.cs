@@ -235,6 +235,33 @@ namespace Klean.Api.Migrations
                     b.ToTable("Contrats");
                 });
 
+            modelBuilder.Entity("Klean.Api.Models.Emplacement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Actif")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("EntrepriseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Nom")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntrepriseId");
+
+                    b.ToTable("Emplacements");
+                });
+
             modelBuilder.Entity("Klean.Api.Models.Entreprise", b =>
                 {
                     b.Property<Guid>("Id")
@@ -339,6 +366,70 @@ namespace Klean.Api.Migrations
                     b.ToTable("JetonsRafraichissement");
                 });
 
+            modelBuilder.Entity("Klean.Api.Models.MouvementStock", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AuteurId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("DateMouvement")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DestinationEmplacementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DestinationSiteId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("Ecart")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<Guid>("EntrepriseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Nature")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("OrigineEmplacementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("OrigineSiteId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProduitId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Quantite")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DestinationEmplacementId");
+
+                    b.HasIndex("DestinationSiteId");
+
+                    b.HasIndex("OrigineEmplacementId");
+
+                    b.HasIndex("OrigineSiteId");
+
+                    b.HasIndex("ProduitId");
+
+                    b.HasIndex("EntrepriseId", "DateMouvement")
+                        .IsDescending(false, true);
+
+                    b.ToTable("MouvementsStock", t =>
+                        {
+                            t.HasCheckConstraint("CK_MouvementsStock_UneDestination", "\"DestinationEmplacementId\" IS NULL OR \"DestinationSiteId\" IS NULL");
+
+                            t.HasCheckConstraint("CK_MouvementsStock_UneOrigine", "\"OrigineEmplacementId\" IS NULL OR \"OrigineSiteId\" IS NULL");
+                        });
+                });
+
             modelBuilder.Entity("Klean.Api.Models.Prestation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -390,6 +481,11 @@ namespace Klean.Api.Migrations
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("Actif")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<Guid>("EntrepriseId")
                         .HasColumnType("uuid");
@@ -516,7 +612,7 @@ namespace Klean.Api.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("EmplacementId")
+                    b.Property<Guid?>("EmplacementId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("EntrepriseId")
@@ -529,17 +625,31 @@ namespace Klean.Api.Migrations
                         .HasPrecision(10, 2)
                         .HasColumnType("numeric(10,2)");
 
-                    b.Property<string>("TypeEmplacement")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<Guid?>("SiteId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("EmplacementId");
+
                     b.HasIndex("EntrepriseId");
 
-                    b.HasIndex("ProduitId");
+                    b.HasIndex("SiteId");
 
-                    b.ToTable("Stocks");
+                    b.HasIndex("ProduitId", "EmplacementId")
+                        .IsUnique()
+                        .HasFilter("\"EmplacementId\" IS NOT NULL");
+
+                    b.HasIndex("ProduitId", "SiteId")
+                        .IsUnique()
+                        .HasFilter("\"SiteId\" IS NOT NULL");
+
+                    b.ToTable("Stocks", t =>
+                        {
+                            t.HasCheckConstraint("CK_Stocks_QuantitePositive", "\"Quantite\" >= 0");
+
+                            t.HasCheckConstraint("CK_Stocks_UnLieu", "(\"EmplacementId\" IS NULL) <> (\"SiteId\" IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Klean.Api.Models.TypePrestation", b =>
@@ -842,6 +952,17 @@ namespace Klean.Api.Migrations
                     b.Navigation("Site");
                 });
 
+            modelBuilder.Entity("Klean.Api.Models.Emplacement", b =>
+                {
+                    b.HasOne("Klean.Api.Models.Entreprise", "Entreprise")
+                        .WithMany()
+                        .HasForeignKey("EntrepriseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Entreprise");
+                });
+
             modelBuilder.Entity("Klean.Api.Models.Intervention", b =>
                 {
                     b.HasOne("Klean.Api.Models.Agent", "Agent")
@@ -869,6 +990,45 @@ namespace Klean.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Utilisateur");
+                });
+
+            modelBuilder.Entity("Klean.Api.Models.MouvementStock", b =>
+                {
+                    b.HasOne("Klean.Api.Models.Emplacement", "DestinationEmplacement")
+                        .WithMany()
+                        .HasForeignKey("DestinationEmplacementId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Klean.Api.Models.Site", "DestinationSite")
+                        .WithMany()
+                        .HasForeignKey("DestinationSiteId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Klean.Api.Models.Emplacement", "OrigineEmplacement")
+                        .WithMany()
+                        .HasForeignKey("OrigineEmplacementId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Klean.Api.Models.Site", "OrigineSite")
+                        .WithMany()
+                        .HasForeignKey("OrigineSiteId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Klean.Api.Models.Produit", "Produit")
+                        .WithMany()
+                        .HasForeignKey("ProduitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DestinationEmplacement");
+
+                    b.Navigation("DestinationSite");
+
+                    b.Navigation("OrigineEmplacement");
+
+                    b.Navigation("OrigineSite");
+
+                    b.Navigation("Produit");
                 });
 
             modelBuilder.Entity("Klean.Api.Models.Prestation", b =>
@@ -945,13 +1105,27 @@ namespace Klean.Api.Migrations
 
             modelBuilder.Entity("Klean.Api.Models.Stock", b =>
                 {
+                    b.HasOne("Klean.Api.Models.Emplacement", "Emplacement")
+                        .WithMany()
+                        .HasForeignKey("EmplacementId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Klean.Api.Models.Produit", "Produit")
                         .WithMany("Stocks")
                         .HasForeignKey("ProduitId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Klean.Api.Models.Site", "Site")
+                        .WithMany()
+                        .HasForeignKey("SiteId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Emplacement");
+
                     b.Navigation("Produit");
+
+                    b.Navigation("Site");
                 });
 
             modelBuilder.Entity("Klean.Api.Models.TypePrestation", b =>

@@ -108,17 +108,20 @@ UNION ALL
 -- avoir une date) et qu'il n'en existe aucun (pour être supprimable). C'était §9.7
 -- sous une autre forme.
 --
--- `Stocks.EmplacementId` n'a pas de clé étrangère (CLAUDE.md §5) : rien en base
--- n'empêcherait de supprimer un site qui porte encore du stock, qui deviendrait
--- orphelin. La garde est donc écrite ici.
+-- Depuis l'étape 22, `Stocks.SiteId` et les quatre lieux de `MouvementsStock` sont
+-- des clés étrangères en Restrict : la base refuserait le DELETE d'un site qui porte
+-- du stock ou que cite un mouvement. La garde reste écrite ici pour que le rapport
+-- ne compte pas comme supprimable ce que le DELETE refuserait — le motif de la
+-- colonne `supprimable_maintenant`.
 SELECT
     'sites',
     count(*),
     count(*) FILTER (
         WHERE NOT EXISTS (SELECT 1 FROM "Contrats" c2 WHERE c2."SiteId" = s."Id")
+          AND NOT EXISTS (SELECT 1 FROM "Stocks" st WHERE st."SiteId" = s."Id")
           AND NOT EXISTS (
-              SELECT 1 FROM "Stocks" st
-              WHERE st."TypeEmplacement" = 'Site' AND st."EmplacementId" = s."Id")
+              SELECT 1 FROM "MouvementsStock" m
+              WHERE m."OrigineSiteId" = s."Id" OR m."DestinationSiteId" = s."Id")
     )
 FROM "Sites" s
 WHERE s."DateCreation" < now() - interval '5 years'
@@ -262,16 +265,17 @@ WHERE a."DateAnonymisation" IS NOT NULL
 -- WHERE c."DateFin" IS NOT NULL AND c."DateFin" < now() - interval '5 years'
 --   AND NOT EXISTS (SELECT 1 FROM "Prestations" p WHERE p."ContratId" = c."Id");
 --
--- -- 6. Sites sans contrat, créés il y a plus de 5 ans, sans stock rattaché
+-- -- 6. Sites sans contrat, créés il y a plus de 5 ans, sans stock ni mouvement rattaché
 -- --    Couvre d'un même geste le site dont les contrats viennent d'être purgés par
 -- --    le DELETE 5 et le prospect jamais signé. `DateCreation` les distingue d'un
 -- --    site saisi hier — c'est tout l'objet de la colonne (RGPD.md §9.7).
 -- DELETE FROM "Sites" s
 -- WHERE s."DateCreation" < now() - interval '5 years'
 --   AND NOT EXISTS (SELECT 1 FROM "Contrats" c WHERE c."SiteId" = s."Id")
+--   AND NOT EXISTS (SELECT 1 FROM "Stocks" st WHERE st."SiteId" = s."Id")
 --   AND NOT EXISTS (
---       SELECT 1 FROM "Stocks" st
---       WHERE st."TypeEmplacement" = 'Site' AND st."EmplacementId" = s."Id");
+--       SELECT 1 FROM "MouvementsStock" m
+--       WHERE m."OrigineSiteId" = s."Id" OR m."DestinationSiteId" = s."Id");
 --
 -- -- 7. Clients sans site, créés il y a plus de 5 ans, sans compte rattaché
 -- DELETE FROM "Clients" cl

@@ -132,24 +132,13 @@ public class CrudTests : IAsyncLifetime
 
     [Theory]
     [InlineData("/api/clients", "Bailleur", "Type de client")]
-    [InlineData("/api/stocks", "Camion", "Type d'emplacement")]
+    [InlineData("/api/emplacements", "Camion", "Type d'emplacement")]
     public async Task Enum_invalide_renvoie_400_avec_les_valeurs_acceptees(
         string route, string valeurInvalide, string debutDuMessage)
     {
         object corps = route == "/api/clients"
             ? new ClientCreateDto { Nom = "X", Type = valeurInvalide }
-            : new StockCreateDto
-            {
-                ProduitId = (await Creer<ProduitDto>("/api/produits", new ProduitCreateDto
-                {
-                    Nom = "Détergent",
-                    Unite = "litre",
-                    SeuilAlerte = 10m
-                })).Id,
-                TypeEmplacement = valeurInvalide,
-                EmplacementId = Guid.NewGuid(),
-                Quantite = 1m
-            };
+            : new EmplacementCreateDto { Nom = "Camion 1", Type = valeurInvalide };
 
         var reponse = await _client.PostAsJsonAsync(route, corps);
 
@@ -203,6 +192,8 @@ public class CrudTests : IAsyncLifetime
     [InlineData("remplacements")]
     [InlineData("produits")]
     [InlineData("stocks")]
+    [InlineData("emplacements")]
+    [InlineData("mouvements-stock")]
     public async Task Identifiant_inexistant_renvoie_404(string ressource)
     {
         var reponse = await _client.GetAsync($"/api/{ressource}/{Guid.NewGuid()}");

@@ -7,6 +7,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Klean.Api.Controllers;
 
+/// <summary>
+/// Les quantités en stock, en lecture seule depuis l'étape 22.
+///
+/// ⚠️ Ni création, ni modification, ni suppression : une quantité résulte de mouvements
+/// (<c>POST /api/mouvements-stock</c>), et une ligne écrite à la main n'aurait pas
+/// d'histoire. Une ligne à zéro reste : elle dit qu'un lieu a porté ce produit.
+/// </summary>
 [Authorize]
 [ApiController]
 [Route("api/stocks")]
@@ -16,17 +23,28 @@ public class StocksController : ControllerBase
 
     public StocksController(KleanDbContext db) => _db = db;
 
+    /// <summary>
+    /// Trois filtres facultatifs, appliqués avant le comptage comme les filtres de parenté
+    /// (CLAUDE.md §6 bis) : <c>Total</c> est celui de la liste filtrée.
+    /// </summary>
     [Authorize(Roles = RolesKlean.Interne)]
     [HttpGet]
-    public async Task<ActionResult<PageDto<StockDto>>> Lister([FromQuery] PaginationDto pagination)
+    public async Task<ActionResult<PageDto<StockDto>>> Lister(
+        [FromQuery] PaginationDto pagination,
+        [FromQuery] Guid? produitId,
+        [FromQuery] Guid? emplacementId,
+        [FromQuery] Guid? siteId)
     {
-        var requete = _db.Stocks
-            .AsNoTracking()
-            .OrderBy(s => s.ProduitId);
+        var requete = _db.Stocks.AsNoTracking();
+
+        if (produitId is not null) requete = requete.Where(s => s.ProduitId == produitId);
+        if (emplacementId is not null) requete = requete.Where(s => s.EmplacementId == emplacementId);
+        if (siteId is not null) requete = requete.Where(s => s.SiteId == siteId);
 
         var total = await requete.CountAsync();
 
         var stocks = await requete
+            .OrderBy(s => s.ProduitId).ThenBy(s => s.Id)
             .Skip(pagination.ANegliger)
             .Take(pagination.Taille)
             .Select(s => new StockDto
@@ -34,8 +52,8 @@ public class StocksController : ControllerBase
                 Id = s.Id,
                 EntrepriseId = s.EntrepriseId,
                 ProduitId = s.ProduitId,
-                TypeEmplacement = s.TypeEmplacement.ToString(),
                 EmplacementId = s.EmplacementId,
+                SiteId = s.SiteId,
                 Quantite = s.Quantite
             })
             .ToListAsync();
@@ -53,90 +71,9 @@ public class StocksController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<StockDto>> Obtenir(Guid id)
     {
-        var stock = await _db.Stocks
-            .AsNoTracking()
-            .Where(s => s.Id == id)
-            .Select(s => new StockDto
-            {
-                Id = s.Id,
-                EntrepriseId = s.EntrepriseId,
-                ProduitId = s.ProduitId,
-                TypeEmplacement = s.TypeEmplacement.ToString(),
-                EmplacementId = s.EmplacementId,
-                Quantite = s.Quantite
-            })
-            .FirstOrDefaultAsync();
+        var stock = await _db.Stocks.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id);
 
-        return stock is null ? NotFound() : Ok(stock);
-    }
-
-    [Authorize(Roles = RolesKlean.Exploitation)]
-    [HttpPost]
-    public async Task<ActionResult<StockDto>> Creer(StockCreateDto dto)
-    {
-        if (!Enum.TryParse<TypeEmplacement>(dto.TypeEmplacement, out var type))
-        {
-            return BadRequest($"Type d'emplacement « {dto.TypeEmplacement} » invalide. Valeurs acceptées : {string.Join(", ", Enum.GetNames<TypeEmplacement>())}.");
-        }
-
-        if (!await _db.Produits.AnyAsync(p => p.Id == dto.ProduitId))
-        {
-            return BadRequest($"Produit {dto.ProduitId} inconnu.");
-        }
-
-        var stock = new Stock
-        {
-            ProduitId = dto.ProduitId,
-            TypeEmplacement = type,
-            // EmplacementId est sans clé étrangère : selon le type, il pointe
-            // vers un dépôt, un véhicule ou un site. Pas de contrôle d'existence
-            // possible ici, c'est le prix de la décision consignée dans SPEC.md.
-            EmplacementId = dto.EmplacementId,
-            Quantite = dto.Quantite
-        };
-
-        _db.Stocks.Add(stock);
-        await _db.SaveChangesAsync();
-
-        return CreatedAtAction(nameof(Obtenir), new { id = stock.Id }, Vers(stock));
-    }
-
-    [Authorize(Roles = RolesKlean.Exploitation)]
-    [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Modifier(Guid id, StockCreateDto dto)
-    {
-        if (!Enum.TryParse<TypeEmplacement>(dto.TypeEmplacement, out var type))
-        {
-            return BadRequest($"Type d'emplacement « {dto.TypeEmplacement} » invalide. Valeurs acceptées : {string.Join(", ", Enum.GetNames<TypeEmplacement>())}.");
-        }
-
-        var stock = await _db.Stocks.FindAsync(id);
-        if (stock is null) return NotFound();
-
-        if (stock.ProduitId != dto.ProduitId && !await _db.Produits.AnyAsync(p => p.Id == dto.ProduitId))
-        {
-            return BadRequest($"Produit {dto.ProduitId} inconnu.");
-        }
-
-        stock.ProduitId = dto.ProduitId;
-        stock.TypeEmplacement = type;
-        stock.EmplacementId = dto.EmplacementId;
-        stock.Quantite = dto.Quantite;
-
-        await _db.SaveChangesAsync();
-        return NoContent();
-    }
-
-    [Authorize(Roles = RolesKlean.Exploitation)]
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Supprimer(Guid id)
-    {
-        var stock = await _db.Stocks.FindAsync(id);
-        if (stock is null) return NotFound();
-
-        _db.Stocks.Remove(stock);
-        await _db.SaveChangesAsync();
-        return NoContent();
+        return stock is null ? NotFound() : Ok(Vers(stock));
     }
 
     private static StockDto Vers(Stock s) => new()
@@ -144,8 +81,8 @@ public class StocksController : ControllerBase
         Id = s.Id,
         EntrepriseId = s.EntrepriseId,
         ProduitId = s.ProduitId,
-        TypeEmplacement = s.TypeEmplacement.ToString(),
         EmplacementId = s.EmplacementId,
+        SiteId = s.SiteId,
         Quantite = s.Quantite
     };
 }

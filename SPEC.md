@@ -2171,6 +2171,57 @@ lignes existantes, qu'aucune n'a aujourd'hui.
 - **C** — les écrans de la section `ST` : emplacements, stock par emplacement, saisie
   d'un mouvement, vue des alertes et du réapprovisionnement.
 
+**Lot A — fait le 4 novembre 2026**
+
+- **Le modèle.**
+  - `Emplacement` : dépôt ou véhicule, avec nom et état actif.
+  - `Stock` : `EmplacementId` **ou** `SiteId`, deux clés réelles en `Restrict`.
+  - `MouvementStock` : nature, origine, destination, quantité, écart d'inventaire, date
+    et auteur, ces deux derniers posés par le serveur.
+  - `Produit.Actif`.
+  - Deux filtres globaux de plus, quinze en tout.
+- **Migration `EmplacementsEtMouvementsDeStock`.** Elle **supprime** `Stocks.TypeEmplacement`
+  et rend `EmplacementId` nullable : la table était vide. Elle s'ouvre sur une garde
+  qui **refuse de s'appliquer** si `Stocks` contient des lignes, en disant comment les
+  reprendre, plutôt que d'échouer au milieu sur une clé étrangère.
+- **Trois gardes de base** sous le service :
+  - un lieu et un seul par stock ;
+  - une quantité jamais négative ;
+  - une ligne par produit et par lieu, par deux index uniques partiels.
+- **`ServiceStock`** : un mouvement et ses quantités dans une transaction, sous un verrou
+  consultatif par entreprise, espace 22. Un refus n'écrit rien.
+  - Une sortie au-delà du disponible est refusée, et le message nomme l'inventaire.
+  - Un inventaire fixe la quantité et garde l'écart.
+  - Un emplacement ou un produit désactivé ne **reçoit** plus rien ; ce qu'il porte peut
+    encore sortir et se compter.
+- **Les routes.**
+  - `/api/emplacements` : CRUD complet.
+  - `/api/mouvements-stock` : lecture et création seulement.
+  - `/api/stocks` : **lecture seule**, filtrable par produit, emplacement et site avant
+    le comptage.
+- **Trois refus de suppression réécrits**, parce que leur sortie se fermait :
+  - produit et emplacement nomment la désactivation ;
+  - un site cité par un mouvement le dit, sans promettre que vider son stock le
+    débloquerait.
+- **Les énumérations nouvelles sont lues par leurs noms exacts.** `Enum.TryParse`
+  accepterait « 0 », donc une entrée que personne n'a choisie.
+- `StockTests` : 28 tests. Dix sabotages, tous rouges. Celui du verrou a été rejoué trois
+  fois, et il échoue pour la bonne raison : une sortie finit sans attendre le verrou.
+  - Le test de concurrence **prend lui-même le verrou du service** : les deux sorties
+    doivent l'attendre, sans quoi il échoue avant de compter.
+  - Un message refusé a fait trouver une faute : « 6 litre disponible(s) ». L'unité est
+    au singulier et sort de la phrase.
+- **Journal d'accès** : l'invariante structurelle a attrapé `EmplacementDto`, qui porte un
+  `Nom`. Il rejoint `ProduitDto` dans les exemptions motivées : un dépôt, un véhicule.
+  La limite est écrite, comme pour les consignes d'un site : l'écran du lot C dira de
+  nommer un véhicule par sa plaque, jamais par son conducteur.
+- **Écran** : le champ « Actif » des produits, exigé par le test de parité. Le reste
+  attend le lot C.
+- `conservation-donnees-metier.sql` lit `SiteId` et les mouvements ; il a été rejoué sur
+  `klean_test`.
+- ⚠️ **Écart ouvert, dit dans `RGPD.md` §5** : les mouvements portent leur auteur, et
+  aucun script n'en gère encore la conservation.
+
 ---
 
 # Suite — non planifié

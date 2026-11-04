@@ -2,16 +2,16 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Klean.Api.Models;
 
-public enum TypeEmplacement
-{
-    Depot,
-    Vehicule,
-    Site
-}
-
 /// <summary>
-/// Quantité d'un produit à un emplacement. <see cref="EntrepriseId"/> dénormalisé,
-/// sans clé étrangère.
+/// Quantité d'un produit en un lieu : un <see cref="Emplacement"/> — dépôt ou véhicule —
+/// <b>ou</b> un <see cref="Site"/>, jamais les deux ni aucun, ce qu'une contrainte de
+/// base garde. Une seule ligne par produit et par lieu, gardée par deux index uniques
+/// partiels. <see cref="EntrepriseId"/> dénormalisé, sans clé étrangère.
+///
+/// ⚠️ <see cref="Quantite"/> n'est écrite que par <c>ServiceStock</c>, dans la
+/// transaction d'un <see cref="MouvementStock"/> (SPEC.md, étape 22) : aucune route ne la
+/// saisit. Une quantité qu'on tape n'a pas d'histoire, et « pourquoi a-t-elle baissé de
+/// douze litres ? » n'a alors pas de réponse.
 /// </summary>
 public class Stock
 {
@@ -25,15 +25,12 @@ public class Stock
     public Guid ProduitId { get; set; }
     public Produit? Produit { get; set; }
 
-    [Required]
-    public TypeEmplacement TypeEmplacement { get; set; }
+    public Guid? EmplacementId { get; set; }
+    public Emplacement? Emplacement { get; set; }
 
-    /// <summary>
-    /// Volontairement sans clé étrangère : selon <see cref="TypeEmplacement"/>,
-    /// pointe vers un dépôt, un véhicule ou un site (CLAUDE.md §5).
-    /// </summary>
-    [Required]
-    public Guid EmplacementId { get; set; }
+    public Guid? SiteId { get; set; }
+    public Site? Site { get; set; }
 
+    /// <summary>Jamais négative : une contrainte de base le garde, sous le service.</summary>
     public decimal Quantite { get; set; }
 }

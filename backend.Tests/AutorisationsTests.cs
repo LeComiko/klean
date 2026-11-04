@@ -150,7 +150,8 @@ public class AutorisationsTests : IAsyncLifetime
     [Theory]
     [InlineData("/api/absences")]
     [InlineData("/api/remplacements")]
-    [InlineData("/api/stocks")]
+    [InlineData("/api/emplacements")]
+    [InlineData("/api/mouvements-stock")]
     [InlineData("/api/clients")]
     public async Task ChefEquipe_lit_mais_n_ecrit_pas_hors_interventions(string route)
     {
@@ -188,6 +189,8 @@ public class AutorisationsTests : IAsyncLifetime
     [InlineData("/api/agents/choix")]
     [InlineData("/api/absences")]
     [InlineData("/api/entreprises")]
+    [InlineData("/api/emplacements")]
+    [InlineData("/api/mouvements-stock")]
     public async Task Agent_n_a_acces_a_rien_d_autre(string route)
     {
         var agent = await _fixture.ClientDeRoleAsync(
@@ -246,6 +249,8 @@ public class AutorisationsTests : IAsyncLifetime
     [InlineData("/api/agents")]
     [InlineData("/api/agents/choix")]
     [InlineData("/api/absences")]
+    [InlineData("/api/emplacements")]
+    [InlineData("/api/mouvements-stock")]
     public async Task ClientSyndic_n_atteint_pas_le_reste_du_systeme(string route)
     {
         var syndic = await _fixture.ClientDeRoleAsync(

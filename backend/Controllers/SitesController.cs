@@ -165,13 +165,30 @@ public class SitesController : ControllerBase
         }
         catch (DbUpdateException)
         {
-            // Restrict depuis la migration SuppressionRestreinteSurLaChaineExploitation.
+            // Restrict depuis la migration SuppressionRestreinteSurLaChaineExploitation,
+            // et depuis l'étape 22 sur le stock et ses mouvements. Le refus nomme ce qui
+            // bloque vraiment : un site sans contrat mais avec du stock n'avait aucune
+            // sortie dans l'ancien message.
             var contrats = await _db.Contrats.CountAsync(c => c.SiteId == id);
 
+            if (contrats > 0)
+            {
+                return Conflict(
+                    $"Ce site porte {contrats} contrat(s) et ne peut pas être supprimé : sa "
+                    + "suppression effacerait aussi leurs prestations et toutes les "
+                    + "interventions déjà planifiées. Supprimer d'abord ses contrats.");
+            }
+
+            // ⚠️ Pas de « vider son stock d'abord » : les mouvements continueraient de citer
+            // le site, et la sortie promise ne débloquerait rien. Un site sans contrat ne
+            // génère plus aucune vacation : le garder ne coûte rien.
+            var mouvements = await _db.MouvementsStock.CountAsync(m =>
+                m.OrigineSiteId == id || m.DestinationSiteId == id);
+
             return Conflict(
-                $"Ce site porte {contrats} contrat(s) et ne peut pas être supprimé : sa "
-                + "suppression effacerait aussi leurs prestations et toutes les "
-                + "interventions déjà planifiées. Supprimer d'abord ses contrats.");
+                $"Ce site est cité par {mouvements} mouvement(s) de stock et ne peut pas être "
+                + "supprimé : l'historique des quantités en dépend. Sans contrat, il ne génère "
+                + "plus aucune vacation et peut rester tel quel.");
         }
 
         return NoContent();

@@ -10,6 +10,7 @@ public class ProduitDto
     public string? Reference { get; set; }
     public string Unite { get; set; } = string.Empty;
     public decimal SeuilAlerte { get; set; }
+    public bool Actif { get; set; }
 }
 
 public class ProduitCreateDto
@@ -28,4 +29,7 @@ public class ProduitCreateDto
 
     [Range(0, 999999.99)]
     public decimal SeuilAlerte { get; set; }
+
+    /// <summary>Décoché, plus d'entrée en stock ; ce qui reste peut sortir et se compter.</summary>
+    public bool Actif { get; set; } = true;
 }

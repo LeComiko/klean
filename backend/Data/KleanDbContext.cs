@@ -56,10 +56,16 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
     public DbSet<TypePrestation> TypesPrestation => Set<TypePrestation>();
     public DbSet<Stock> Stocks => Set<Stock>();
 
+    /// <summary>Dépôts et véhicules (SPEC.md, étape 22). Le site est l'autre lieu d'un stock.</summary>
+    public DbSet<Emplacement> Emplacements => Set<Emplacement>();
+
+    /// <summary>La seule écriture qui change une quantité de stock (SPEC.md, étape 22).</summary>
+    public DbSet<MouvementStock> MouvementsStock => Set<MouvementStock>();
+
     /// <summary>
-    /// Journal d'accès aux données personnelles (SPEC.md étape 17). Douzième
-    /// entité, et la seule qui n'existe pas pour le métier : elle existe pour
-    /// rendre compte de l'usage des onze autres.
+    /// Journal d'accès aux données personnelles (SPEC.md étape 17). La seule
+    /// entité qui n'existe pas pour le métier : elle existe pour rendre compte de
+    /// l'usage des autres.
     /// </summary>
     public DbSet<AccesJournalise> AccesJournalises => Set<AccesJournalise>();
 
@@ -97,7 +103,8 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Intervention>().Property(e => e.Statut).HasConversion<string>();
         modelBuilder.Entity<Absence>().Property(e => e.Type).HasConversion<string>();
         modelBuilder.Entity<Remplacement>().Property(e => e.Statut).HasConversion<string>();
-        modelBuilder.Entity<Stock>().Property(e => e.TypeEmplacement).HasConversion<string>();
+        modelBuilder.Entity<Emplacement>().Property(e => e.Type).HasConversion<string>();
+        modelBuilder.Entity<MouvementStock>().Property(e => e.Nature).HasConversion<string>();
         modelBuilder.Entity<AccesJournalise>().Property(e => e.Ressource).HasConversion<string>();
         modelBuilder.Entity<AccesJournalise>().Property(e => e.Nature).HasConversion<string>();
 
@@ -123,6 +130,14 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
 
         modelBuilder.Entity<Produit>().Property(e => e.SeuilAlerte).HasPrecision(10, 2);
         modelBuilder.Entity<Stock>().Property(e => e.Quantite).HasPrecision(10, 2);
+        modelBuilder.Entity<MouvementStock>().Property(e => e.Quantite).HasPrecision(10, 2);
+        modelBuilder.Entity<MouvementStock>().Property(e => e.Ecart).HasPrecision(10, 2);
+
+        // ⚠️ Le défaut sert les produits antérieurs à la colonne : sans lui, la migration
+        // les créerait tous désactivés. La sentinelle `true` fait qu'EF envoie toujours
+        // `false` quand l'application le pose, et laisse le défaut — vrai lui aussi —
+        // couvrir le cas où elle pose `true`. Même raisonnement que `Prestation.Jours`.
+        modelBuilder.Entity<Produit>().Property(e => e.Actif).HasDefaultValue(true).HasSentinel(true);
 
         modelBuilder.Entity<Entreprise>().HasIndex(e => e.Siret).IsUnique();
 
@@ -199,6 +214,62 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Stock>()
             .HasOne(e => e.Produit).WithMany(e => e.Stocks)
             .HasForeignKey(e => e.ProduitId).OnDelete(DeleteBehavior.Restrict);
+
+        // Le stock et ses mouvements (SPEC.md, étape 22). Tout en **Restrict** : un
+        // mouvement est l'histoire d'une quantité, et un produit, un lieu ou un site qui
+        // en porte ne part pas en emportant l'explication de ce qu'il reste. On les
+        // désactive ; un site, lui, garde son stock tant qu'on ne l'a pas vidé.
+        modelBuilder.Entity<Emplacement>()
+            .HasOne(e => e.Entreprise).WithMany()
+            .HasForeignKey(e => e.EntrepriseId).OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<Stock>()
+            .HasOne(e => e.Emplacement).WithMany()
+            .HasForeignKey(e => e.EmplacementId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Stock>()
+            .HasOne(e => e.Site).WithMany()
+            .HasForeignKey(e => e.SiteId).OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<MouvementStock>()
+            .HasOne(e => e.Produit).WithMany()
+            .HasForeignKey(e => e.ProduitId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<MouvementStock>()
+            .HasOne(e => e.OrigineEmplacement).WithMany()
+            .HasForeignKey(e => e.OrigineEmplacementId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<MouvementStock>()
+            .HasOne(e => e.OrigineSite).WithMany()
+            .HasForeignKey(e => e.OrigineSiteId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<MouvementStock>()
+            .HasOne(e => e.DestinationEmplacement).WithMany()
+            .HasForeignKey(e => e.DestinationEmplacementId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<MouvementStock>()
+            .HasOne(e => e.DestinationSite).WithMany()
+            .HasForeignKey(e => e.DestinationSiteId).OnDelete(DeleteBehavior.Restrict);
+
+        // ⚠️ Les gardes de base, sous le service : elles tranchent ce qu'une erreur de code
+        // ou un script SQL laisserait passer. Un stock est en un lieu et un seul, jamais
+        // négatif ; un côté de mouvement désigne au plus un lieu.
+        modelBuilder.Entity<Stock>().ToTable(t =>
+        {
+            t.HasCheckConstraint("CK_Stocks_UnLieu", "(\"EmplacementId\" IS NULL) <> (\"SiteId\" IS NULL)");
+            t.HasCheckConstraint("CK_Stocks_QuantitePositive", "\"Quantite\" >= 0");
+        });
+        modelBuilder.Entity<MouvementStock>().ToTable(t =>
+        {
+            t.HasCheckConstraint("CK_MouvementsStock_UneOrigine",
+                "\"OrigineEmplacementId\" IS NULL OR \"OrigineSiteId\" IS NULL");
+            t.HasCheckConstraint("CK_MouvementsStock_UneDestination",
+                "\"DestinationEmplacementId\" IS NULL OR \"DestinationSiteId\" IS NULL");
+        });
+
+        // Une ligne par produit et par lieu : deux lignes rendraient la quantité d'un lieu
+        // ambiguë. Partiels, parce qu'une seule des deux colonnes est renseignée.
+        modelBuilder.Entity<Stock>()
+            .HasIndex(e => new { e.ProduitId, e.EmplacementId }).IsUnique()
+            .HasFilter("\"EmplacementId\" IS NOT NULL");
+        modelBuilder.Entity<Stock>()
+            .HasIndex(e => new { e.ProduitId, e.SiteId }).IsUnique()
+            .HasFilter("\"SiteId\" IS NOT NULL");
 
         // Une absence porte des dates à valeur légale, et l'étape 16 bis lot B lui
         // donne son écran. Elle ne part donc pas avec son agent sans qu'on le
@@ -343,6 +414,10 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
             !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
         modelBuilder.Entity<Stock>().HasQueryFilter(e =>
             !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+        modelBuilder.Entity<Emplacement>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+        modelBuilder.Entity<MouvementStock>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
 
         // ⚠️ Le journal d'accès est filtré comme le reste, et l'oublier serait pire
         // qu'ailleurs : GET /api/journal-acces est réservé à l'administrateur, donc un
@@ -378,6 +453,12 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Produit>().HasIndex(e => e.EntrepriseId);
         modelBuilder.Entity<TypePrestation>().HasIndex(e => e.EntrepriseId);
         modelBuilder.Entity<Stock>().HasIndex(e => e.EntrepriseId);
+        modelBuilder.Entity<Emplacement>().HasIndex(e => e.EntrepriseId);
+
+        // L'historique se lit du plus récent au plus ancien, comme le journal d'accès.
+        modelBuilder.Entity<MouvementStock>()
+            .HasIndex(e => new { e.EntrepriseId, e.DateMouvement })
+            .IsDescending(false, true);
 
         // ⚠️ Le journal se lit toujours du plus récent au plus ancien, et se purge
         // par date : l'index est composite et l'horodatage descendant. Un index sur

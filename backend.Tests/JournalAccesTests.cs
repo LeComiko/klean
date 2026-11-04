@@ -90,6 +90,13 @@ public class JournalAccesTests : IAsyncLifetime
         // exception est écrite, qu'une règle fine qui laisse passer en silence.
         "ProduitDto",
 
+        // Le `Nom` d'un emplacement est « Dépôt central » ou « Kangoo AB-123-CD » : un
+        // lieu et un véhicule de l'entreprise, pas une personne (étape 22). ⚠️ La limite
+        // est celle des consignes d'un site : rien n'empêche d'écrire « le camion de
+        // Paul ». La parade est en amont, à l'écran du lot C, comme pour les consignes
+        // (RGPD.md §9.5) : nommer par la plaque ou le modèle, jamais par le conducteur.
+        "EmplacementDto",
+
         // ⚠️ `ProfilDto` porte nom, prénom et courriel — mais **ceux de l'appelant**.
         // `GET /api/auth/moi` ne divulgue rien que l'appelant ne sache déjà de
         // lui-même, et un journal de « qui a lu son propre nom » serait du bruit qui

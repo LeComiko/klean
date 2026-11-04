@@ -36,7 +36,8 @@ public class ProduitsController : ControllerBase
                 Nom = p.Nom,
                 Reference = p.Reference,
                 Unite = p.Unite,
-                SeuilAlerte = p.SeuilAlerte
+                SeuilAlerte = p.SeuilAlerte,
+                Actif = p.Actif
             })
             .ToListAsync();
 
@@ -63,7 +64,8 @@ public class ProduitsController : ControllerBase
                 Nom = p.Nom,
                 Reference = p.Reference,
                 Unite = p.Unite,
-                SeuilAlerte = p.SeuilAlerte
+                SeuilAlerte = p.SeuilAlerte,
+                Actif = p.Actif
             })
             .FirstOrDefaultAsync();
 
@@ -79,7 +81,8 @@ public class ProduitsController : ControllerBase
             Nom = dto.Nom,
             Reference = dto.Reference,
             Unite = dto.Unite,
-            SeuilAlerte = dto.SeuilAlerte
+            SeuilAlerte = dto.SeuilAlerte,
+            Actif = dto.Actif
         };
 
         _db.Produits.Add(produit);
@@ -99,6 +102,7 @@ public class ProduitsController : ControllerBase
         produit.Reference = dto.Reference;
         produit.Unite = dto.Unite;
         produit.SeuilAlerte = dto.SeuilAlerte;
+        produit.Actif = dto.Actif;
 
         await _db.SaveChangesAsync();
         return NoContent();
@@ -119,13 +123,15 @@ public class ProduitsController : ControllerBase
         }
         catch (DbUpdateException)
         {
-            // Restrict depuis la migration SuppressionRestreinteSurLaChaineExploitation.
-            var stocks = await _db.Stocks.CountAsync(s => s.ProduitId == id);
+            // Restrict depuis le stock et ses mouvements. ⚠️ Avant l'étape 22, la sortie
+            // nommée était « supprimer ses lignes de stock » ; elles ne se suppriment plus,
+            // et un refus qui nomme une sortie fermée est un cul-de-sac (CLAUDE.md §10).
+            var mouvements = await _db.MouvementsStock.CountAsync(m => m.ProduitId == id);
 
             return Conflict(
-                $"Ce produit porte {stocks} ligne(s) de stock et ne peut pas être "
-                + "supprimé : sa suppression effacerait les quantités relevées au dépôt, "
-                + "en véhicule et sur site. Supprimer d'abord ses lignes de stock.");
+                $"Ce produit est cité par {mouvements} mouvement(s) de stock et ne peut pas "
+                + "être supprimé : l'historique des quantités en dépend. Le désactiver : il "
+                + "ne pourra plus entrer en stock, et ce qui en reste pourra encore sortir.");
         }
 
         return NoContent();
@@ -138,6 +144,7 @@ public class ProduitsController : ControllerBase
         Nom = p.Nom,
         Reference = p.Reference,
         Unite = p.Unite,
-        SeuilAlerte = p.SeuilAlerte
+        SeuilAlerte = p.SeuilAlerte,
+        Actif = p.Actif
     };
 }
