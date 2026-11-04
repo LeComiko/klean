@@ -94,14 +94,14 @@ KLEAN/
 ├── .env.example         le seul endroit où un exploitant écrit un secret
 ├── backend/
 │   ├── Dockerfile       l'API ET son bundle de migration, une seule image
-│   ├── Models/          14 entités métier + AccesJournalise + Utilisateur
+│   ├── Models/          15 entités métier + AccesJournalise + Utilisateur
 │   │                    + RolesKlean
 │   ├── Data/            KleanDbContext (filtres multi-tenant)
 │   ├── DTOs/            un fichier par entité, XxxDto + XxxCreateDto
 │   ├── Controllers/     un par entité + Auth + Planning
 │   ├── Services/        AffectationService, RemplacementService,
 │   │                    PlanningService, ServiceGeneration, JoursFeries,
-│   │                    ServiceStock,
+│   │                    ServiceStock, ServicePrevisionStock,
 │   │                    JwtService, ServiceSession,
 │   │                    AmorcageService, TenantContext, LimiteurDebit,
 │   │                    ServiceCourrielSmtp, DescripteurErreursFrancais,
@@ -146,22 +146,23 @@ répond 403, un jeton mal orthographié qu'aucun navigateur ne signale.
 
 ## 5. Modèle de données
 
-Quatorze entités métier, toutes avec un `Id` de type `Guid` généré côté
+Quinze entités métier, toutes avec un `Id` de type `Guid` généré côté
 application et une colonne `EntrepriseId` (dénormalisée, voir §7). `TypePrestation` est
-le catalogue de l'étape 21 ; `Emplacement` et `MouvementStock` sont le stock de
-l'étape 22.
+le catalogue de l'étape 21 ; `Emplacement`, `MouvementStock` et `ConsommationType` sont
+le stock de l'étape 22.
 
-Une quinzième entité existe et n'est **pas** métier : `AccesJournalise`, le journal
+Une seizième entité existe et n'est **pas** métier : `AccesJournalise`, le journal
 d'accès aux données personnelles de §7 bis. Elle suit les mêmes règles — `Guid`
 applicatif, `EntrepriseId` dénormalisé, filtre global — mais elle ne décrit rien du
-nettoyage de bureaux : elle rend compte de l'usage des quatorze autres.
+nettoyage de bureaux : elle rend compte de l'usage des quinze autres.
 
 ```
 Entreprise ─┬─ Client ─── Site ─── Contrat ─── Prestation ─── Intervention
             ├─ TypePrestation ────────────────────┘                 │
-            ├─ Agent ─── Absence                                    │
-            ├─ Emplacement ─┐                       Remplacement ───┘
-            └─ Produit ─────┴─ Stock, MouvementStock — lieu : emplacement ou site
+            │        └─ ConsommationType ─┐                         │
+            ├─ Agent ─── Absence          │                         │
+            ├─ Emplacement ─┐             │         Remplacement ───┘
+            └─ Produit ─────┴─────────────┴─ Stock, MouvementStock — lieu : emplacement ou site
 ```
 
 | Entité | Champs notables |
@@ -180,6 +181,7 @@ Entreprise ─┬─ Client ─── Site ─── Contrat ─── Prestatio
 | Emplacement | Nom, Type (enum `TypeEmplacement`), Actif — dépôt ou véhicule ; le site n'en est pas un |
 | Stock | EmplacementId **ou** SiteId, deux clés `Restrict`, l'une exactement ; Quantite, jamais saisie, jamais négative |
 | MouvementStock | Nature (enum), origine et destination (emplacement ou site), Quantite, Ecart (inventaire), DateMouvement, AuteurId — ni modifiable ni supprimable |
+| ConsommationType | TypePrestationId, ProduitId (deux clés `Restrict`, un couple unique), QuantiteParPassage — sert la prévision, jamais une déduction |
 
 Enums :
 - `TypeClient` : EntrepriseCliente, Syndic, GestionnaireImmobilier,
@@ -440,7 +442,7 @@ Mécanisme en trois parties, toutes nécessaires :
    utilisé par l'amorçage qui doit créer la première entreprise avant
    qu'aucun tenant n'existe.
 
-2. **Filtres globaux EF Core**, **quinze** au total :
+2. **Filtres globaux EF Core**, **seize** au total :
    ```csharp
    modelBuilder.Entity<X>().HasQueryFilter(e =>
        !TenantFiltrageActif || TenantEntrepriseId == null
@@ -449,7 +451,7 @@ Mécanisme en trois parties, toutes nécessaires :
    où `TenantFiltrageActif` et `TenantEntrepriseId` sont des **propriétés
    privées d'instance du DbContext**. Voir le piège §10.
 
-   Treize filtres sur les entités métier portant `EntrepriseId`, un quatorzième sur
+   Quatorze filtres sur les entités métier portant `EntrepriseId`, un quinzième sur
    `AccesJournalise` (§7 bis), **plus un sur `Entreprise` elle-même**, sur son
    propre `Id`. Depuis l'étape 21, `IsolationTests` refuse toute entité portant
    `EntrepriseId` sans filtre : une entité oubliée ne casse rien de visible, elle se lit
@@ -499,9 +501,9 @@ Mécanisme en trois parties, toutes nécessaires :
    relire ; l'écriture inter-tenant passait. Ne jamais conditionner cette
    affectation.
 
-`EntrepriseId` est **dénormalisé** sur les huit entités qui ne l'ont pas
+`EntrepriseId` est **dénormalisé** sur les neuf entités qui ne l'ont pas
 naturellement (Site, Contrat, Prestation, Intervention, Absence,
-Remplacement, Stock, MouvementStock). Choix assumé : évite trois jointures par ligne sur la
+Remplacement, Stock, MouvementStock, ConsommationType). Choix assumé : évite trois jointures par ligne sur la
 vue planning. La cohérence est garantie applicativement, sans clé étrangère.
 
 ### L'équipe d'un chef — quatrième axe
@@ -1070,6 +1072,25 @@ de plus, en général un inventaire. Quatre choses à savoir avant d'y toucher :
   génère plus rien, et le refus le dit plutôt que de promettre une sortie qui ne
   débloquerait rien.
 
+**La prévision lit, elle ne déduit rien.** `GET /api/stocks/prevision?semaines=4` compte
+les vacations `Planifiee` et `EnCours` d'aujourd'hui à quatre semaines, les multiplie par
+la consommation de leur type (`ConsommationType`), et compare au stock. Aucune quantité ne
+baisse au passage d'un agent : rien ne certifie encore qu'il a eu lieu. Quatre choses à
+savoir avant d'y toucher :
+
+- ⚠️ **Le stock d'un site ne couvre que ce site.** Chaque site puise d'abord dans le sien ;
+  ce qu'il lui manque, la **réserve** — dépôts et véhicules — doit le couvrir.
+  Additionner tout le stock laisserait l'excédent d'un site masquer le manque d'un autre.
+  Le seuil d'alerte, lui, se lit tous lieux confondus.
+- ⚠️ **`Exploitation` seule**, alors que le chef d'équipe lit le stock. Ses vacations sont
+  filtrées sur son équipe (§7), le stock ne l'est pas : sa prévision comparerait le besoin
+  d'une équipe au stock de l'entreprise, et annoncerait une couverture fausse.
+- **Une vacation sans type ne consomme rien**, et la réponse en donne le nombre : un besoin
+  sous-estimé en silence ressemble à un stock suffisant.
+- **Un produit désactivé sort de la prévision.** Il ne se réapprovisionne plus ;
+  l'annoncer en couverture courte pousserait à racheter ce qu'on a décidé d'arrêter. Pour
+  la même raison, on ne lui attache plus de consommation.
+
 ## 10. Pièges connus
 
 À lire avant d'écrire du code. Chacun a déjà coûté du temps sur ce projet.
@@ -1474,7 +1495,9 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   l'étape 20, et pour la même raison. « Douze semaines à partir d'aujourd'hui » ne
   s'éprouve pas sur un jour qui change : sans substitution, la série de génération
   dépendrait du jour où elle tourne. C'est le défaut que le paramètre obligatoire
-  `lundi` du planning existe pour éviter. Seul `ServiceGeneration` le lit.
+  `lundi` du planning existe pour éviter. `ServiceGeneration` le lit, et
+  `ServicePrevisionStock` depuis l'étape 22 : « les quatre semaines à venir » pose la même
+  question.
 
   Les autres lectures de l'horloge gardent `DateTime.UtcNow`. Plusieurs décident
   pourtant : expiration des sessions et des jetons, fenêtre de la limitation de

@@ -62,6 +62,9 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
     /// <summary>La seule écriture qui change une quantité de stock (SPEC.md, étape 22).</summary>
     public DbSet<MouvementStock> MouvementsStock => Set<MouvementStock>();
 
+    /// <summary>Ce qu'un passage de chaque type consomme (SPEC.md, étape 22, lot B).</summary>
+    public DbSet<ConsommationType> ConsommationsType => Set<ConsommationType>();
+
     /// <summary>
     /// Journal d'accès aux données personnelles (SPEC.md étape 17). La seule
     /// entité qui n'existe pas pour le métier : elle existe pour rendre compte de
@@ -132,6 +135,7 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Stock>().Property(e => e.Quantite).HasPrecision(10, 2);
         modelBuilder.Entity<MouvementStock>().Property(e => e.Quantite).HasPrecision(10, 2);
         modelBuilder.Entity<MouvementStock>().Property(e => e.Ecart).HasPrecision(10, 2);
+        modelBuilder.Entity<ConsommationType>().Property(e => e.QuantiteParPassage).HasPrecision(10, 2);
 
         // ⚠️ Le défaut sert les produits antérieurs à la colonne : sans lui, la migration
         // les créerait tous désactivés. La sentinelle `true` fait qu'EF envoie toujours
@@ -261,6 +265,23 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
             t.HasCheckConstraint("CK_MouvementsStock_UneDestination",
                 "\"DestinationEmplacementId\" IS NULL OR \"DestinationSiteId\" IS NULL");
         });
+
+        // La consommation par type (lot B) : **Restrict** des deux côtés. Elle a son écran,
+        // et un type ou un produit qui part ne l'emporte pas en silence — ce que la
+        // prévision compterait en moins sans que personne l'ait décidé.
+        modelBuilder.Entity<ConsommationType>()
+            .HasOne(e => e.TypePrestation).WithMany()
+            .HasForeignKey(e => e.TypePrestationId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ConsommationType>()
+            .HasOne(e => e.Produit).WithMany()
+            .HasForeignKey(e => e.ProduitId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ConsommationType>().ToTable(t =>
+            t.HasCheckConstraint("CK_ConsommationsType_QuantitePositive", "\"QuantiteParPassage\" > 0"));
+
+        // Une consommation par type et par produit : deux lignes donneraient deux réponses
+        // à « combien ce passage consomme-t-il », et la prévision les additionnerait.
+        modelBuilder.Entity<ConsommationType>()
+            .HasIndex(e => new { e.TypePrestationId, e.ProduitId }).IsUnique();
 
         // Une ligne par produit et par lieu : deux lignes rendraient la quantité d'un lieu
         // ambiguë. Partiels, parce qu'une seule des deux colonnes est renseignée.
@@ -418,6 +439,8 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
             !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
         modelBuilder.Entity<MouvementStock>().HasQueryFilter(e =>
             !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+        modelBuilder.Entity<ConsommationType>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
 
         // ⚠️ Le journal d'accès est filtré comme le reste, et l'oublier serait pire
         // qu'ailleurs : GET /api/journal-acces est réservé à l'administrateur, donc un
@@ -454,6 +477,7 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<TypePrestation>().HasIndex(e => e.EntrepriseId);
         modelBuilder.Entity<Stock>().HasIndex(e => e.EntrepriseId);
         modelBuilder.Entity<Emplacement>().HasIndex(e => e.EntrepriseId);
+        modelBuilder.Entity<ConsommationType>().HasIndex(e => e.EntrepriseId);
 
         // L'historique se lit du plus récent au plus ancien, comme le journal d'accès.
         modelBuilder.Entity<MouvementStock>()

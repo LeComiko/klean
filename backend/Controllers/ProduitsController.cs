@@ -128,6 +128,18 @@ public class ProduitsController : ControllerBase
             // et un refus qui nomme une sortie fermée est un cul-de-sac (CLAUDE.md §10).
             var mouvements = await _db.MouvementsStock.CountAsync(m => m.ProduitId == id);
 
+            // Restrict aussi depuis la consommation par type (lot B). Jamais cité par un
+            // mouvement, il n'a pas d'histoire : ses consommations se retirent, et la sortie
+            // est franchissable sans désactiver.
+            if (mouvements == 0)
+            {
+                var consommations = await _db.ConsommationsType.CountAsync(c => c.ProduitId == id);
+
+                return Conflict(
+                    $"Ce produit figure dans {consommations} consommation(s) par type de prestation : "
+                    + "les retirer d'abord, ou le désactiver pour le sortir de la prévision.");
+            }
+
             return Conflict(
                 $"Ce produit est cité par {mouvements} mouvement(s) de stock et ne peut pas "
                 + "être supprimé : l'historique des quantités en dépend. Le désactiver : il "

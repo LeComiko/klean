@@ -144,6 +144,17 @@ public class TypesPrestationController : ControllerBase
             // friction qui ne dit pas par où passer est un cul-de-sac (CLAUDE.md §10).
             var prestations = await _db.Prestations.CountAsync(p => p.TypePrestationId == id);
 
+            // Restrict aussi depuis la consommation par type (étape 22, lot B). Un type qu'aucune
+            // prestation ne porte n'a rien d'historique : ses consommations se retirent.
+            if (prestations == 0)
+            {
+                var consommations = await _db.ConsommationsType.CountAsync(c => c.TypePrestationId == id);
+
+                return Conflict(
+                    $"Ce type porte {consommations} consommation(s) de produit : les retirer d'abord, "
+                    + "ou le désactiver.");
+            }
+
             return Conflict(
                 $"Ce type est utilisé par {prestations} prestation(s) et ne peut pas être "
                 + "supprimé : le stock et le devis s'appuient sur ce lien. Le désactiver le "

@@ -1,6 +1,7 @@
 using Klean.Api.DTOs;
 using Klean.Api.Data;
 using Klean.Api.Models;
+using Klean.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -20,8 +21,13 @@ namespace Klean.Api.Controllers;
 public class StocksController : ControllerBase
 {
     private readonly KleanDbContext _db;
+    private readonly ServicePrevisionStock _prevision;
 
-    public StocksController(KleanDbContext db) => _db = db;
+    public StocksController(KleanDbContext db, ServicePrevisionStock prevision)
+    {
+        _db = db;
+        _prevision = prevision;
+    }
 
     /// <summary>
     /// Trois filtres facultatifs, appliqués avant le comptage comme les filtres de parenté
@@ -65,6 +71,32 @@ public class StocksController : ControllerBase
             Page = pagination.Page,
             Taille = pagination.Taille
         });
+    }
+
+    /// <summary>
+    /// Le besoin des <paramref name="semaines"/> à venir et les deux alertes, « sous le seuil »
+    /// et « couverture courte » (SPEC.md, étape 22, lot B).
+    ///
+    /// ⚠️ <c>Exploitation</c> seule, et le chef d'équipe n'en est pas exclu par principe : ses
+    /// vacations sont filtrées sur son équipe (CLAUDE.md §7), le stock ne l'est pas. Sa
+    /// prévision comparerait le besoin de son équipe au stock de toute l'entreprise, et
+    /// annoncerait une couverture que l'entreprise n'a pas. À rouvrir avec un rattachement
+    /// des véhicules aux équipes.
+    /// </summary>
+    [Authorize(Roles = RolesKlean.Exploitation)]
+    [HttpGet("prevision")]
+    public async Task<ActionResult<PrevisionStockDto>> Prevision(
+        CancellationToken annulation, [FromQuery] int semaines = ServicePrevisionStock.SemainesParDefaut)
+    {
+        // Vérifié ici plutôt que par [Range], dont le refus parlerait anglais (CLAUDE.md §10).
+        if (semaines is < 1 or > ServicePrevisionStock.SemainesMaximum)
+        {
+            return BadRequest(
+                $"La prévision porte sur 1 à {ServicePrevisionStock.SemainesMaximum} semaines, "
+                + "l'horizon de la génération des vacations.");
+        }
+
+        return Ok(await _prevision.CalculerAsync(semaines, annulation));
     }
 
     [Authorize(Roles = RolesKlean.Interne)]

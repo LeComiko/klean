@@ -198,6 +198,39 @@ namespace Klean.Api.Migrations
                     b.ToTable("Clients");
                 });
 
+            modelBuilder.Entity("Klean.Api.Models.ConsommationType", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EntrepriseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProduitId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("QuantiteParPassage")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<Guid>("TypePrestationId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntrepriseId");
+
+                    b.HasIndex("ProduitId");
+
+                    b.HasIndex("TypePrestationId", "ProduitId")
+                        .IsUnique();
+
+                    b.ToTable("ConsommationsType", t =>
+                        {
+                            t.HasCheckConstraint("CK_ConsommationsType_QuantitePositive", "\"QuantiteParPassage\" > 0");
+                        });
+                });
+
             modelBuilder.Entity("Klean.Api.Models.Contrat", b =>
                 {
                     b.Property<Guid>("Id")
@@ -939,6 +972,25 @@ namespace Klean.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Entreprise");
+                });
+
+            modelBuilder.Entity("Klean.Api.Models.ConsommationType", b =>
+                {
+                    b.HasOne("Klean.Api.Models.Produit", "Produit")
+                        .WithMany()
+                        .HasForeignKey("ProduitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Klean.Api.Models.TypePrestation", "TypePrestation")
+                        .WithMany()
+                        .HasForeignKey("TypePrestationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Produit");
+
+                    b.Navigation("TypePrestation");
                 });
 
             modelBuilder.Entity("Klean.Api.Models.Contrat", b =>

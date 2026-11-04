@@ -78,7 +78,7 @@ public class FixtureApi : IAsyncLifetime
         await db.Database.ExecuteSqlRawAsync("""
             TRUNCATE TABLE
                 "Remplacements", "Absences", "Interventions", "Prestations",
-                "Contrats", "MouvementsStock", "Stocks", "Emplacements", "Sites", "Clients", "Produits", "TypesPrestation",
+                "Contrats", "ConsommationsType", "MouvementsStock", "Stocks", "Emplacements", "Sites", "Clients", "Produits", "TypesPrestation",
                 "Agents", "Entreprises",
                 "JetonsRafraichissement",
                 "AspNetUserRoles", "AspNetUserClaims", "AspNetUserLogins",

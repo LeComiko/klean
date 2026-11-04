@@ -189,6 +189,7 @@ Les treize tables du modèle, plus les tables d'Identity. « DP » = donnée per
 | `Produits`, `Stocks`, `Emplacements` | aucune — un véhicule est nommé par sa plaque ou son modèle, jamais par son conducteur | — | — |
 | `MouvementsStock` | **`AuteurId`**, `DateMouvement` | trace d'activité d'un utilisateur : qui a sorti, transféré, compté quoi, et quand | `/api/mouvements-stock` — l'identifiant seulement, jamais le nom, donc hors du journal d'accès (§7 bis de `CLAUDE.md`) |
 | `TypesPrestation` | aucune — un libellé de catalogue et une durée | — | `/api/types-prestation` |
+| `ConsommationsType` | aucune — une quantité de produit par passage d'un type | — | `/api/consommations-type` ; la prévision `/api/stocks/prevision` en dérive des besoins **par site**, sans agent ni vacation nommés |
 | `AccesJournalises` | `UtilisateurId`, `CibleId`, `Horodatage` | trace d'activité d'un utilisateur | `/api/journal-acces` |
 | `AspNetUsers` | `Email`, `UserName`, `PhoneNumber`, `Nom`, `Prenom`, `PasswordHash`, verrouillage, `DateAnonymisation` | identité et **secret d'authentification** | `/api/auth/moi`, et nom et prénom des chefs d'équipe par `/api/agents/chefs-equipe` (administrateur, journalisée) |
 | `JetonsRafraichissement` | `UtilisateurId`, **`AdresseIp`**, dates | trace de connexion | **aucune route** |

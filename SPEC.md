@@ -2222,6 +2222,63 @@ lignes existantes, qu'aucune n'a aujourd'hui.
 - ⚠️ **Écart ouvert, dit dans `RGPD.md` §5** : les mouvements portent leur auteur, et
   aucun script n'en gère encore la conservation.
 
+**Lot B — fait le 4 novembre 2026**
+
+Trois réponses obtenues au début du lot :
+
+| Question | Réponse |
+|---|---|
+| Horizon par défaut | **quatre semaines**, de 1 à 12 sur demande — la limite de la génération |
+| Où se mesure la couverture | **par site, puis réserve** : chaque site puise dans son propre stock, les dépôts et véhicules couvrent le reste ; l'excédent d'un site ne compte pas pour un autre |
+| Qui lit la prévision | **`Exploitation` seule** — défaut trouvé avant de coder : les vacations d'un chef sont filtrées sur son équipe, le stock ne l'est pas, et sa prévision aurait comparé le besoin d'une équipe au stock de l'entreprise. À rouvrir avec un rattachement des véhicules aux équipes |
+
+- **`ConsommationType`** : type de prestation, produit, quantité par passage. Deux clés
+  `Restrict`, un couple unique par index, une quantité strictement positive par
+  contrainte de base. Seizième filtre global.
+  - `/api/consommations-type` : CRUD, lecture `Interne`, écriture `Exploitation`,
+    filtrable par type et par produit avant le comptage.
+  - Un doublon rend 409 ; une saisie concurrente tombée sur l'index aussi, et non 500.
+  - Un produit désactivé ne s'attache plus ; la ligne qui le portait se corrige encore.
+- **`GET /api/stocks/prevision?semaines=4`**, dans `ServicePrevisionStock`. Pour chaque
+  produit actif :
+  - le **besoin**, c'est-à-dire les vacations `Planifiee` et `EnCours` d'aujourd'hui à
+    quatre semaines, multipliées par la consommation de leur type, site par site ;
+  - le **stock total** et la **réserve** ;
+  - le **manque**, ce que la réserve ne couvre pas une fois chaque site servi par son
+    propre stock ;
+  - les deux alertes, **« Sous le seuil »** (total strictement sous `SeuilAlerte`) et
+    **« Couverture courte »** (manque positif) ;
+  - et, par site, ce qu'il faut y apporter : la base du réapprovisionnement du lot C.
+
+  Les produits en alerte viennent d'abord. Les vacations sans type ne consomment rien,
+  et la réponse en donne le nombre.
+- **Aucune déduction** : la prévision lit le planning et le stock, elle n'écrit rien.
+- **Refus de suppression** : un produit ou un type cité seulement par des consommations
+  le dit, et nomme la sortie — les retirer, ou désactiver. Un produit cité par un
+  mouvement, ou un type porté par une prestation, garde son refus d'avant.
+- **`ServicePrevisionStock` lit `TimeProvider`**, comme la génération : « les quatre
+  semaines à venir » ne s'éprouve pas sur un jour qui change.
+- Migration **`ConsommationsParType`**, purement additive : une table, trois index.
+- `PrevisionStockTests` : 17 tests. Dix-huit sabotages, tous rouges :
+  - statut terminé compté ;
+  - fin de période incluse ;
+  - stock des sites versé dans la réserve ;
+  - seuil large au lieu de strict ;
+  - produits désactivés gardés ;
+  - ordre des alertes ;
+  - vacations sans type tues ;
+  - borne de l'horizon ;
+  - rôle de la prévision ;
+  - vérification de doublon ;
+  - conversion du 23505, rejouée trois fois et dans la série ;
+  - produit désactivé attaché ;
+  - ligne existante figée ;
+  - filtre par type après le comptage ;
+  - type inconnu accepté ;
+  - les deux refus de suppression ;
+  - filtre global retiré.
+- **Aucun écran** : les consommations, la prévision et les alertes s'affichent au lot C.
+
 ---
 
 # Suite — non planifié
