@@ -2351,11 +2351,146 @@ Prévision.
 
 ---
 
+# Étape 23 — Double authentification
+
+Placée **avant** l'écran agent, parce qu'un pilote est attendu dans un mois. Ce qu'un
+compte administrateur expose : les coordonnées du domicile de chaque salarié, ses arrêts
+maladie, le dossier complet de l'article 15, et la création de comptes. Aujourd'hui, un
+mot de passe suffit pour tout cela. Le verrouillage et la limitation de débit freinent
+qui devine un mot de passe ; ils ne font rien contre celui qui l'a, par hameçonnage ou
+parce qu'il sert ailleurs.
+
+**Ce qui existe, relu le 4 novembre 2026**
+
+- **Identity porte déjà le mécanisme.** Il fournit la colonne
+  `AspNetUsers.TwoFactorEnabled`, la table `AspNetUserTokens` (créée par la migration
+  `IdentiteEtRoles`), le fournisseur TOTP enregistré par `AddDefaultTokenProviders`, et
+  les codes de récupération à usage unique (`GenerateNewTwoFactorRecoveryCodesAsync`,
+  `RedeemTwoFactorRecoveryCodeAsync`). Le lot A ne devrait **pas** demander de
+  migration, sauf peut-être pour la parade au rejeu ci-dessous.
+- ⚠️ **La connexion ignore tout second facteur.** `AuthController.Connexion` appelle
+  `CheckPasswordSignInAsync`, qui ne consulte pas `TwoFactorEnabled`. Le parcours en deux
+  temps de `PasswordSignInAsync` repose sur un cookie d'Identity que ce projet n'emploie
+  pas (`CLAUDE.md` §10, schémas forcés sur le JWT). Il faut donc l'écrire.
+- **Aucune bibliothèque ne dessine un QR code.** Ni côté serveur ni côté écran, et
+  `CLAUDE.md` §3 exige de proposer et de justifier toute dépendance.
+- Le flux de mot de passe oublié **ne contourne pas** le second facteur : il change le
+  mot de passe, et la connexion suivante demande toujours le code. C'est le comportement
+  voulu, et un test devra le dire.
+
+**Le parcours, tel que je le propose**
+
+1. `POST /api/auth/connexion` avec un bon mot de passe, sur un compte équipé, n'ouvre
+   **aucune** session. Il répond **202** avec `{ etape: "SecondFacteur" }` et pose un
+   cookie de défi : `HttpOnly`, `Secure`, `SameSite=Strict`, chemin `/api/auth`, cinq
+   minutes. Ce cookie est protégé par la Data Protection et porte l'identifiant du compte,
+   son `SecurityStamp` et l'échéance. Un changement de mot de passe entre les deux temps
+   rend donc le défi caduc.
+2. `POST /api/auth/connexion/code` avec `{ code }` ou `{ codeRecuperation }` ouvre la
+   session, par `ServiceSession.OuvrirAsync`, comme aujourd'hui.
+   - Un code faux rend **400**, puisque c'est le corps qui est faux (`CLAUDE.md` §10).
+     L'échec est compté par `AccessFailedAsync` : les cinq échecs du verrouillage sont
+     **partagés** avec le mot de passe. Sans ce partage, un million de codes à six
+     chiffres se testeraient à côté du verrou.
+   - Un défi expiré ou absent rend **401**, et la route rejoint `SansRafraichissement`
+     côté client.
+   - La route a son plafond de débit, par adresse et par compte.
+3. Le second facteur se demande **à la connexion seulement**. Le rafraîchissement ne le
+   redemande pas : la session absolue de quatorze jours borne déjà l'ensemble. Il n'y a
+   pas de « se souvenir de cet appareil » en V1 ; ce serait un second jeton de longue
+   durée à rendre révocable.
+4. **L'activation** se fait depuis l'écran du compte, en deux temps. `preparer` engendre
+   la clé et la rend en clair, avec l'URI `otpauth://` et le QR code. `activer { code }`
+   prouve que l'application du téléphone produit le bon code, puis rend **dix codes de
+   récupération, une seule fois**. L'activation régénère l'empreinte et rouvre la session
+   de l'appelant, comme le changement de mot de passe : une session ouverte sans second
+   facteur ne doit pas survivre à l'activation sur un autre appareil.
+
+**À trancher avant le lot A**
+
+| Question | Options | Penchant |
+|---|---|---|
+| Qui y est soumis | obligatoire pour l'administrateur et le responsable, facultative pour les autres ; obligatoire pour tous les rôles internes ; facultative pour tous | **Administrateur et Responsable obligatoires, facultative pour tous les autres comptes.** Ces deux rôles lisent les données de santé et les domiciles. Le chef d'équipe ne voit que son équipe, et l'obliger alourdit le pilote. Facultative, la double authentification ne coûte rien à qui la veut, y compris un syndic |
+| Un compte obligé et pas encore équipé | équipement imposé **dans** la connexion, aucune session sans second facteur ; délai de grâce de N jours avec un bandeau ; refus de connexion | **Dans la connexion.** Le bon mot de passe d'un tel compte rend 202 `{ etape: "Equipement" }` avec le même cookie de défi, et `preparer` puis `activer` acceptent ce défi à la place d'une session. Le premier administrateur de l'amorçage passe par là à sa première connexion. Un délai de grâce est une période où l'obligation n'existe pas, et elle dure en pratique jusqu'à la fin du délai |
+| Le QR code | la clé en texte seule, à recopier (32 caractères) ; **QRCoder** côté serveur (licence MIT, entièrement managé) ; un encodeur écrit à la main | **QRCoder, côté serveur, à justifier comme dépendance.** Recopier 32 caractères sur un téléphone, c'est l'erreur de saisie assurée au pilote. Un encodeur écrit à la main représente plusieurs centaines de lignes de Reed-Solomon et de masques, pour une fonction que personne ne relira. Le serveur rend la **matrice** des modules, et l'écran la dessine en `<rect>` SVG : pas de `innerHTML`, aucune politique de contenu touchée. La clé en texte reste affichée à côté, pour qui l'utilise sur le même téléphone. Absence de dépendance transitive et version à vérifier avant l'installation |
+| Téléphone perdu | codes de récupération seuls ; plus une réinitialisation par un administrateur ; plus un script d'exploitation pour le dernier administrateur | **Les trois.** Un code de récupération ouvre la session une fois et se consomme. Un administrateur peut **réinitialiser** la double authentification d'un autre compte de l'entreprise, jamais la sienne : cela retire la clé et les codes, régénère l'empreinte et coupe les sessions. Le compte repasse alors par l'équipement à la connexion suivante. Pour **le dernier administrateur**, la situation ordinaire d'une entreprise de cinq personnes, aucun rattrapage par l'API n'est possible sans affaiblir la règle. Il faut un script SQL d'exploitation, documenté dans `DEPLOIEMENT.md`, à la main de qui détient la base |
+
+⚠️ **Où tracer la réinitialisation par un administrateur** : la question reste ouverte, et
+mon penchant contredit une règle écrite. Le journal d'accès ne consigne que les
+divulgations (`CLAUDE.md` §7 bis, règle 5). Mais il porte déjà l'anonymisation, autre
+geste d'un administrateur sur le compte d'autrui, qui n'est pas une lecture. Une nature
+`ReinitialisationSecondFacteur` suivrait ce précédent. Une table de sécurité à part
+serait plus juste, et c'est une entité de plus. Je penche pour le journal d'accès, la
+règle 5 complétée par une exception écrite.
+
+**Réponses obtenues le 4 novembre 2026** — les quatre penchants posés en question sont
+retenus. Celui du compte pas encore équipé n'a pas été posé : il est retenu par défaut,
+sauf avis contraire.
+
+| Question | Réponse | Ce que cela veut dire dans le code |
+|---|---|---|
+| Qui | **Administrateur et Responsable obligés, facultative pour les autres** | une liste de rôles obligés dans `RolesKlean`, lue à la connexion ; la désactivation est refusée à un compte obligé |
+| Compte pas encore équipé | **équipement dans la connexion** (par défaut) | 202 `{ etape: "Equipement" }`, puis `preparer` et `activer` acceptent le défi à la place d'une session |
+| QR code | **QRCoder, côté serveur** | dépendance présentée et justifiée avant installation ; le serveur rend la matrice, l'écran dessine le SVG |
+| Téléphone perdu | **codes, administrateur, script** | dix codes à usage unique ; `POST /api/auth/comptes/{id}/reinitialiser-second-facteur`, administrateur seul, jamais sur soi, cadré à la main sur `EntrepriseId` ; un script SQL pour le dernier administrateur |
+| Traçage | **journal d'accès** | nature `ReinitialisationSecondFacteur`, ressource `Compte` ; la règle 5 de `CLAUDE.md` §7 bis reçoit son exception écrite, et le test qui fige la liste des actions journalisées s'allonge d'une |
+
+**Conséquences à vérifier au cadrage**
+
+- ⚠️ **La série de tests.** Toutes les fixtures se connectent en administrateur. Avec
+  l'obligation, chacune doit s'équiper puis produire un code. Le calcul TOTP côté test
+  tient en une vingtaine de lignes (RFC 6238, HMAC-SHA1), sans dépendance. Un réglage
+  qui désactiverait l'obligation en test est **exclu** : un drapeau conditionnel sur un
+  attribut de sécurité finit à `false` en production (`CLAUDE.md` §10).
+- ⚠️ **Le rejeu d'un code.** À ma connaissance, le fournisseur d'Identity accepte le même
+  code pendant toute sa fenêtre de validité, sans mémoriser le dernier pas de temps
+  accepté. À vérifier au lot A. Si c'est le cas, il faut mémoriser ce pas par compte, ce
+  qui demande une colonne, donc une migration additive.
+- ⚠️ **Le stockage de la clé.** À ma connaissance, Identity range la clé de
+  l'authentificateur et les codes de récupération **en clair** dans `AspNetUserTokens`,
+  sauf protection explicite (`ProtectPersonalData`). Une copie de la base livrerait alors
+  le second facteur de tous les comptes. À vérifier, puis à trancher : chiffrer par la
+  Data Protection, ou dire la limite dans `RGPD.md` et `DEPLOIEMENT.md`.
+- **Les deux pseudonymisations** (`CLAUDE.md` §7 bis) doivent retirer la clé et les codes
+  de récupération. C'est une ligne de plus dans la relecture en base, champ par champ,
+  que leurs tests font déjà.
+- **`DEPLOIEMENT.md`** : l'horloge du serveur doit être synchronisée. Un écart de plus
+  d'une minute environ refuse tous les codes, sans autre symptôme qu'un « code faux ». Le
+  script du dernier administrateur y figure aussi.
+- **Hors V1, et dit tel quel** : clés matérielles et WebAuthn, code par SMS (un service
+  tiers payant, contraire à `CLAUDE.md` §2), code par courriel (le SMTP est optionnel,
+  et la boîte est souvent le maillon déjà compromis).
+
+**Lots, provisoires**
+
+- **A** — le serveur :
+  - le parcours en deux temps, le défi, l'équipement et l'activation ;
+  - les codes de récupération ;
+  - la réinitialisation par un administrateur et l'obligation par rôle ;
+  - la dépendance QRCoder, présentée avant installation ;
+  - le calcul TOTP des tests et la mise à niveau des fixtures ;
+  - un sabotage par garde.
+- **B** — les écrans :
+  - le second temps de la connexion et l'équipement imposé ;
+  - la section « Double authentification » de l'écran du compte : activer, régénérer
+    les codes, désactiver quand le rôle le permet ;
+  - la réinitialisation côté administrateur. ⚠️ **Aucun écran ne liste les comptes** :
+    `GET /api/agents/chefs-equipe` est la seule liste, et elle est journalisée. Il faut
+    une liste des comptes de l'entreprise, journalisée elle aussi puisqu'elle nomme des
+    personnes. Elle servirait aussi la création de comptes, qui n'a pas d'écran non plus.
+    C'est à mesurer au début du lot B, et peut-être un lot à part ;
+  - l'extraction de la logique dans un module éprouvé, comme `auth/motDePasse.ts`.
+- **C** — l'exploitation : le script du dernier administrateur, `DEPLOIEMENT.md`,
+  `RGPD.md`, `CLAUDE.md` §6.
+
+---
+
 # Suite — non planifié
 
 Par ordre de valeur, à cadrer le moment venu.
 
-**Double authentification** pour les rôles Administrateur et Responsable.
+~~**Double authentification** pour les rôles Administrateur et Responsable.~~ Cadrée à
+l'étape 23.
 
 **RLS PostgreSQL** en défense en profondeur : si un filtre global est oublié
 sur une entité future, la base refuse quand même. Ceinture et bretelles sur le
