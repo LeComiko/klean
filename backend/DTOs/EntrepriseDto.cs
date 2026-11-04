@@ -8,6 +8,9 @@ public class EntrepriseDto
     public string RaisonSociale { get; set; } = string.Empty;
     public string Siret { get; set; } = string.Empty;
     public DateTime DateCreation { get; set; }
+
+    /// <summary>Valeurs : Metropole, AlsaceMoselle, Guadeloupe, Martinique, Guyane, Reunion, Mayotte.</summary>
+    public string Territoire { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -23,4 +26,11 @@ public class EntrepriseCreateDto
     [Required]
     [MaxLength(14)]
     public string Siret { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Le nom exact du territoire. ⚠️ Pas de défaut : un <c>PUT</c> qui l'omet est refusé,
+    /// plutôt que de ramener en silence une entreprise d'Alsace-Moselle en Métropole — et
+    /// de lui faire travailler son Vendredi saint.
+    /// </summary>
+    public string Territoire { get; set; } = string.Empty;
 }

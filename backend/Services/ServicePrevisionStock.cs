@@ -28,20 +28,21 @@ public class ServicePrevisionStock
         [StatutIntervention.Planifiee, StatutIntervention.EnCours];
 
     private readonly KleanDbContext _db;
+    private readonly ITenantContext _tenant;
     private readonly TimeProvider _horloge;
 
-    public ServicePrevisionStock(KleanDbContext db, TimeProvider horloge)
+    public ServicePrevisionStock(KleanDbContext db, ITenantContext tenant, TimeProvider horloge)
     {
         _db = db;
+        _tenant = tenant;
         _horloge = horloge;
     }
 
-    /// <summary>Le jour UTC, comme la génération, et avec la même limite au petit matin.</summary>
-    private DateOnly Aujourdhui => DateOnly.FromDateTime(_horloge.GetUtcNow().UtcDateTime);
-
     public async Task<PrevisionStockDto> CalculerAsync(int semaines, CancellationToken annulation)
     {
-        var du = Aujourdhui;
+        // Le jour du territoire de l'entreprise, comme la génération (Territoires).
+        var du = Territoires.Aujourdhui(
+            _horloge, await Territoires.DeLEntrepriseAsync(_db, _tenant.EntrepriseId, annulation));
         var finExclue = du.AddDays(semaines * 7);
 
         var debut = DateTime.SpecifyKind(du.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);

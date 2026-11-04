@@ -278,6 +278,14 @@ export interface DescriptionRessource {
 
   /** Un geste de liste au-delà du CRUD, offert à qui écrit. */
   action?: ActionRessource
+
+  /**
+   * Les lignes existent sans qu'on les crée ni les supprime : seul le `PUT` est exposé.
+   * Le cas qui l'a fait naître : l'entreprise elle-même, provisionnée par l'instance
+   * (CLAUDE.md §7). Sans ce drapeau, l'écran offrirait « Nouvelle entreprise » et
+   * « Supprimer », deux boutons qui répondraient 405.
+   */
+  modificationSeule?: boolean
 }
 
 /**

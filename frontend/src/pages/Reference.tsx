@@ -277,6 +277,7 @@ function EcranReference({
     }
   }, [description, ecriture])
   const lectureSeule = !ecriture
+  const suppression = ecriture && description.modificationSeule !== true
   const designation = designer(description.singulier, description.genre)
 
   const fermer = useCallback(() => {
@@ -463,17 +464,21 @@ function EcranReference({
                   {actionEnCours ? description.action.enCours : description.action.libelle}
                 </button>
               )}
-              <button
-                className="reference__nouveau"
-                type="button"
-                onClick={() => {
-                  setEdition({ mode: 'creation' })
-                  setErreurFormulaire(null)
-                  setAnnonce(null)
-                }}
-              >
-                {nouveau(description.singulier, description.genre)}
-              </button>
+              {/* Ni création ni suppression sur une ressource que l'API ne laisse que
+                  modifier : deux boutons qui répondraient 405. */}
+              {description.modificationSeule !== true && (
+                <button
+                  className="reference__nouveau"
+                  type="button"
+                  onClick={() => {
+                    setEdition({ mode: 'creation' })
+                    setErreurFormulaire(null)
+                    setAnnonce(null)
+                  }}
+                >
+                  {nouveau(description.singulier, description.genre)}
+                </button>
+              )}
             </>
           ) : undefined
         }
@@ -532,9 +537,9 @@ function EcranReference({
                 setErreurFormulaire(null)
                 setAnnonce(null)
               }}
-              onSupprimer={ecriture ? (ligne) => void supprimer(ligne) : undefined}
+              onSupprimer={suppression ? (ligne) => void supprimer(ligne) : undefined}
               aConfirmer={aConfirmer}
-              onDemanderSuppression={ecriture ? setAConfirmer : undefined}
+              onDemanderSuppression={suppression ? setAConfirmer : undefined}
               enCours={suppressionEnCours}
               videMessage={messageVide(description, ecriture, filtre, descriptionParente)}
             />

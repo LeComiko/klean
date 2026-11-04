@@ -411,11 +411,40 @@ public class CrudTests : IAsyncLifetime
             new EntrepriseCreateDto
             {
                 RaisonSociale = alpha.RaisonSociale,
-                Siret = "20000000000002"
+                Siret = "20000000000002",
+                Territoire = "Metropole"
             });
 
         Assert.Equal(HttpStatusCode.Conflict, reponse.StatusCode);
         Assert.Contains("déjà enregistré", await reponse.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Le_territoire_se_lit_par_son_nom_exact_et_n_a_pas_de_defaut_a_l_ecriture()
+    {
+        var alpha = Assert.Single(await _client.ListerAsync<EntrepriseDto>("/api/entreprises"));
+        Assert.Equal("Metropole", alpha.Territoire);
+
+        // Omis, « 0 » ou mal écrit : refusé. Un défaut ramènerait en silence une entreprise
+        // d'Alsace-Moselle en Métropole, et lui ferait travailler son Vendredi saint.
+        foreach (var faux in new[] { "", "0", "Alsace" })
+        {
+            var refus = await _client.PutAsJsonAsync($"/api/entreprises/{alpha.Id}", new EntrepriseCreateDto
+            {
+                RaisonSociale = alpha.RaisonSociale, Siret = alpha.Siret, Territoire = faux
+            });
+
+            Assert.Equal(HttpStatusCode.BadRequest, refus.StatusCode);
+            Assert.Contains("Valeurs acceptées", await refus.Content.ReadAsStringAsync());
+        }
+
+        var reponse = await _client.PutAsJsonAsync($"/api/entreprises/{alpha.Id}", new EntrepriseCreateDto
+        {
+            RaisonSociale = alpha.RaisonSociale, Siret = alpha.Siret, Territoire = "Reunion"
+        });
+
+        Assert.Equal(HttpStatusCode.NoContent, reponse.StatusCode);
+        Assert.Equal("Reunion", (await _client.GetFromJsonAsync<EntrepriseDto>($"/api/entreprises/{alpha.Id}"))!.Territoire);
     }
 
     [Fact]

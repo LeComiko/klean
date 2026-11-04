@@ -92,18 +92,22 @@ public class PlanningController : ControllerBase
 
         var jusquAu = DateOnly.FromDateTime(dto.JusquAu.Value);
 
-        if (jusquAu < _generation.Aujourdhui)
+        // Le jour du territoire de l'entreprise, pas le jour UTC (Territoires).
+        var aujourdhui = await _generation.AujourdhuiAsync(annulation);
+        var horizon = aujourdhui.AddDays(ServiceGeneration.SemainesMaximum * 7);
+
+        if (jusquAu < aujourdhui)
         {
             return BadRequest(
                 $"La date {jusquAu:yyyy-MM-dd} est passée. La génération part d'aujourd'hui, "
-                + $"{_generation.Aujourdhui:yyyy-MM-dd}, et ne crée jamais de vacation dans le passé.");
+                + $"{aujourdhui:yyyy-MM-dd}, et ne crée jamais de vacation dans le passé.");
         }
 
-        if (jusquAu > _generation.Horizon)
+        if (jusquAu > horizon)
         {
             return BadRequest(
                 $"La génération porte sur {ServiceGeneration.SemainesMaximum} semaines au plus, "
-                + $"soit jusqu'au {_generation.Horizon:yyyy-MM-dd}. Générer plus loin figerait "
+                + $"soit jusqu'au {horizon:yyyy-MM-dd}. Générer plus loin figerait "
                 + "un planning que les absences et les contrats auront changé d'ici là.");
         }
 

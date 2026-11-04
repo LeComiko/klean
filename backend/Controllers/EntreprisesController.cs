@@ -34,7 +34,8 @@ public class EntreprisesController : ControllerBase
                 Id = e.Id,
                 RaisonSociale = e.RaisonSociale,
                 Siret = e.Siret,
-                DateCreation = e.DateCreation
+                DateCreation = e.DateCreation,
+                Territoire = e.Territoire.ToString()
             })
             .ToListAsync();
 
@@ -59,7 +60,8 @@ public class EntreprisesController : ControllerBase
                 Id = e.Id,
                 RaisonSociale = e.RaisonSociale,
                 Siret = e.Siret,
-                DateCreation = e.DateCreation
+                DateCreation = e.DateCreation,
+                Territoire = e.Territoire.ToString()
             })
             .FirstOrDefaultAsync();
 
@@ -73,8 +75,19 @@ public class EntreprisesController : ControllerBase
         var entreprise = await _db.Entreprises.FindAsync(id);
         if (entreprise is null) return NotFound();
 
+        // Les noms exacts : `Enum.TryParse` accepterait « 0 », c'est-à-dire un territoire que
+        // personne n'a choisi (CLAUDE.md §5).
+        if (!Enum.GetNames<Territoire>().Contains(dto.Territoire))
+        {
+            return BadRequest(
+                $"Territoire « {dto.Territoire} » invalide. Valeurs acceptées : "
+                + $"{string.Join(", ", Enum.GetNames<Territoire>())}. Il fixe le fuseau du jour "
+                + "et le calendrier des jours fériés.");
+        }
+
         entreprise.RaisonSociale = dto.RaisonSociale;
         entreprise.Siret = dto.Siret;
+        entreprise.Territoire = Enum.Parse<Territoire>(dto.Territoire);
 
         try
         {

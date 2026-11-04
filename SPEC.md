@@ -1806,7 +1806,16 @@ récurrence et son drapeau de fériés.
 - **Le rapport ne nomme aucun agent.**
 - **Les jours fériés** : les onze jours nationaux, calculés à partir de Pâques par
   `JoursFeries`. L'Alsace-Moselle et l'outre-mer sont hors périmètre V1, et c'est
-  écrit dans le code.
+  écrit dans le code. **Levé le 4 novembre 2026**, avec la limite du jour UTC, par un
+  `Territoire` par entreprise — décidé ce jour-là plutôt qu'un réglage d'instance, faux
+  dès qu'une instance héberge deux territoires. Il fixe le fuseau d'« aujourd'hui »
+  (génération, contrôle de date, prévision du stock) et ajoute ses jours : Vendredi saint
+  et Saint-Étienne en Alsace-Moselle, abolition de l'esclavage à la date de chaque
+  département d'outre-mer. Écran Entreprise, pastille `EN`, sans création ni
+  suppression. Migration `TerritoireDeLEntreprise`, additive, `'Metropole'` par défaut.
+  Onze sabotages backend et deux côté écran, tous rouges ; le premier jeu de sabotages a
+  laissé vert le férié des orphelines, rattrapé par un test du territoire posé après
+  coup.
 - **Le dossier de l'agent** porte désormais les prestations dont il est titulaire,
   nommées par leur site. Le point ouvert du lot A est fermé.
 

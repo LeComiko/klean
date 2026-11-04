@@ -745,6 +745,77 @@ const ConsommationsType: DescriptionRessource = {
   parent: { ressource: 'typesPrestation', champ: 'typePrestationId' },
 }
 
+/** `Territoire`, miroir de `backend/Models/Entreprise.cs`. */
+const Territoires = [
+  'Metropole',
+  'AlsaceMoselle',
+  'Guadeloupe',
+  'Martinique',
+  'Guyane',
+  'Reunion',
+  'Mayotte',
+] as const
+
+const LibellesTerritoire: Readonly<Record<(typeof Territoires)[number], string>> = {
+  Metropole: 'Métropole',
+  AlsaceMoselle: 'Alsace-Moselle',
+  Guadeloupe: 'Guadeloupe',
+  Martinique: 'Martinique',
+  Guyane: 'Guyane',
+  Reunion: 'La Réunion',
+  Mayotte: 'Mayotte',
+}
+
+/**
+ * L'entreprise elle-même : une ligne, celle du tenant. Ni création ni suppression —
+ * l'instance la provisionne (CLAUDE.md §7) —, d'où `modificationSeule`.
+ */
+const Entreprises: DescriptionRessource = {
+  cle: 'entreprises',
+  chemin: '/entreprise',
+  route: '/api/entreprises',
+  libelle: 'Entreprise',
+  singulier: 'entreprise',
+  genre: 'feminin',
+  sousTitre: 'Son identité, et le territoire qui fixe son jour et ses jours fériés',
+  etiquette: 'raisonSociale',
+
+  colonnes: [
+    { nom: 'raisonSociale', libelle: 'Raison sociale' },
+    { nom: 'siret', libelle: 'SIRET', chiffres: true },
+    { nom: 'territoire', libelle: 'Territoire' },
+  ],
+
+  champs: [
+    { nom: 'raisonSociale', libelle: 'Raison sociale', type: 'texte', requis: true, longueurMax: 200 },
+    {
+      nom: 'siret',
+      libelle: 'SIRET',
+      type: 'texte',
+      requis: true,
+      longueurMax: 14,
+      aide: 'Quatorze chiffres. Unique sur l’instance.',
+    },
+    {
+      nom: 'territoire',
+      libelle: 'Territoire',
+      type: 'choix',
+      requis: true,
+      choix: Territoires,
+      libelles: LibellesTerritoire,
+      // Décrire l'effet : le mot « territoire » ne dit pas ce qu'il change.
+      aide: 'Fixe le jour d’« aujourd’hui » pour la génération et la prévision, et les jours '
+        + 'fériés : le Vendredi saint et le 26 décembre en Alsace-Moselle, l’abolition de '
+        + 'l’esclavage outre-mer.',
+    },
+  ],
+
+  rolesLecture: RolesInternes,
+  rolesEcriture: EcritureReference,
+
+  modificationSeule: true,
+}
+
 /**
  * ⚠️ L'ordre suit la **chaîne du modèle**, pas l'alphabet : un site appartient à
  * un client, on ne peut donc pas créer le second avant le premier. C'est cet ordre
@@ -762,6 +833,7 @@ export const Descriptions: readonly DescriptionRessource[] = [
   Produits,
   Emplacements,
   ConsommationsType,
+  Entreprises,
 ]
 
 export function descriptionDe(cle: string): DescriptionRessource | undefined {

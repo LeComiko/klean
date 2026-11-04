@@ -130,6 +130,13 @@ describe('descriptions — structure', () => {
     }
   })
 
+  test('l’entreprise se modifie, ne se crée ni ne se supprime', () => {
+    // L'API n'expose que GET et PUT sur /api/entreprises : la création et la
+    // suppression ont été retirées comme gestes de provisionnement d'instance.
+    assert.equal(descriptionDe('entreprises')?.modificationSeule, true)
+    assert.equal(Descriptions.filter((description) => description.modificationSeule === true).length, 1)
+  })
+
   test('le chef d’équipe d’un agent ne se lit en colonne que par l’administrateur', () => {
     // Décidé le 4 novembre 2026 : aucun droit ne change côté serveur, et pour un chef
     // la colonne vaudrait toujours lui-même.

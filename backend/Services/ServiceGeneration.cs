@@ -49,14 +49,12 @@ public class ServiceGeneration
     }
 
     /// <summary>
-    /// Le jour UTC. ⚠️ Entre minuit et une ou deux heures du matin à Paris, c'est encore
-    /// la veille : la génération peut alors créer une vacation du jour qui vient de
-    /// finir. Sans conséquence au-delà du bruit — elle est idempotente et l'écran la
-    /// montre — et un fuseau par entreprise n'existe pas dans le modèle.
+    /// Le jour qu'il est sur le territoire de l'entreprise. ⚠️ C'était le jour UTC jusqu'au
+    /// 4 novembre 2026 : entre minuit et deux heures à Paris, la génération partait de la
+    /// veille (<see cref="Territoires"/>).
     /// </summary>
-    public DateOnly Aujourdhui => DateOnly.FromDateTime(_horloge.GetUtcNow().UtcDateTime);
-
-    public DateOnly Horizon => Aujourdhui.AddDays(SemainesMaximum * 7);
+    public async Task<DateOnly> AujourdhuiAsync(CancellationToken annulation = default) =>
+        Territoires.Aujourdhui(_horloge, await Territoires.DeLEntrepriseAsync(_db, _tenant.EntrepriseId, annulation));
 
     public const string CauseSansTitulaire = "Aucun titulaire désigné sur la prestation.";
 
@@ -78,7 +76,8 @@ public class ServiceGeneration
     /// </param>
     public async Task<RapportGenerationDto> GenererAsync(DateOnly jusquAu, CancellationToken annulation = default)
     {
-        var du = Aujourdhui;
+        var territoire = await Territoires.DeLEntrepriseAsync(_db, _tenant.EntrepriseId, annulation);
+        var du = Territoires.Aujourdhui(_horloge, territoire);
 
         var rapport = new RapportGenerationDto { Du = Utc(du), Au = Utc(jusquAu) };
 
@@ -96,7 +95,7 @@ public class ServiceGeneration
 
         var prestations = await PrestationsGenerablesAsync(du, jusquAu, annulation);
 
-        rapport.Orphelines = await OrphelinesAsync(du, jusquAu, annulation);
+        rapport.Orphelines = await OrphelinesAsync(du, jusquAu, territoire, annulation);
 
         var dejaPresentes = await CreneauxOccupesAsync(
             prestations.Select(p => p.Id).ToList(), du, jusquAu, annulation);
@@ -104,7 +103,7 @@ public class ServiceGeneration
         for (var jour = du; jour <= jusquAu; jour = jour.AddDays(1))
         {
             var drapeau = JoursDeLaSemaine.De(jour.DayOfWeek);
-            var ferie = JoursFeries.Nom(jour);
+            var ferie = JoursFeries.Nom(jour, territoire);
 
             // L'ordre chronologique n'est pas cosmétique : l'éligibilité d'un titulaire
             // dépend de ses vacations de la veille et du jour même — repos de 11 h,
@@ -254,7 +253,7 @@ public class ServiceGeneration
     /// s'appliquent alors à ses vacations.
     /// </summary>
     private async Task<List<LigneRapportGenerationDto>> OrphelinesAsync(
-        DateOnly du, DateOnly au, CancellationToken annulation)
+        DateOnly du, DateOnly au, Territoire territoire, CancellationToken annulation)
     {
         var debut = Utc(du);
         var lendemain = Utc(au.AddDays(1));
@@ -288,7 +287,7 @@ public class ServiceGeneration
         {
             var jour = DateOnly.FromDateTime(v.DatePrevue);
             var recurrente = v.Jours != JoursSemaine.Aucun && v.HeureDebut is not null;
-            var ferie = JoursFeries.Nom(jour);
+            var ferie = JoursFeries.Nom(jour, territoire);
 
             string? cause =
                 !v.Actif ? "Le contrat n'est plus actif."

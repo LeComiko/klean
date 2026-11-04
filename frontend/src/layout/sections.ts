@@ -141,6 +141,16 @@ export const Sections: readonly Section[] = [
       { chemin: '/prevision', libelle: 'Prévision', roles: Exploitation },
     ],
   },
+
+  // L'entreprise elle-même : son identité et son territoire. Dernière, parce qu'on y
+  // vient rarement — une fois à la mise en route, puis presque jamais.
+  {
+    chemin: '/entreprise',
+    pastille: 'EN',
+    libelle: 'Entreprise',
+    roles: RolesInternes,
+    ressources: ['entreprises'],
+  },
 ]
 
 /**

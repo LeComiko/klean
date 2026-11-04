@@ -241,6 +241,15 @@ public class PrevisionStockTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task La_periode_part_du_jour_du_territoire()
+    {
+        // Dimanche 23 mai, 23 h UTC : lundi 24 à Paris.
+        _fixture.Fabrique.Horloge.Fixer(Aujourdhui.AddDays(-1), heure: 23);
+
+        Assert.Equal(Utc(Aujourdhui), (await LirePrevision()).Du);
+    }
+
+    [Fact]
     public async Task Le_besoin_multiplie_les_passages_par_la_consommation_de_leur_type_site_par_site()
     {
         await Consommer(_hall, _detergent, 0.5m);

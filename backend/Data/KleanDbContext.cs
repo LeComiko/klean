@@ -143,6 +143,16 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         // couvrir le cas où elle pose `true`. Même raisonnement que `Prestation.Jours`.
         modelBuilder.Entity<Produit>().Property(e => e.Actif).HasDefaultValue(true).HasSentinel(true);
 
+        // Le territoire, en texte comme les autres énumérations. Le défaut sert les
+        // entreprises antérieures à la colonne — sans lui, la chaîne vide, relue en
+        // silence comme `Metropole` par la conversion d'EF (CLAUDE.md §5). La sentinelle
+        // fait envoyer la valeur de l'entité, même `Metropole` : même raisonnement que
+        // `Prestation.Jours`.
+        modelBuilder.Entity<Entreprise>().Property(e => e.Territoire)
+            .HasConversion<string>()
+            .HasDefaultValueSql("'Metropole'")
+            .HasSentinel((Territoire)(-1));
+
         modelBuilder.Entity<Entreprise>().HasIndex(e => e.Siret).IsUnique();
 
         // ⚠️ Le défaut en base n'est pas là pour l'application, qui pose la valeur

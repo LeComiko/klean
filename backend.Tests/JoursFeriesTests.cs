@@ -1,3 +1,4 @@
+using Klean.Api.Models;
 using Klean.Api.Services;
 
 namespace Klean.Api.Tests;
@@ -59,9 +60,8 @@ public class JoursFeriesTests
     }
 
     /// <summary>
-    /// Une table qui recense aussi les fêtes régionales ferait sauter ces jours partout.
-    /// L'Alsace-Moselle est hors périmètre de la V1 : ses entreprises marquent leurs
-    /// contrats et saisissent ces jours à la main.
+    /// En Métropole, le territoire par défaut. Une table qui recenserait les fêtes
+    /// régionales sans territoire ferait sauter ces jours partout.
     /// </summary>
     [Theory]
     [InlineData(2026, 4, 3)]
@@ -71,5 +71,68 @@ public class JoursFeriesTests
     public void Vendredi_saint_Saint_Etienne_et_dimanches_ne_sont_pas_feries(int annee, int mois, int jour)
     {
         Assert.Null(JoursFeries.Nom(new DateOnly(annee, mois, jour)));
+    }
+
+    [Fact]
+    public void L_Alsace_Moselle_ajoute_le_Vendredi_saint_et_la_Saint_Etienne()
+    {
+        var feries = JoursFeries.De(2026, Territoire.AlsaceMoselle);
+
+        Assert.Equal(13, feries.Count);
+        Assert.Equal("Vendredi saint", feries[new DateOnly(2026, 4, 3)]);
+        Assert.Equal("Saint-Étienne", feries[new DateOnly(2026, 12, 26)]);
+        Assert.Equal("Vendredi saint", JoursFeries.Nom(new DateOnly(2027, 3, 26), Territoire.AlsaceMoselle));
+    }
+
+    /// <summary>Décret n° 83-1003 : une date par département.</summary>
+    [Theory]
+    [InlineData(Territoire.Guadeloupe, 5, 27)]
+    [InlineData(Territoire.Martinique, 5, 22)]
+    [InlineData(Territoire.Guyane, 6, 10)]
+    [InlineData(Territoire.Reunion, 12, 20)]
+    [InlineData(Territoire.Mayotte, 4, 27)]
+    public void Chaque_departement_d_outre_mer_commemore_l_abolition_a_sa_date(Territoire territoire, int mois, int jour)
+    {
+        var feries = JoursFeries.De(2026, territoire);
+
+        Assert.Equal(12, feries.Count);
+        Assert.Equal("Abolition de l'esclavage", feries[new DateOnly(2026, mois, jour)]);
+        Assert.Null(JoursFeries.Nom(new DateOnly(2026, mois, jour)));
+    }
+
+    [Fact]
+    public void Chaque_territoire_garde_les_onze_jours_nationaux()
+    {
+        var nationaux = JoursFeries.De(2026).Keys.ToHashSet();
+
+        foreach (var territoire in Enum.GetValues<Territoire>())
+        {
+            Assert.Superset(nationaux, JoursFeries.De(2026, territoire).Keys.ToHashSet());
+        }
+    }
+
+    [Theory]
+    [InlineData(Territoire.Metropole, 24)]
+    [InlineData(Territoire.AlsaceMoselle, 24)]
+    [InlineData(Territoire.Reunion, 24)]
+    [InlineData(Territoire.Guadeloupe, 23)]
+    [InlineData(Territoire.Guyane, 23)]
+    public void Aujourd_hui_est_le_jour_du_territoire(Territoire territoire, int jourAttendu)
+    {
+        // Dimanche 23 mai 2027, 23 h UTC.
+        var horloge = new HorlogeFixe(new DateTimeOffset(2027, 5, 23, 23, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal(new DateOnly(2027, 5, jourAttendu), Territoires.Aujourdhui(horloge, territoire));
+    }
+
+    [Fact]
+    public void Tous_les_fuseaux_se_resolvent_sur_cette_machine()
+    {
+        Territoires.VerifierFuseaux();
+    }
+
+    private sealed class HorlogeFixe(DateTimeOffset instant) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => instant;
     }
 }

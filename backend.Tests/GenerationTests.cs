@@ -292,6 +292,65 @@ public class GenerationTests : IAsyncLifetime
         Assert.Equal(7, (await Vacations(prestation.Id)).Count);
     }
 
+    [Fact]
+    public async Task Une_entreprise_d_Alsace_Moselle_ne_genere_pas_son_Vendredi_saint()
+    {
+        // 2027 : Vendredi saint le 26 mars. Férié en Alsace-Moselle seulement.
+        _fixture.Fabrique.Horloge.Fixer(new DateOnly(2027, 3, 22));
+        await Territoire("AlsaceMoselle");
+        var prestation = await Prestation(await Contrat(), ["Vendredi"], titulaire: null);
+
+        var rapport = await Rapport(new DateOnly(2027, 4, 2));
+
+        Assert.Equal(["Vendredi saint, que le contrat n'inclut pas."], rapport.Feries.Select(f => f.Cause));
+        Assert.Equal([new DateTime(2027, 4, 2)], (await Vacations(prestation.Id)).Select(v => v.DatePrevue.Date));
+    }
+
+    [Fact]
+    public async Task En_Metropole_le_Vendredi_saint_est_travaille()
+    {
+        _fixture.Fabrique.Horloge.Fixer(new DateOnly(2027, 3, 22));
+        var prestation = await Prestation(await Contrat(), ["Vendredi"], titulaire: null);
+
+        var rapport = await Rapport(new DateOnly(2027, 4, 2));
+
+        Assert.Empty(rapport.Feries);
+        Assert.Equal(2, (await Vacations(prestation.Id)).Count);
+    }
+
+    // ------------------------------------------------------------------ le fuseau
+
+    [Fact]
+    public async Task Le_jour_de_depart_est_celui_du_territoire_et_non_le_jour_UTC()
+    {
+        // Dimanche 23 mai, 23 h UTC : lundi 24 à 1 h du matin à Paris, dimanche 19 h en
+        // Guadeloupe. Jusqu'au 4 novembre 2026, la génération partait du dimanche partout.
+        _fixture.Fabrique.Horloge.Fixer(new DateOnly(2027, 5, 23), heure: 23);
+        var prestation = await Prestation(await Contrat(), ["Dimanche", "Lundi"], titulaire: null);
+
+        var paris = await Rapport(Lundi24Mai);
+
+        Assert.Equal(Utc(Lundi24Mai), paris.Du);
+        Assert.Equal([new DateTime(2027, 5, 24)], (await Vacations(prestation.Id)).Select(v => v.DatePrevue.Date));
+
+        await Territoire("Guadeloupe");
+        var guadeloupe = await Rapport(Lundi24Mai);
+
+        Assert.Equal(Utc(new DateOnly(2027, 5, 23)), guadeloupe.Du);
+    }
+
+    [Fact]
+    public async Task Le_refus_d_une_date_passee_compte_en_jour_du_territoire()
+    {
+        // Lundi 24 à 1 h à Paris : demander jusqu'au dimanche 23 est demander le passé.
+        _fixture.Fabrique.Horloge.Fixer(new DateOnly(2027, 5, 23), heure: 23);
+
+        var reponse = await Generer(new DateOnly(2027, 5, 23));
+
+        Assert.Equal(HttpStatusCode.BadRequest, reponse.StatusCode);
+        Assert.Contains("2027-05-24", await reponse.Content.ReadAsStringAsync());
+    }
+
     // ------------------------------------------------------------- les orphelines
 
     /// <summary>
@@ -332,6 +391,27 @@ public class GenerationTests : IAsyncLifetime
             rapport.Orphelines.Select(o => o.Date.Date));
         Assert.All(rapport.Orphelines, o => Assert.Equal("Ce jour n'est pas prévu par la prestation.", o.Cause));
         Assert.Equal(4, (await Vacations(prestation.Id)).Count);
+    }
+
+    /// <summary>
+    /// Le cas réel du territoire posé après coup : les vendredis ont été générés en
+    /// Métropole, puis l'entreprise se déclare en Alsace-Moselle. Le Vendredi saint déjà
+    /// créé n'est pas supprimé — la génération n'ajoute que —, il est signalé.
+    /// </summary>
+    [Fact]
+    public async Task Un_territoire_pose_apres_coup_signale_le_ferie_deja_genere()
+    {
+        _fixture.Fabrique.Horloge.Fixer(new DateOnly(2027, 3, 22));
+        var prestation = await Prestation(await Contrat(), ["Vendredi"], titulaire: null);
+        await Rapport(new DateOnly(2027, 4, 2));
+
+        await Territoire("AlsaceMoselle");
+        var rapport = await Rapport(new DateOnly(2027, 4, 2));
+
+        var orpheline = Assert.Single(rapport.Orphelines);
+        Assert.Equal((new DateTime(2027, 3, 26), "Vendredi saint, que le contrat n'inclut pas."),
+            (orpheline.Date.Date, orpheline.Cause));
+        Assert.Equal(2, (await Vacations(prestation.Id)).Count);
     }
 
     [Fact]
@@ -499,6 +579,19 @@ public class GenerationTests : IAsyncLifetime
 
     private static DateTime Utc(DateOnly jour) =>
         DateTime.SpecifyKind(jour.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+
+    /// <summary>Change le territoire d'Alpha par l'API, comme le ferait l'administrateur.</summary>
+    private async Task Territoire(string territoire)
+    {
+        var alpha = Assert.Single(await _client.ListerAsync<EntrepriseDto>("/api/entreprises"));
+
+        var reponse = await _client.PutAsJsonAsync($"/api/entreprises/{alpha.Id}", new EntrepriseCreateDto
+        {
+            RaisonSociale = alpha.RaisonSociale, Siret = alpha.Siret, Territoire = territoire
+        });
+
+        Assert.Equal(HttpStatusCode.NoContent, reponse.StatusCode);
+    }
 
     private Task<HttpResponseMessage> Generer(DateOnly jusquAu) =>
         _client.PostAsJsonAsync("/api/planning/generer", new { JusquAu = jusquAu.ToString("yyyy-MM-dd") });

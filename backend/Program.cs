@@ -229,6 +229,10 @@ builder.Services.AddScoped<ServicePrevisionStock>();
 // L'horloge de la génération (étape 20), substituée par la série de tests : « douze
 // semaines à partir d'aujourd'hui » ne s'éprouve pas sur un jour qui change.
 builder.Services.AddSingleton(TimeProvider.System);
+
+// Les fuseaux des territoires, résolus avant de servir quoi que ce soit : une image sans
+// base de fuseaux échouerait sinon en 500 à la première génération (Territoires).
+Territoires.VerifierFuseaux();
 // Résolu depuis RequestServices par JournaliserAccesAttribute : un attribut ne
 // reçoit pas d'injection par constructeur.
 builder.Services.AddScoped<ServiceJournalAcces>();

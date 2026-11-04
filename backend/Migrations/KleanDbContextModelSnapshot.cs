@@ -313,6 +313,12 @@ namespace Klean.Api.Migrations
                         .HasMaxLength(14)
                         .HasColumnType("character varying(14)");
 
+                    b.Property<string>("Territoire")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValueSql("'Metropole'");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Siret")

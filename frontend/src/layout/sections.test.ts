@@ -22,7 +22,7 @@ describe('sections — navigation et destination d’arrivée', () => {
 
   test('les pastilles sont celles de SPEC.md étape 13, moins TB, revues à l’étape 22', () => {
     // `SI` est devenu `CL` : la pastille dit la ressource où l'on arrive.
-    assert.deepEqual(Sections.map((section) => section.pastille), ['PL', 'CL', 'AG', 'ST'])
+    assert.deepEqual(Sections.map((section) => section.pastille), ['PL', 'CL', 'AG', 'ST', 'EN'])
   })
 
   test('chaque section déclare un chemin absolu et un libellé', () => {

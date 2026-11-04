@@ -168,7 +168,7 @@ Entreprise ─┬─ Client ─── Site ─── Contrat ─── Prestatio
 
 | Entité | Champs notables |
 |---|---|
-| Entreprise | RaisonSociale, Siret, DateCreation |
+| Entreprise | RaisonSociale, Siret, DateCreation, Territoire (enum) — le fuseau d'« aujourd'hui » et le calendrier des jours fériés |
 | Client | Type (enum `TypeClient`), coordonnées, DateCreation |
 | Site | Latitude, Longitude, Consignes, DateCreation |
 | Contrat | DateDebut, DateFin (nullable), Frequence (libellé libre), Actif, InclutJoursFeries |
@@ -193,6 +193,8 @@ Enums :
 - `TypeEmplacement` : Depot, Vehicule — `Site` en est sorti à l'étape 22, le site
   étant visé par sa propre clé
 - `NatureMouvement` : Entree, Sortie, Transfert, Inventaire
+- `Territoire` : Metropole, AlsaceMoselle, Guadeloupe, Martinique, Guyane, Reunion,
+  Mayotte — lu par ses noms exacts, et sans défaut à l'écriture
 - `JoursSemaine`, **à drapeaux** : Aucun, Lundi … Dimanche
 
 Tous les enums sont stockés **en texte** via `HasConversion<string>()`.
@@ -958,6 +960,13 @@ Quatre choses à savoir avant d'y toucher :
 - **Son rapport ne nomme aucun agent.** La cause d'une vacation non pourvue mêle les
   quatre filtres durs, comme le refus de l'affectation : elle ne divulgue donc pas une
   absence, et la route n'a pas à être journalisée (§7 bis).
+- **« Aujourd'hui » et les jours fériés sont ceux du territoire de l'entreprise**
+  (`Territoires`, `JoursFeries`). ⚠️ C'était le jour UTC jusqu'au 4 novembre 2026 : à
+  Paris entre minuit et deux heures, la génération partait de la veille. La prévision du
+  stock lit le même jour. Les fuseaux sont résolus **au démarrage** : un serveur sans
+  `tzdata` refuse de démarrer plutôt que de répondre 500 à la première génération.
+  Un territoire posé après coup ne supprime rien : le férié déjà généré devient une
+  orpheline.
 
 ---
 
@@ -1556,7 +1565,9 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   - `roles` et `comptes` sur une colonne — la colonne « Chef d'équipe » des agents,
     réservée à l'administrateur. ⚠️ Une colonne de comptes n'est ouverte qu'à des rôles
     d'écriture : la liste des comptes n'est chargée que pour eux, et un lecteur lirait
-    « Hors de votre périmètre » sur chaque ligne.
+    « Hors de votre périmètre » sur chaque ligne ;
+  - `modificationSeule` sur une description : ni création ni suppression, l'API
+    n'exposant que le `PUT` — l'écran Entreprise.
 
   Leur logique est dans `valeurs.ts`, leurs invariantes dans `descriptions.test.ts`, qui
   refuse tout nom de champ qui ne désigne rien. ⚠️ Le préremplissage ne réécrit qu'un
