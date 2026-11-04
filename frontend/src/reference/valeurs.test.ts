@@ -8,6 +8,7 @@ import type {
 } from '../types/reference.ts'
 import {
   accorder,
+  colonnesVisibles,
   corpsDe,
   departCreation,
   departOuverture,
@@ -304,6 +305,15 @@ describe('rendu', () => {
     const colonne: ColonneRessource = { nom: 'clientId', libelle: 'Client', reference: 'clients' }
 
     assert.equal(cellule({ clientId: 'client-1' }, colonne), 'Syndic Bellevue')
+  })
+
+  test('un compte est résolu par sa route, comme une référence par sa clé', () => {
+    const colonne: ColonneRessource = { nom: 'chefEquipeId', libelle: 'Chef', comptes: '/api/agents/chefs-equipe' }
+    const parRoute = (source: string, identifiant: string): string =>
+      source === '/api/agents/chefs-equipe' && identifiant === 'compte-1' ? 'Léa Martin' : identifiant
+
+    assert.equal(rendu({ chefEquipeId: 'compte-1' }, colonne, Champs, parRoute), 'Léa Martin')
+    assert.equal(rendu({ chefEquipeId: null }, colonne, Champs, parRoute), Vide)
   })
 
   test('une référence introuvable rend son identifiant plutôt que rien', () => {
@@ -734,5 +744,19 @@ describe('etiquetteDe', () => {
     assert.equal(etiquetteDe(description('nom'), { nom: 'Bellevue' }), 'Bellevue')
     assert.equal(etiquetteDe(description('nom'), {}), undefined)
     assert.equal(etiquetteDe(description('type'), { type: '' }), undefined)
+  })
+})
+
+describe('colonnesVisibles', () => {
+  const colonnes: readonly ColonneRessource[] = [
+    { nom: 'nom', libelle: 'Nom' },
+    { nom: 'chefEquipeId', libelle: 'Chef', comptes: '/api/agents/chefs-equipe', roles: ['Administrateur'] },
+  ]
+
+  test('une colonne réservée n’apparaît qu’à ses rôles', () => {
+    assert.deepEqual(colonnesVisibles(colonnes, ['Administrateur']).map((c) => c.nom), ['nom', 'chefEquipeId'])
+    assert.deepEqual(colonnesVisibles(colonnes, ['Responsable']).map((c) => c.nom), ['nom'])
+    assert.deepEqual(colonnesVisibles(colonnes, ['ChefEquipe', 'Administrateur']).map((c) => c.nom), ['nom', 'chefEquipeId'])
+    assert.deepEqual(colonnesVisibles(colonnes, []).map((c) => c.nom), ['nom'])
   })
 })

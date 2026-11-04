@@ -1727,6 +1727,9 @@ pour intelligible.
 chef, elle vaudrait toujours lui-même ; pour un responsable, elle demanderait d'ouvrir la
 liste des chefs, réservée à l'administrateur au lot A. L'administrateur voit le
 rattachement dans le formulaire. À rouvrir si un responsable en exprime le besoin.
+**Faite le 4 novembre 2026, pour l'administrateur seul** — aucun droit ne change côté
+serveur. Une colonne porte désormais `roles` et `comptes`, et une invariante la réserve à
+des rôles d'écriture, seuls à charger la liste des comptes. Cinq sabotages, tous rouges.
 
 **Périmètre initial** — écrit avant la réponse, conservé pour mémoire
 

@@ -99,6 +99,45 @@ describe('descriptions — structure', () => {
     }
   })
 
+  test('une colonne réservée l’est à des lecteurs de la ressource', () => {
+    for (const description of Descriptions) {
+      for (const colonne of description.colonnes) {
+        for (const role of colonne.roles ?? []) {
+          assert.ok(description.rolesLecture.includes(role), `${description.cle} → ${colonne.nom} → ${role}`)
+        }
+      }
+    }
+  })
+
+  test('une colonne de comptes est celle du champ de comptes, réservée à qui écrit', () => {
+    // ⚠️ La liste des comptes n'est chargée que pour qui écrit (les routes de comptes
+    // lui sont réservées). Ouverte à un simple lecteur, la colonne afficherait « Hors de
+    // votre périmètre » sur chaque ligne — exact en apparence, faux en réalité.
+    for (const description of Descriptions) {
+      for (const colonne of description.colonnes) {
+        if (colonne.comptes === undefined) continue
+
+        const champ = description.champs.find((candidat) => candidat.nom === colonne.nom)
+        assert.equal(champ?.type, 'compte', `${description.cle} → ${colonne.nom}`)
+        assert.equal(champ?.comptes, colonne.comptes, `${description.cle} → ${colonne.nom}`)
+        assert.equal(colonne.reference, undefined, `${description.cle} → ${colonne.nom}`)
+
+        assert.ok((colonne.roles ?? []).length > 0, `${description.cle} → ${colonne.nom} : sans rôles`)
+        for (const role of colonne.roles ?? []) {
+          assert.ok(description.rolesEcriture.includes(role), `${description.cle} → ${colonne.nom} → ${role}`)
+        }
+      }
+    }
+  })
+
+  test('le chef d’équipe d’un agent ne se lit en colonne que par l’administrateur', () => {
+    // Décidé le 4 novembre 2026 : aucun droit ne change côté serveur, et pour un chef
+    // la colonne vaudrait toujours lui-même.
+    const colonne = descriptionDe('agents')?.colonnes.find((candidate) => candidate.nom === 'chefEquipeId')
+
+    assert.deepEqual(colonne?.roles, [Roles.Administrateur])
+  })
+
   test('un champ de choix nomme chacune de ses valeurs, et rien d’autre', () => {
     // Une valeur sans libellé s'afficherait en nom brut — « Indisponibilite » — sans
     // aucune erreur ; un libellé sans valeur serait une faute de frappe muette.

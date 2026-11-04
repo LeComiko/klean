@@ -258,6 +258,12 @@ export function rendu(
     return resoudre(colonne.reference, String(valeur))
   }
 
+  // Les comptes se rangent sous leur route, qu'aucune clé de description ne peut
+  // prendre puisqu'elle commence par une barre : le même résolveur les sert.
+  if (colonne.comptes !== undefined) {
+    return resoudre(colonne.comptes, String(valeur))
+  }
+
   if (typeof valeur === 'boolean') return valeur ? 'Oui' : 'Non'
 
   if (Array.isArray(valeur)) {
@@ -283,6 +289,16 @@ export function rendu(
   if (typeof valeur === 'number') return formaterNombre(valeur)
 
   return String(valeur)
+}
+
+/** Les colonnes que ces rôles voient : toutes, sauf celles qui en réservent d'autres. */
+export function colonnesVisibles(
+  colonnes: readonly ColonneRessource[],
+  roles: readonly string[],
+): readonly ColonneRessource[] {
+  return colonnes.filter(
+    (colonne) => colonne.roles === undefined || colonne.roles.some((role) => roles.includes(role)),
+  )
 }
 
 /** Filtre de descente de niveau, lu dans la chaîne de requête de l'écran. */

@@ -177,6 +177,21 @@ export interface ColonneRessource {
 
   /** Rendu par la valeur d'une autre ressource, résolue par la page. */
   reference?: string
+
+  /**
+   * Rendu par le nom d'un compte, lu sur cette route — celle du champ `compte` du même
+   * nom. Les comptes n'ont pas de description, d'où cette propriété à côté de `reference`.
+   */
+  comptes?: string
+
+  /**
+   * Rôles qui voient la colonne ; absent, tous les lecteurs.
+   *
+   * ⚠️ Une colonne de `comptes` doit y être restreinte à des rôles d'**écriture** : la
+   * liste des comptes n'est chargée que pour eux, et un lecteur lirait « Hors de votre
+   * périmètre » sur chaque ligne. `descriptions.test.ts` le garde.
+   */
+  roles?: readonly string[]
 }
 
 /**

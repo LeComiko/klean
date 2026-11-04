@@ -1547,11 +1547,16 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   l'étape 20. `descriptions.test.ts` lit désormais `backend/DTOs/*.cs` et compare les
   deux listes ; ajouter une propriété à un `XxxCreateDto` demande donc d'ajouter son
   champ à la description.
-- **Quatre propriétés déclaratives étendent le motif sans écrire de page** :
+- **Des propriétés déclaratives étendent le motif sans écrire de page** :
   - `action` sur une description, pour un geste de liste au-delà du CRUD ;
   - `routeChoix` sur une description, pour remplir les listes déroulantes des
     ressources enfants sans charger la ressource entière (§7 bis, `ChoixAgents`) ;
-  - `preremplit` et `seulementActifs` sur un champ de référence.
+  - `preremplit` et `seulementActifs` sur un champ de référence ;
+  - `libelles` sur un champ de choix : « Congé » s'affiche, `Conge` part ;
+  - `roles` et `comptes` sur une colonne — la colonne « Chef d'équipe » des agents,
+    réservée à l'administrateur. ⚠️ Une colonne de comptes n'est ouverte qu'à des rôles
+    d'écriture : la liste des comptes n'est chargée que pour eux, et un lecteur lirait
+    « Hors de votre périmètre » sur chaque ligne.
 
   Leur logique est dans `valeurs.ts`, leurs invariantes dans `descriptions.test.ts`, qui
   refuse tout nom de champ qui ne désigne rien. ⚠️ Le préremplissage ne réécrit qu'un

@@ -26,6 +26,7 @@ import type { Section } from '../layout/sections'
 import { descriptionDe, enfantsDe } from '../reference/descriptions'
 import {
   accorder,
+  colonnesVisibles,
   corpsDe,
   departCreation,
   departOuverture,
@@ -518,7 +519,7 @@ function EcranReference({
         <div className="reference" aria-busy={chargement}>
           <div className="reference__principal">
             <TableauRessource
-              colonnes={description.colonnes}
+              colonnes={colonnesVisibles(description.colonnes, profil?.roles ?? [])}
               lignes={obtenue.page.elements}
               choisie={edition?.mode === 'ouverture' ? edition.ligne.id : null}
               rendu={celluleDe}

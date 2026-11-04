@@ -217,6 +217,16 @@ const Agents: DescriptionRessource = {
     { nom: 'telephone', libelle: 'Téléphone' },
     { nom: 'dateEmbauche', libelle: 'Embauché le' },
     { nom: 'actif', libelle: 'Actif' },
+    {
+      // L'administrateur seul, qui charge déjà la liste des chefs pour le formulaire.
+      // Pour un chef d'équipe elle vaudrait toujours lui-même ; l'ouvrir au responsable
+      // demanderait de lui ouvrir `GET /api/agents/chefs-equipe` — écarté à l'étape 19,
+      // confirmé le 4 novembre 2026.
+      nom: 'chefEquipeId',
+      libelle: 'Chef d’équipe',
+      comptes: '/api/agents/chefs-equipe',
+      roles: EcritureReference,
+    },
   ],
 
   champs: [
