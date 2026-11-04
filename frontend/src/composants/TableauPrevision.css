@@ -1,0 +1,104 @@
+/* ---- Un état de stock : une pastille et un mot ----
+   Le mot porte l'information, la pastille la redouble (§12). Le texte reste en
+   --texte : la couleur est sur la pastille et la bordure, jamais sur des lettres —
+   aucun contraste de texte à négocier dans les deux thèmes. */
+.prevision__etats {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--espace-2);
+}
+
+.etat-stock {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espace-2);
+  padding: 0 var(--espace-2);
+  background: var(--surface);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-pilule);
+  font-weight: 600;
+  color: var(--texte);
+  white-space: nowrap;
+}
+
+.etat-stock__pastille {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: var(--rayon-pilule);
+}
+
+/* ⚠️ Le ton du retard, jamais la terre cuite : --alerte est réservée au « non
+   pourvu » et au focus (§12). Une alerte de stock demande d'agir bientôt. Trait
+   plein, plus épais : une seconde redondance non colorée. */
+.etat-stock--alerte {
+  border: 2px solid var(--retard);
+}
+
+.etat-stock--alerte .etat-stock__pastille {
+  background: var(--retard);
+}
+
+.etat-stock--calme .etat-stock__pastille {
+  background: var(--realise);
+}
+
+/* ---- Le détail par site, sous la ligne du produit ---- */
+.prevision__detail-cellule {
+  padding: 0 var(--espace-4) var(--espace-4) var(--espace-8);
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+}
+
+.prevision__sites {
+  width: 100%;
+  max-width: 640px;
+  border-collapse: collapse;
+}
+
+.prevision__sites-entete {
+  padding: var(--espace-3) var(--espace-3) var(--espace-2);
+  text-align: left;
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texte-2);
+}
+
+.prevision__sites-entete--chiffres,
+.prevision__sites-cellule--chiffres {
+  text-align: right;
+}
+
+.prevision__sites-cellule {
+  padding: var(--espace-2) var(--espace-3);
+  border-top: 1px solid var(--border);
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  color: var(--texte);
+}
+
+.prevision__sites-cellule--chiffres {
+  font-family: var(--police-chiffres);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ce qu'il faut apporter est la réponse de ce tableau : la graisse le dit, sans
+   couleur. */
+.prevision__sites-cellule--fort {
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .etat-stock,
+  .prevision__sites-cellule {
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+
+  .prevision__detail-cellule {
+    padding-left: var(--espace-4);
+  }
+}

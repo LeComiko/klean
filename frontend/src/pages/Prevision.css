@@ -1,0 +1,75 @@
+/* L'horizon, dans l'en-tête : une liste et son mot, à la place du bouton « Nouveau »
+   des autres écrans — ici on choisit ce qu'on regarde, on ne crée rien. */
+.prevision__horizon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espace-3);
+}
+
+.prevision__horizon-libelle {
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texte-2);
+}
+
+.prevision__horizon-liste {
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-3);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-family: var(--police);
+  font-size: var(--corps-taille);
+}
+
+.prevision__horizon-liste:focus {
+  border-color: var(--brand);
+}
+
+.prevision__periode {
+  margin-bottom: var(--espace-4);
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  color: var(--texte);
+}
+
+/* Une information, pas une alerte : la marque, comme le bandeau de descente de
+   niveau. Le texte reste --texte, seule couleur qui tienne AA sur --brand-tint avec
+   --alerte (§10). */
+.prevision__sans-type {
+  margin-bottom: var(--espace-4);
+  padding: var(--espace-3) var(--espace-4);
+  background: var(--brand-tint);
+  border: 1px solid var(--border-fort);
+  border-left: 3px solid var(--brand);
+  border-radius: var(--rayon-bloc);
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  font-weight: 600;
+  color: var(--texte);
+}
+
+.prevision__note {
+  margin-top: var(--espace-4);
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  color: var(--texte-2);
+}
+
+@media (max-width: 900px) {
+  .prevision__horizon-liste {
+    height: var(--cible-tactile);
+    font-size: var(--corps-mobile-taille);
+  }
+
+  .prevision__periode,
+  .prevision__sans-type,
+  .prevision__note {
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+}

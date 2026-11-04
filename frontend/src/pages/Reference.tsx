@@ -21,7 +21,9 @@ import { Pagination } from '../composants/Pagination'
 import { SousNavigation } from '../composants/SousNavigation'
 import { TableauRessource } from '../composants/TableauRessource'
 import type { LienEnfant } from '../composants/TableauRessource'
-import { descriptionDe, descriptionsLisibles, enfantsDe } from '../reference/descriptions'
+import { ongletsDe } from '../layout/sections'
+import type { Section } from '../layout/sections'
+import { descriptionDe, enfantsDe } from '../reference/descriptions'
 import {
   accorder,
   corpsDe,
@@ -41,8 +43,8 @@ import './Reference.css'
 
 interface Proprietes {
   description: DescriptionRessource
-  /** Les ressources de la section, pour la sous-navigation. */
-  fratrie: readonly string[]
+  /** La section qui porte la ressource, pour la sous-navigation. */
+  section: Section
 }
 
 /** Résultat obtenu, avec la clé de la demande à laquelle il répond. */
@@ -88,7 +90,7 @@ function messageDe(echec: unknown, repli: string): string {
  * la même raison qui fait qu'`App.tsx` remonte déjà cet écran d'une ressource à
  * l'autre.
  */
-export function Reference({ description, fratrie }: Proprietes) {
+export function Reference({ description, section }: Proprietes) {
   const [parametres] = useSearchParams()
   const filtre = filtreDe(description, (nom) => parametres.get(nom))
 
@@ -96,7 +98,7 @@ export function Reference({ description, fratrie }: Proprietes) {
     <EcranReference
       key={filtre?.valeur ?? 'tout'}
       description={description}
-      fratrie={fratrie}
+      section={section}
       filtreChamp={filtre?.champ}
       filtreValeur={filtre?.valeur}
     />
@@ -117,7 +119,7 @@ interface ProprietesEcran extends Proprietes {
 
 function EcranReference({
   description,
-  fratrie,
+  section,
   filtreChamp,
   filtreValeur,
 }: ProprietesEcran) {
@@ -411,7 +413,7 @@ function EcranReference({
     }
   }
 
-  const ressourcesDeLaSection = descriptionsLisibles(fratrie, profil?.roles ?? [])
+  const onglets = ongletsDe(section, profil?.roles ?? [])
 
   const optionsParChamp: Record<string, readonly OptionReference[]> = {}
   const tronqueesParChamp: Record<string, boolean> = {}
@@ -476,7 +478,7 @@ function EcranReference({
         }
       />
 
-      <SousNavigation ressources={ressourcesDeLaSection} />
+      <SousNavigation onglets={onglets} />
 
       {filtre && parent !== undefined && (
         <p className="reference__filtre">

@@ -1,0 +1,8 @@
+/* Le reste du formulaire vient de FormulaireRessource.css : même panneau, mêmes
+   champs, pour que saisir un mouvement ressemble à saisir un produit. */
+
+/* Une quantité est un chiffre comparé : chasse fixe, comme dans les tableaux (§12). */
+.champ__saisie--chiffres {
+  font-family: var(--police-chiffres);
+  font-variant-numeric: tabular-nums;
+}

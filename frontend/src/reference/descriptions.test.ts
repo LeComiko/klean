@@ -402,7 +402,10 @@ describe('descriptions — droits', () => {
     // La liste est écrite ici parce qu'elle doit être **courte et délibérée** : y
     // ajouter une clé est une décision, pas un ajustement. L'autorité reste le
     // serveur, qui répond 403.
-    const ecritesParLeResponsable = ['absences']
+    //
+    // Deux clés de plus à l'étape 22, décidées au cadrage : les emplacements et les
+    // consommations, écrits par `Exploitation` comme les mouvements qui les visent.
+    const ecritesParLeResponsable = ['absences', 'emplacements', 'consommationsType']
 
     for (const description of Descriptions) {
       assert.ok(description.rolesLecture.includes(Roles.Responsable), description.cle)
@@ -529,6 +532,7 @@ describe('descriptions — parité avec les DTOs du serveur', () => {
    */
   const ClassesExplicites: Readonly<Record<string, string>> = {
     typesPrestation: 'TypePrestationCreateDto',
+    consommationsType: 'ConsommationTypeCreateDto',
   }
 
   test('chaque champ du DTO de création a son champ à l’écran, et réciproquement', () => {

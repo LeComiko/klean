@@ -11,21 +11,26 @@ import { Chantier } from './pages/Chantier'
 import { Compte } from './pages/Compte'
 import { Connexion } from './pages/Connexion'
 import { Planning } from './pages/Planning'
+import { Prevision } from './pages/Prevision'
 import { Reference } from './pages/Reference'
+import { Stock } from './pages/Stock'
 import { descriptionDe } from './reference/descriptions'
 
 /**
- * Écrans réels, par chemin. Ce qui n'y figure pas tombe sur `Chantier`.
+ * Écrans écrits à la main, par chemin. Ce qui n'y figure pas tombe sur `Chantier`.
  *
- * Ne concerne plus que les sections **sans** ressources : celles qui en portent
- * sont rendues par `Reference`, piloté par sa description.
+ * Deux sortes : une section **sans** ressources — le planning —, et les écrans propres
+ * d'une section à ressources (`ecrans` dans `sections.ts`), qui reçoivent leur section
+ * pour la sous-navigation. Les ressources, elles, sont rendues par `Reference`.
  */
-const Ecrans: Record<string, ReactNode> = {
-  '/planning': <Planning />,
+const Ecrans: Record<string, (section: Section) => ReactNode> = {
+  '/planning': () => <Planning />,
+  '/stock': (section) => <Stock section={section} />,
+  '/prevision': (section) => <Prevision section={section} />,
 }
 
-function ecranDe(section: Section): ReactNode {
-  return Ecrans[section.chemin] ?? <Chantier titre={section.libelle} />
+function ecranDe(section: Section, chemin: string, libelle: string): ReactNode {
+  return Ecrans[chemin]?.(section) ?? <Chantier titre={libelle} />
 }
 
 /** Une route montée sous la disposition. */
@@ -52,7 +57,11 @@ function routesDesEcrans(): RouteEcran[] {
 
   for (const section of Sections) {
     if (section.ressources === undefined) {
-      routes.push({ chemin: section.chemin, roles: section.roles, element: ecranDe(section) })
+      routes.push({
+        chemin: section.chemin,
+        roles: section.roles,
+        element: ecranDe(section, section.chemin, section.libelle),
+      })
       continue
     }
 
@@ -72,9 +81,19 @@ function routesDesEcrans(): RouteEcran[] {
             // sur une liste qui n'en a qu'une.
             key={description.cle}
             description={description}
-            fratrie={section.ressources}
+            section={section}
           />
         ),
+      })
+    }
+
+    // Les écrans propres, gardés par **leurs** rôles : la prévision est fermée au chef
+    // d'équipe, à qui la section reste ouverte.
+    for (const ecran of section.ecrans ?? []) {
+      routes.push({
+        chemin: ecran.chemin,
+        roles: ecran.roles,
+        element: ecranDe(section, ecran.chemin, ecran.libelle),
       })
     }
   }

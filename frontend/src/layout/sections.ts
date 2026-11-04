@@ -1,6 +1,7 @@
 // ⚠️ Extension explicite, et elle est nécessaire : ce module est chargé par
 // `node --test` via sections.test.ts, et Node n'applique pas la résolution sans
 // extension de Vite. Voir le piège des extensions d'import en CLAUDE.md §10.
+import { descriptionsLisibles } from '../reference/descriptions.ts'
 import { Roles, RolesInternes } from '../types/auth.ts'
 
 /**
@@ -34,7 +35,32 @@ export interface Section {
    * invariante éprouvée par `sections.test.ts`, pas une convention.
    */
   ressources?: readonly string[]
+
+  /**
+   * Écrans écrits à la main, rangés **après** les ressources dans la sous-navigation.
+   *
+   * Le cas qui les a fait naître : le stock et la prévision de l'étape 22, qui ne sont
+   * pas des listes à formulaire — une quantité ne se saisit pas, elle résulte d'un
+   * mouvement. Chacun porte ses rôles, que `roles` de la section doit couvrir.
+   */
+  ecrans?: readonly EcranSection[]
 }
+
+/** Un écran propre d'une section : son chemin, son onglet, ses lecteurs. */
+export interface EcranSection {
+  chemin: string
+  libelle: string
+  roles: readonly string[]
+}
+
+/** Un onglet de sous-navigation, ressource décrite ou écran propre. */
+export interface Onglet {
+  chemin: string
+  libelle: string
+}
+
+/** Lecture et écriture du stock pour l'exploitation : `RolesKlean.Exploitation`. */
+const Exploitation: readonly string[] = [Roles.Administrateur, Roles.Responsable]
 
 /**
  * Le seul écran qui n'est **pas** une section, et le seul chemin monté par
@@ -72,13 +98,11 @@ export const Sections: readonly Section[] = [
   // les contrats et les prestations lui sont fermés, et les rôles de la section
   // valent l'union des lectures de ses quatre ressources.
   //
-  // ⚠️ La pastille reste `SI` alors que la section commence par Clients. Les
-  // libellés de pastilles seront revus à l'étape des Stocks : les renommer
-  // maintenant, pour les renommer encore à l'étape suivante, ferait deux fois le
-  // travail et deux fois la désorientation.
+  // La pastille dit la première ressource, celle où l'on arrive : `CL`. Elle a valu
+  // `SI` jusqu'à l'étape 22, où les libellés ont été revus d'un seul geste.
   {
     chemin: '/clients',
-    pastille: 'SI',
+    pastille: 'CL',
     libelle: 'Clients et sites',
     roles: InternesEtClientSyndic,
     // Le catalogue clôt la chaîne : il ne descend d'aucune ressource, il sert les
@@ -97,21 +121,41 @@ export const Sections: readonly Section[] = [
     ressources: ['agents', 'absences'],
   },
 
-  // ⚠️ `ST` mène désormais à Produits, et le chemin a donc changé de `/stocks` à
-  // `/produits` : l'invariante veut que le chemin d'une section soit celui de sa
-  // première ressource, faute de quoi la destination d'arrivée pointerait vers une
-  // route qu'`App.tsx` ne monte pas. L'écran « en chantier » des stocks disparaît
-  // avec lui, et c'est préférable à un écran qui ne promet rien : les Stocks sont
-  // une des quatre fonctions du cœur de produit et ont leur propre étape, où ils
-  // rejoindront cette section en deuxième ressource.
+  // Le stock, étape 22 : ce qui se stocke, où, ce que chaque passage consomme, puis
+  // les quantités et le besoin. L'ordre est celui de la mise en route — on ne compte
+  // pas un stock avant d'avoir un produit et un lieu.
+  //
+  // ⚠️ Le chemin reste `/produits` : celui d'une section est celui de sa première
+  // ressource, faute de quoi la destination d'arrivée pointerait vers une route
+  // qu'`App.tsx` ne monte pas.
   {
     chemin: '/produits',
     pastille: 'ST',
-    libelle: 'Produits et stocks',
+    libelle: 'Stock',
     roles: RolesInternes,
-    ressources: ['produits'],
+    ressources: ['produits', 'emplacements', 'consommationsType'],
+    ecrans: [
+      { chemin: '/stock', libelle: 'Stock', roles: RolesInternes },
+      // ⚠️ L'exploitation seule : les vacations d'un chef sont filtrées sur son équipe,
+      // le stock non, et sa prévision serait fausse (SPEC.md, étape 22, lot B).
+      { chemin: '/prevision', libelle: 'Prévision', roles: Exploitation },
+    ],
   },
 ]
+
+/**
+ * Les onglets de la sous-navigation d'une section, pour ces rôles : ses ressources
+ * lisibles, dans l'ordre de la chaîne, puis ses écrans ouverts.
+ *
+ * ⚠️ Filtrés par rôle un à un, comme les liens de descente : un chef d'équipe ne voit
+ * pas l'onglet de la prévision, qui lui répondrait 403.
+ */
+export function ongletsDe(section: Section, roles: readonly string[]): readonly Onglet[] {
+  return [
+    ...descriptionsLisibles(section.ressources ?? [], roles),
+    ...(section.ecrans ?? []).filter((ecran) => ecran.roles.some((role) => roles.includes(role))),
+  ]
+}
 
 /**
  * La première section ouverte à ces rôles, ou `undefined` si aucune.

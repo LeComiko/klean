@@ -1,0 +1,66 @@
+/* Le filtre du lieu, au-dessus du tableau : une liste et son étiquette, sans cadre —
+   ce n'est pas un formulaire, c'est la façon de regarder la liste. */
+.stock__filtre {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-3);
+  margin-bottom: var(--espace-4);
+}
+
+.stock__filtre-libelle {
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texte-2);
+}
+
+.stock__filtre-liste {
+  min-width: 260px;
+  height: var(--ligne-compacte);
+  padding: 0 var(--espace-3);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-family: var(--police);
+  font-size: var(--corps-taille);
+}
+
+.stock__filtre-liste:focus {
+  border-color: var(--brand);
+}
+
+.stock__titre {
+  margin: var(--espace-8) 0 var(--espace-4);
+  font-size: var(--titre-section-taille);
+  line-height: var(--titre-section-interligne);
+  font-weight: var(--titre-section-graisse);
+}
+
+/* La date d'un mouvement ne se coupe pas : « 24 mai 2027, 09:05 » sur deux lignes se
+   lit comme deux informations. */
+.stock__date {
+  white-space: nowrap;
+}
+
+/* La nature est un mot court : la classe de titre du tableau, qui coupe n'importe où
+   pour les noms de sites, faisait lire « Inventair / e ». */
+.stock__nature {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .stock__filtre {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .stock__filtre-liste {
+    min-width: 0;
+    height: var(--cible-tactile);
+    font-size: var(--corps-mobile-taille);
+  }
+}

@@ -2279,6 +2279,57 @@ Trois réponses obtenues au début du lot :
   - filtre global retiré.
 - **Aucun écran** : les consommations, la prévision et les alertes s'affichent au lot C.
 
+**Lot C — fait le 4 novembre 2026**
+
+La section `ST`, libellée « Stock » : Produits › Emplacements › Consommations › Stock ›
+Prévision.
+
+- **Deux écrans de référence**, sans page écrite :
+  - **Emplacements** : nom, type, actif. L'aide du nom dit « la plaque ou le modèle,
+    jamais le conducteur » : c'est la condition de l'exemption d'`EmplacementDto` au
+    journal d'accès.
+  - **Consommations** : elles descendent du catalogue. Chaque type offre « Voir les
+    consommations », et la descente traverse les sections.
+- **Deux écrans propres**, déclarés dans `ecrans` de la section. Une quantité ne se
+  saisit pas et une prévision ne s'enregistre pas, donc ce ne sont pas des listes à
+  formulaire.
+  - **Stock** : les quantités par lieu, filtrables par lieu, et les derniers mouvements.
+    La saisie d'un mouvement est réservée à l'`Exploitation`. Elle ne montre que les
+    lieux qu'exige la nature, et n'envoie que ceux-là. Un refus du serveur s'affiche tel
+    quel : il nomme l'inventaire.
+  - **Prévision** : réservée à l'`Exploitation`, et l'onglet est absent pour le chef.
+    - Un horizon de 1 à 12 semaines.
+    - Une ligne par produit, avec un mot et une pastille par état, dans le ton du retard
+      et jamais en terre cuite.
+    - Un détail par site, qui dit ce qu'il faut y apporter : c'est la proposition de
+      réapprovisionnement, en lecture.
+    - Les vacations sans type sont dites, avec la sortie.
+- **Pastilles revues** : `SI` devient `CL`, puisque la section commence par Clients.
+- **Logique extraite** dans `stock/mouvements.ts` et `stock/prevision.ts`, avec 20 tests.
+  Onze sabotages côté écran, tous rouges :
+  - côté non exigé envoyé ;
+  - lieux de l'inventaire ;
+  - transfert sur place ;
+  - quantité en chaîne ;
+  - alerte de couverture tue ;
+  - onglets sans rôles ;
+  - prévision ouverte au chef ;
+  - rôle d'écran hors de la section ;
+  - chemin monté deux fois ;
+  - accord de la phrase des vacations sans type ;
+  - champ de description sans DTO.
+- **Vérifié dans le navigateur**, sur un petit jeu saisi dans la base de développement :
+  - la prévision rend les chiffres attendus ;
+  - un transfert excessif est refusé avec le message du serveur ;
+  - un inventaire passe, avec l'origine du transfert précédent restée dans le formulaire,
+    et son écart s'inscrit ;
+  - la descente depuis le catalogue fonctionne.
+  - Un défaut vu et corrigé : la nature d'un mouvement se coupait au milieu du mot.
+- **Limites vues, laissées en l'état** : le moteur des écrans de référence affiche les
+  nombres avec un point (« 0.5 ») et les énumérations par leur nom brut (« Depot »),
+  comme partout ailleurs. L'auteur d'un mouvement n'est pas affiché : la route des
+  comptes est réservée à l'administrateur.
+
 ---
 
 # Suite — non planifié

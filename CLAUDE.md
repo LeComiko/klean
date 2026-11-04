@@ -129,6 +129,7 @@ KLEAN/
         ├── layout/      Navigation, Disposition, sections.ts
         ├── pages/       un fichier par écran, plus Reference.tsx et Compte.tsx
         ├── reference/   descriptions.ts, valeurs.ts — le motif liste-et-formulaire
+        ├── stock/       mouvements.ts, prevision.ts — la saisie et la lecture du stock
         ├── styles/      tokens.css
         ├── types/       interfaces TypeScript
         └── utils/       dates.ts, dates.test.ts
@@ -1520,6 +1521,14 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   répond 403. Une description dans `src/reference/descriptions.ts`, et
   `src/pages/Reference.tsx` la rend. Ajouter une ressource, c'est ajouter une
   description et une clé dans `sections.ts` — jamais un fichier de page.
+
+  **Ce qui n'est pas une liste à formulaire a sa page**, déclarée dans `ecrans` de sa
+  section : le stock et la prévision de l'étape 22. Une quantité ne se saisit pas, elle
+  résulte d'un mouvement ; une prévision ne s'enregistre pas. Un écran propre porte
+  **ses** rôles — la prévision est fermée au chef d'équipe, à qui la section reste
+  ouverte —, et la sous-navigation le range après les ressources (`ongletsDe`).
+  `sections.test.ts` exige que les rôles d'une section couvrent ceux de ses écrans, et
+  qu'aucun chemin ne soit monté deux fois.
 - **L'étiquette d'une description n'est jamais une clé étrangère.** Elle sert deux
   fois : nommer une ligne, et **libeller les options de la liste déroulante d'une
   ressource enfant**. L'écran d'une prestation charge les contrats, pas les sites : une

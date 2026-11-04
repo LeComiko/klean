@@ -604,6 +604,115 @@ const Produits: DescriptionRessource = {
   rolesEcriture: EcritureReference,
 }
 
+/** `TypeEmplacement`, miroir de `backend/Models/Emplacement.cs`. Le site n'en est pas un. */
+const TypesDEmplacement = ['Depot', 'Vehicule'] as const
+
+/**
+ * Dépôts et véhicules (SPEC.md, étape 22). Écrits par l'exploitation, comme les
+ * mouvements qui les visent.
+ */
+const Emplacements: DescriptionRessource = {
+  cle: 'emplacements',
+  chemin: '/emplacements',
+  route: '/api/emplacements',
+  libelle: 'Emplacements',
+  singulier: 'emplacement',
+  genre: 'masculin',
+  sousTitre: 'Les dépôts et les véhicules qui portent du stock',
+  etiquette: 'nom',
+
+  colonnes: [
+    { nom: 'nom', libelle: 'Nom' },
+    { nom: 'type', libelle: 'Type' },
+    { nom: 'actif', libelle: 'Actif' },
+  ],
+
+  champs: [
+    {
+      nom: 'nom',
+      libelle: 'Nom',
+      type: 'texte',
+      requis: true,
+      longueurMax: 200,
+      // ⚠️ La condition de l'exemption d'`EmplacementDto` au journal d'accès
+      // (CLAUDE.md §7 bis) : un véhicule nommé « Kangoo de Paul » ferait de cette liste
+      // une donnée personnelle que personne ne journalise. L'écran le dit au moment
+      // où le nom se choisit.
+      aide: 'Un véhicule se nomme par sa plaque ou son modèle, jamais par son conducteur.',
+    },
+    { nom: 'type', libelle: 'Type', type: 'choix', requis: true, choix: TypesDEmplacement },
+    {
+      nom: 'actif',
+      libelle: 'Actif',
+      type: 'booleen',
+      defaut: true,
+      aide: 'Décoché, l’emplacement ne reçoit plus rien ; ce qui s’y trouve peut encore en sortir.',
+    },
+  ],
+
+  rolesLecture: RolesInternes,
+  rolesEcriture: EcritureExploitation,
+}
+
+/**
+ * Ce qu'un passage de chaque type consomme (SPEC.md, étape 22, lot B). Elle descend du
+ * catalogue — « les consommations de ce type » — alors que l'écran vit dans la section
+ * du stock : la descente traverse les sections, et c'est voulu.
+ */
+const ConsommationsType: DescriptionRessource = {
+  cle: 'consommationsType',
+  chemin: '/consommations',
+  route: '/api/consommations-type',
+  libelle: 'Consommations',
+  singulier: 'consommation',
+  genre: 'feminin',
+  sousTitre: 'Ce qu’un passage de chaque type consomme, pour prévoir le besoin',
+  // Imparfait, mais ni une référence ni un booléen : aucune ressource n'en descend, et
+  // la ligne se nomme ainsi dans une confirmation de suppression.
+  etiquette: 'quantiteParPassage',
+
+  colonnes: [
+    { nom: 'typePrestationId', libelle: 'Type de prestation', reference: 'typesPrestation' },
+    { nom: 'produitId', libelle: 'Produit', reference: 'produits' },
+    { nom: 'quantiteParPassage', libelle: 'Par passage', chiffres: true },
+  ],
+
+  champs: [
+    {
+      nom: 'typePrestationId',
+      libelle: 'Type de prestation',
+      type: 'reference',
+      reference: 'typesPrestation',
+      requis: true,
+      seulementActifs: true,
+    },
+    {
+      nom: 'produitId',
+      libelle: 'Produit',
+      type: 'reference',
+      reference: 'produits',
+      requis: true,
+      // Le serveur refuse d'attacher un produit désactivé : ne pas le proposer.
+      seulementActifs: true,
+    },
+    {
+      nom: 'quantiteParPassage',
+      libelle: 'Quantité par passage',
+      type: 'nombre',
+      requis: true,
+      min: 0.01,
+      max: 99999999.99,
+      pas: 0.01,
+      aide: 'Dans l’unité du produit. Une prestation sans type ne consomme rien.',
+    },
+  ],
+
+  rolesLecture: RolesInternes,
+  rolesEcriture: EcritureExploitation,
+
+  parent: { ressource: 'typesPrestation', champ: 'typePrestationId' },
+}
+
 /**
  * ⚠️ L'ordre suit la **chaîne du modèle**, pas l'alphabet : un site appartient à
  * un client, on ne peut donc pas créer le second avant le premier. C'est cet ordre
@@ -619,6 +728,8 @@ export const Descriptions: readonly DescriptionRessource[] = [
   Agents,
   Absences,
   Produits,
+  Emplacements,
+  ConsommationsType,
 ]
 
 export function descriptionDe(cle: string): DescriptionRessource | undefined {

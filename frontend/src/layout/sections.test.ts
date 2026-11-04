@@ -3,7 +3,7 @@ import { describe, test } from 'node:test'
 
 import { descriptionDe } from '../reference/descriptions.ts'
 import { Roles } from '../types/auth.ts'
-import { CheminCompte, Sections, premiereSectionOuverte } from './sections.ts'
+import { CheminCompte, Sections, ongletsDe, premiereSectionOuverte } from './sections.ts'
 
 /**
  * `Sections` est la source unique de la navigation, des routes et de la
@@ -20,8 +20,9 @@ describe('sections — navigation et destination d’arrivée', () => {
     assert.equal(Sections.some((section) => section.pastille === 'TB'), false)
   })
 
-  test('les pastilles sont celles de SPEC.md étape 13, moins TB', () => {
-    assert.deepEqual(Sections.map((section) => section.pastille), ['PL', 'SI', 'AG', 'ST'])
+  test('les pastilles sont celles de SPEC.md étape 13, moins TB, revues à l’étape 22', () => {
+    // `SI` est devenu `CL` : la pastille dit la ressource où l'on arrive.
+    assert.deepEqual(Sections.map((section) => section.pastille), ['PL', 'CL', 'AG', 'ST'])
   })
 
   test('chaque section déclare un chemin absolu et un libellé', () => {
@@ -56,7 +57,7 @@ describe('sections — navigation et destination d’arrivée', () => {
       }
     })
 
-    test('les rôles d’une section valent l’union des lectures de ses ressources', () => {
+    test('les rôles d’une section valent l’union des lectures de ses ressources et écrans', () => {
       // L'invariante qui empêche les deux divergences symétriques : une pastille
       // visible dont toutes les listes répondent 403, et une liste lisible dont la
       // pastille est cachée.
@@ -67,6 +68,10 @@ describe('sections — navigation et destination d’arrivée', () => {
           for (const role of descriptionDe(cle)?.rolesLecture ?? []) union.add(role)
         }
 
+        for (const ecran of section.ecrans ?? []) {
+          for (const role of ecran.roles) union.add(role)
+        }
+
         assert.deepEqual(
           [...(section.roles ?? [])].sort(),
           [...union].sort(),
@@ -75,10 +80,16 @@ describe('sections — navigation et destination d’arrivée', () => {
       }
     })
 
-    test('aucun chemin de ressource n’est monté deux fois', () => {
-      const chemins = avecRessources.flatMap((section) =>
-        (section.ressources ?? []).map((cle) => descriptionDe(cle)?.chemin ?? cle),
-      )
+    test('aucun chemin de ressource ou d’écran n’est monté deux fois', () => {
+      const chemins = [
+        ...Sections.map((section) => section.chemin).filter((chemin) =>
+          !avecRessources.some((section) => section.chemin === chemin)),
+        ...avecRessources.flatMap((section) => [
+          ...(section.ressources ?? []).map((cle) => descriptionDe(cle)?.chemin ?? cle),
+          ...(section.ecrans ?? []).map((ecran) => ecran.chemin),
+        ]),
+        CheminCompte,
+      ]
 
       assert.equal(new Set(chemins).size, chemins.length, chemins.join(' '))
     })
@@ -93,6 +104,28 @@ describe('sections — navigation et destination d’arrivée', () => {
       for (const section of Sections.filter((candidate) => candidate.ressources === undefined)) {
         assert.equal(deRessources.has(section.chemin), false, section.chemin)
       }
+    })
+  })
+
+  describe('les onglets du stock', () => {
+    const stock = Sections.find((section) => section.pastille === 'ST')
+
+    test('les ressources dans l’ordre de la mise en route, puis les écrans', () => {
+      assert.ok(stock)
+      assert.deepEqual(
+        ongletsDe(stock, [Roles.Administrateur]).map((onglet) => onglet.chemin),
+        ['/produits', '/emplacements', '/consommations', '/stock', '/prevision'],
+      )
+    })
+
+    test('le chef d’équipe n’a pas l’onglet de la prévision, qui lui répondrait 403', () => {
+      // Ses vacations sont filtrées sur son équipe, le stock non : sa prévision
+      // comparerait le besoin d'une équipe au stock de l'entreprise.
+      assert.ok(stock)
+      const chemins = ongletsDe(stock, [Roles.ChefEquipe]).map((onglet) => onglet.chemin)
+
+      assert.ok(chemins.includes('/stock'))
+      assert.equal(chemins.includes('/prevision'), false)
     })
   })
 
