@@ -2093,6 +2093,86 @@ d'un geste de liste, il les déclarera.
 
 ---
 
+# Étape 22 — Stock
+
+La quatrième fonction du cœur de produit (`CLAUDE.md` §1), écartée de l'étape 16 bis
+parce qu'elle a ses propres notions — emplacements, mouvements, consommation, alertes —
+et n'est pas un formulaire de plus. L'étape 21 a posé ce dont elle avait besoin : un
+**type** de prestation, auquel attacher une consommation standard.
+
+**Ce qui existe, relu le 4 novembre 2026** — et trois constats changent la nature des
+questions.
+
+- `Produit` : nom, référence, unité, seuil d'alerte. Écran de référence en place.
+- `Stock` : produit, type d'emplacement (`Depot`, `Vehicule`, `Site`), `EmplacementId`,
+  quantité. CRUD par l'API pour `Exploitation`, **aucun écran**. Base de développement :
+  zéro produit, zéro stock.
+- ⚠️ **Ni dépôt ni véhicule n'existent comme entités.** `EmplacementId` est un `Guid`
+  libre, et le contrôleur l'accepte sans contrôle, son commentaire le dit. Un stock
+  « au dépôt » pointe donc vers un identifiant que rien ne nomme et que personne ne
+  pourra afficher. La décision « sans clé étrangère » a été prise quand aucun écran ne
+  devait jamais montrer l'emplacement.
+- ⚠️ **La quantité se saisit**, elle ne se mouvemente pas. Aucune trace de qui l'a
+  changée, quand, ni pourquoi. Rien n'empêche non plus deux lignes pour le même produit
+  au même emplacement.
+- ⚠️ **Rien ne fait passer une vacation à `Terminee`**, sauf un `PUT` brut. Il n'y a ni
+  application agent ni certification. Une consommation « déduite à chaque passage » se
+  déduirait donc de passages dont personne ne sait s'ils ont eu lieu.
+
+**À trancher avant le lot A**
+
+| Question | Options | Penchant |
+|---|---|---|
+| Les emplacements | entité `Emplacement` (dépôt, véhicule) avec vraies clés étrangères ; `Guid` libre comme aujourd'hui | **entité**. Un emplacement qu'on ne peut pas nommer ne peut pas s'afficher. Le stock référence alors soit un `Emplacement`, soit un `Site`, chacun par une clé en `Restrict`, avec une contrainte « exactement l'un des deux ». Cela **révise une décision prise** (tableau en fin de fichier), et la table est vide : c'est le moment le moins cher |
+| Quantité ou mouvements | quantité saisie, comme aujourd'hui ; table `MouvementStock` — entrée, sortie, transfert, inventaire | **mouvements**. « Pourquoi le stock a-t-il baissé de douze litres ? » n'a pas de réponse sans eux, et le transfert du dépôt vers un véhicule est le geste quotidien. La quantité reste stockée, mise à jour par le service dans la même transaction que le mouvement, jamais saisie. Une seule ligne par produit et par emplacement, gardée par un index unique |
+| Consommation standard | par type de prestation ; par prestation ; par type, avec exception par prestation | **par type, seulement, en V1**. Dix-sept types fois quelques produits se saisissent une fois. Par prestation, c'est des dizaines de lignes par site. L'exception par prestation donnerait deux sources à la même quantité, et peut attendre qu'un site la demande. Une prestation sans type ne consomme rien, et l'écran le dit |
+| Ce que fait la consommation | déduite du stock à chaque vacation `Terminee` ; **prévisionnelle** — le besoin des semaines à venir, depuis le planning | **prévisionnelle**. Vacations planifiées × consommation de leur type, comparées au stock. Le réel s'établit par l'**inventaire**, un mouvement d'ajustement. La déduction automatique attend la certification des passages : avant elle, elle inventerait une consommation |
+| Les alertes | seuil fixe du produit, qui existe ; couverture en semaines de besoin prévu ; les deux | **les deux** : « sous le seuil », puis « couverture courte ». Seuil **par produit**, tous emplacements confondus, en V1. ⚠️ **Pas de 🟢🟠🔴** comme l'écrivait la Suite : la terre cuite est réservée au « non pourvu » (`CLAUDE.md` §12), et chaque état porte un **mot** et une pastille, avec les jetons existants |
+| Qui écrit | `Exploitation`, comme aujourd'hui ; chef d'équipe en plus | **`Exploitation`**, le chef d'équipe lit. Le chef recharge souvent un véhicule, mais aucun lien ne rattache un véhicule à une équipe. Le lui ouvrir sans ce lien ouvrirait tout le stock de l'entreprise, ce qui ne répond pas au besoin. À rouvrir avec un pilote |
+
+**Réponses obtenues le 4 novembre 2026** — les six penchants sont retenus.
+
+| Question | Réponse | Ce que cela veut dire dans le code |
+|---|---|---|
+| Emplacements | **entité `Emplacement`** | dépôts et véhicules : nom, type, actif, `EntrepriseId` et filtre global. `Stock` porte `EmplacementId` **ou** `SiteId`, deux clés nullables en `Restrict`, et une contrainte de base « exactement l'un des deux ». `TypeEmplacement` passe sur `Emplacement` (`Depot`, `Vehicule`), et le site est l'autre branche |
+| Mouvements | **par mouvements** | `MouvementStock` : nature (entrée, sortie, transfert, inventaire), produit, origine et destination, quantité, date, auteur. `Stock.Quantite` n'est plus écrite que par le service, dans la transaction du mouvement. Index unique par produit et emplacement. Le CRUD direct de la quantité disparaît |
+| Consommation standard | **par type, seulement** | `ConsommationType` : type de prestation, produit, quantité par passage. Aucune surcharge par prestation en V1 |
+| Effet | **prévisionnel** | besoin = vacations planifiées non annulées × consommation de leur type, sur N semaines. Aucune déduction automatique ; l'inventaire constate le réel |
+| Alertes | **seuil et couverture** | « Sous le seuil » d'après `Produit.SeuilAlerte`, tous emplacements confondus ; « Couverture courte » quand le stock ne couvre pas le besoin prévu. Un mot et une pastille, avec les jetons existants |
+| Droits | **`Exploitation` écrit, le chef lit** | `RolesKlean.Exploitation` sur les mouvements, les emplacements et les consommations ; lecture `Interne` |
+
+⚠️ **Le lot A supprime des colonnes de `Stocks`** — `TypeEmplacement` et le `Guid` libre
+`EmplacementId`, remplacés par deux clés réelles. C'est une opération destructrice sur une
+table métier, que `CLAUDE.md` §14 soumet à accord. La table est vide en développement ; la
+migration sera présentée, et une instance déjà peuplée demanderait une reprise des
+lignes existantes, qu'aucune n'a aujourd'hui.
+
+**Conséquences à vérifier au cadrage**
+
+- **`RGPD.md`** : un mouvement porte son **auteur**, sans quoi la trace ne répond pas à
+  « qui ». C'est une donnée personnelle, celle d'un collègue. Il faut l'inscrire dans la
+  cartographie, avec une durée de conservation, et ne pas la journaliser : elle désigne
+  qui a écrit, elle ne divulgue rien.
+- **Section `ST`** : Produits, Emplacements, Stocks, et la vue des alertes. Les libellés
+  des pastilles annoncés « à revoir à l'étape des Stocks » (`sections.ts`) se revoient ici.
+- **Hors V1, et dit tel quel** : commande fournisseur et prix d'achat, qui relèvent de
+  l'ERP hors périmètre (`CLAUDE.md` §1) ; déduction au passage, qui attend la
+  certification ; stock par équipe.
+- **Proposition de réapprovisionnement** : besoin prévu moins stock, par emplacement, en
+  liste. C'est une lecture, pas une commande.
+
+**Lots, provisoires**
+
+- **A** — `Emplacement`, la refonte de `Stock` en clés réelles et index unique, les
+  mouvements et leur service : entrée, sortie, transfert, inventaire. Une migration,
+  présentée avant d'être appliquée.
+- **B** — consommation standard par type, besoin prévisionnel sur N semaines, alertes et
+  couverture.
+- **C** — les écrans de la section `ST` : emplacements, stock par emplacement, saisie
+  d'un mouvement, vue des alertes et du réapprovisionnement.
+
+---
+
 # Suite — non planifié
 
 Par ordre de valeur, à cadrer le moment venu.
@@ -2115,10 +2195,9 @@ terminer. Suppose les entités `Checklist` et `Anomalie`. Suppose aussi un
 parce que sa grille nomme tous les agents de l'entreprise, et le filtre
 multi-tenant ne restreint pas cette colonne.
 
-**Module stock.** L'entité pivot est `PrestationProduit` (PrestationId,
-ProduitId, QuantiteParIntervention). Sans elle, le stock se réduit à un
-inventaire sans valeur. Ensuite : consommation prévisionnelle, alertes
-🟢🟠🔴, proposition de réapprovisionnement.
+~~**Module stock.**~~ Cadré à l'étape 22. L'entité pivot `PrestationProduit` qui
+figurait ici y devient une consommation **par type de prestation**, et les alertes
+🟢🟠🔴 y perdent leur rouge, réservé au « non pourvu ».
 
 **Rattachement agent ↔ site.** Table `AgentSite` avec `EstTitulaire`. Sert au
 filtrage et au périmètre du chef d'équipe. Ne remplace pas le calcul
@@ -2164,7 +2243,7 @@ Quand un client demande « pourquoi ce montant ? », on peut répondre.
 | Blocs de planning | Une seule couleur | Une couleur par agent devient illisible au-delà de dix agents et brûle la palette |
 | Compétences | Hors V1 du moteur | L'entité n'existe pas ; ne pas bloquer le moteur dessus |
 | Remplacement automatique | Non implémenté | Sans notifications ni application agent, il n'y a personne à contacter |
-| `Stock.EmplacementId` | Sans clé étrangère | Peut pointer vers un dépôt, un véhicule ou un site |
+| ~~`Stock.EmplacementId`~~ | ~~Sans clé étrangère~~ → **révisée à l'étape 22** : entité `Emplacement` et deux clés réelles, « exactement l'une des deux » | La décision d'origine supposait qu'aucun écran n'afficherait l'emplacement. Un dépôt qu'on ne peut pas nommer ne peut pas s'afficher, et un identifiant faux était accepté sans contrôle. Révisée quand la table était vide |
 | Écriture inter-tenant | `EntrepriseId` forcé sans condition, retiré des `CreateDto` | Le mécanisme conditionnel laissait passer un identifiant forgé valide, donc l'écriture chez un concurrent |
 | Pagination | `?page&taille` plafonnée, réponse enveloppée | Onze endpoints renvoyaient tout : épuisement de ressources, et forme à figer avant d'écrire les écrans |
 | Base de test | PostgreSQL dédiée `klean_test` | Le fournisseur InMemory ne reproduit ni les filtres globaux, ni les contraintes, ni le refus des `DateTime` non datés — ce qu'on veut justement tester |
