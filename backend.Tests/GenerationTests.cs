@@ -608,7 +608,7 @@ public class GenerationTests : IAsyncLifetime
     /// <summary>Lues en base, hors de tout tenant : la vérité, pas ce que l'API veut bien montrer.</summary>
     private async Task<List<Intervention>> Vacations(Guid prestationId)
     {
-        using var portee = _fixture.Fabrique.Services.CreateScope();
+        using var portee = _fixture.PorteeAuProprietaire();
         var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
 
         return await db.Interventions.AsNoTracking()

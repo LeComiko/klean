@@ -23,6 +23,17 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
     {
     }
 
+    /// <summary>
+    /// Vrai quand <see cref="BasculeRoleApplicatif"/> doit mettre la connexion sous la RLS
+    /// (SPEC.md, étape 26) : tout contexte injecté, tant que le filtrage n'a pas été désactivé.
+    /// Faux pour un contexte construit hors injection — les migrations — et sous
+    /// <c>DesactiverFiltrage</c> : la connexion reste alors au propriétaire.
+    /// </summary>
+    internal bool SousLaSecuriteDesLignes => _tenant?.FiltrageActif == true;
+
+    /// <summary>L'entreprise que les politiques comparent. Nulle : aucune ligne.</summary>
+    internal Guid? EntrepriseDuJeton => _tenant?.EntrepriseId;
+
     // Le filtre global doit traverser des propriétés d'INSTANCE du DbContext.
     // OnModelCreating ne s'exécute qu'une fois par type de contexte, puis le
     // modèle est mis en cache : un filtre qui capturerait une variable locale

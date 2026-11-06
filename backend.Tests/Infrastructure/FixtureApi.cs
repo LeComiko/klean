@@ -79,7 +79,10 @@ public class FixtureApi : IAsyncLifetime
     /// </summary>
     public async Task ReinitialiserAsync()
     {
-        using var portee = Fabrique.Services.CreateScope();
+        // Le vidage et la recréation des deux entreprises se font au propriétaire, hors de la
+        // sécurité au niveau des lignes (SPEC.md, étape 26) : `klean_app` n'a ni `TRUNCATE`, ni
+        // le droit de créer une entreprise qui n'est pas la sienne.
+        using var portee = PorteeAuProprietaire();
         var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
 
         // La série partage une instance d'application : sans remise à zéro, les
@@ -452,8 +455,25 @@ public class FixtureApi : IAsyncLifetime
     /// </summary>
     public async Task AvecServicesAsync(Func<IServiceProvider, Task> action)
     {
-        using var portee = Fabrique.Services.CreateScope();
+        using var portee = PorteeAuProprietaire();
         await action(portee.ServiceProvider);
+    }
+
+    /// <summary>
+    /// Une portée dont le contexte reste au propriétaire, hors de la sécurité au niveau des
+    /// lignes (SPEC.md, étape 26) — ce que fait l'amorçage.
+    ///
+    /// ⚠️ C'est la seule façon d'ouvrir une portée dans un test qui touche la base **sous
+    /// l'API** : poser une ligne qu'aucune route n'écrit, éprouver une contrainte par du SQL
+    /// direct, ou lire <c>pg_stat_activity</c>. Sans tenant, la base n'accepterait ni ne rendrait
+    /// aucune ligne, et sous <c>klean_app</c> les sessions des autres ne s'y voient pas. Côté
+    /// EF, rien ne change : l'absence de tenant y valait déjà absence de filtre.
+    /// </summary>
+    public IServiceScope PorteeAuProprietaire()
+    {
+        var portee = Fabrique.Services.CreateScope();
+        portee.ServiceProvider.GetRequiredService<ITenantContext>().DesactiverFiltrage();
+        return portee;
     }
 
     /// <summary>Désactive un compte en base : aucun endpoint ne le fait encore.</summary>

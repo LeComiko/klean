@@ -117,7 +117,7 @@ public class PrevisionStockTests : IAsyncLifetime
         // ⚠️ La course est provoquée, pas espérée (CLAUDE.md §10) : la ligne concurrente est
         // insérée dans une transaction laissée ouverte, la vérification du contrôleur ne la
         // voit pas, son insertion attend sur l'index, et la validation la fait tomber.
-        using var portee = _fixture.Fabrique.Services.CreateScope();
+        using var portee = _fixture.PorteeAuProprietaire();
         var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
         await using var transaction = await db.Database.BeginTransactionAsync();
         await db.Database.ExecuteSqlAsync($"""
@@ -209,7 +209,7 @@ public class PrevisionStockTests : IAsyncLifetime
     {
         var refus = await Assert.ThrowsAsync<PostgresException>(async () =>
         {
-            using var portee = _fixture.Fabrique.Services.CreateScope();
+            using var portee = _fixture.PorteeAuProprietaire();
             await portee.ServiceProvider.GetRequiredService<KleanDbContext>().Database.ExecuteSqlAsync($"""
                 INSERT INTO "ConsommationsType" ("Id", "EntrepriseId", "TypePrestationId", "ProduitId", "QuantiteParPassage")
                 VALUES ({Guid.NewGuid()}, {_fixture.EntrepriseAlpha}, {_hall}, {_detergent}, 0)
@@ -506,7 +506,7 @@ public class PrevisionStockTests : IAsyncLifetime
     /// </summary>
     private async Task AttendreUneAttenteDeVerrouAsync(Task requete)
     {
-        using var portee = _fixture.Fabrique.Services.CreateScope();
+        using var portee = _fixture.PorteeAuProprietaire();
         var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
 
         for (var essai = 0; essai < 200; essai++)

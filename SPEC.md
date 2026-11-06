@@ -3423,6 +3423,65 @@ rôle de connexion contre l'injection ; la RLS sur les tables d'Identity.
 - **B** — les documents : `CLAUDE.md` §7 et §10, `DEPLOIEMENT.md` (une instance existante,
   une base gérée), `RGPD.md` §10.
 
+**Lot A — fait le 6 novembre 2026**
+
+- **La migration `SecuriteAuNiveauDesLignes`**, générée vide puis écrite à la main en SQL. Le
+  modèle d'EF ne change pas. Elle :
+  - crée `klean_app` s'il n'existe pas ;
+  - lui donne la lecture et l'écriture des lignes, rien d'autre, et les mêmes droits par
+    défaut aux tables futures ;
+  - pose vingt et une politiques, en lecture comme en écriture.
+
+  Appliquée à `klean_test` seulement. **La base de développement ne l'a pas** : son API
+  échouera jusqu'à ce qu'elle soit appliquée, puisque la connexion bascule désormais sur un
+  rôle qui n'y a aucun droit.
+- **`BasculeRoleApplicatif`**, un intercepteur de connexion. À chaque ouverture, en une seule
+  commande, il pose l'entreprise du jeton, vide sans elle, puis `SET ROLE klean_app`. Sous
+  `DesactiverFiltrage`, ou pour un contexte construit hors injection, il revient
+  explicitement au rôle de connexion. ⚠️ Aucun réglage ne dit à une politique de tout
+  laisser passer : un code fautif ne trouve aucune valeur à poser pour sortir de la RLS en
+  restant `klean_app`.
+- **`FabriqueDeConception`**, et elle est vérifiée sur le bundle lui-même :
+  - `dotnet ef` annonce l'employer ;
+  - le bundle se construit sans chaîne de connexion ;
+  - joué sur une base jetable, il applique les dix-neuf migrations et pose les vingt et une
+    politiques, avec la seule chaîne en environnement et **sans clé JWT**. Il n'exécute
+    donc plus `Program.cs`, et la note de `CLAUDE.md` §13 devient fausse.
+- **Les tests qui touchent la base sous l'API** passent par `PorteeAuProprietaire`, une
+  portée sous `DesactiverFiltrage`. Ils posent des lignes qu'aucune route n'écrit, ou lisent
+  `pg_stat_activity`. ⚠️ Vingt-deux échecs à la première série complète :
+  - onze portées ouvertes à la main dans quatre classes, invisibles tant que la base ne
+    gardait rien ;
+  - pour les tests de concurrence, `klean_app` ne voit pas les sessions des autres dans
+    `pg_stat_activity`.
+- **`SecuriteDesLignesTests`, 9 cas** :
+  - la connexion d'une requête est sous `klean_app`, avec son entreprise ;
+  - le contournement reste au propriétaire ;
+  - un filtre oublié ne rend que l'entreprise du jeton, `Entreprises` comprise ;
+  - sans entreprise, aucune ligne ;
+  - une insertion ou un déplacement vers une autre entreprise sont refusés en `42501` ;
+  - les lignes d'une autre entreprise ne se modifient ni ne se suppriment ;
+  - toute table qui porte `EntrepriseId`, sauf `AspNetUsers`, a sa politique ;
+  - `klean_app` ne contourne rien et ne touche pas la structure.
+- **Sept sabotages, tous rouges.** Trois dans le code :
+  - l'intercepteur non enregistré ;
+  - jamais de bascule ;
+  - le réglage non posé.
+
+  Quatre en base, rétablis à l'identique et vérifiés :
+  - une politique retirée ;
+  - `WITH CHECK` ouvert ;
+  - `nullif` retiré ;
+  - la RLS désactivée sur `Entreprises`.
+- **Le coût, mesuré** :
+  - l'instruction de l'intercepteur coûte 0,035 ms contre 0,020 ms pour un `SELECT 1`, sur
+    3 000 essais en local : un aller-retour par ouverture de connexion ;
+  - sous plan générique, la condition de la politique sert de condition d'index, sur les
+    index composites existants ;
+  - la série complète a duré 6 min 17 s, contre 5 min 56 s avant, avec neuf tests de plus.
+    L'écart n'est pas attribué.
+- Série serveur complète : 698 tests verts.
+
 ---
 
 # Suite — non planifié

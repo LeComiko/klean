@@ -354,7 +354,7 @@ public class StockTests : IAsyncLifetime
         // à une : la première prend 6 litres sur 10, la seconde n'en trouve plus que 4.
         await Poster(Entree(_detergent, emplacement: _depot, quantite: 10));
 
-        using var portee = _fixture.Fabrique.Services.CreateScope();
+        using var portee = _fixture.PorteeAuProprietaire();
         var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
         await using var transaction = await db.Database.BeginTransactionAsync();
         await db.Database.ExecuteSqlAsync(
@@ -464,7 +464,7 @@ public class StockTests : IAsyncLifetime
 
     private async Task SqlAsync(Func<KleanDbContext, Task<int>> requete)
     {
-        using var portee = _fixture.Fabrique.Services.CreateScope();
+        using var portee = _fixture.PorteeAuProprietaire();
         await requete(portee.ServiceProvider.GetRequiredService<KleanDbContext>());
     }
 
@@ -474,7 +474,7 @@ public class StockTests : IAsyncLifetime
     /// </summary>
     private async Task AttendreDesSessionsBloqueesAsync(int combien, Task[] requetes)
     {
-        using var portee = _fixture.Fabrique.Services.CreateScope();
+        using var portee = _fixture.PorteeAuProprietaire();
         var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
 
         for (var essai = 0; essai < 200; essai++)

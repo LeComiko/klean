@@ -277,7 +277,7 @@ public class TypesPrestationTests : IAsyncLifetime
         // (CLAUDE.md §10). Ici, « Parking » est inséré dans une transaction laissée ouverte :
         // la vérification du contrôleur ne le voit pas, son insertion attend sur l'index, et
         // la validation la fait tomber sur la violation d'unicité.
-        using var portee = _fixture.Fabrique.Services.CreateScope();
+        using var portee = _fixture.PorteeAuProprietaire();
         var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
         await using var transaction = await db.Database.BeginTransactionAsync();
         await db.Database.ExecuteSqlAsync($"""
@@ -427,7 +427,7 @@ public class TypesPrestationTests : IAsyncLifetime
     /// <summary>Lu en base, toutes entreprises : la vérité, pas ce que l'API veut bien montrer.</summary>
     private async Task<int> CompterEnBaseAsync(string libelleEnMinuscules)
     {
-        using var portee = _fixture.Fabrique.Services.CreateScope();
+        using var portee = _fixture.PorteeAuProprietaire();
         var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
 
         return await db.TypesPrestation.CountAsync(t => t.Libelle.ToLower() == libelleEnMinuscules);
@@ -440,7 +440,7 @@ public class TypesPrestationTests : IAsyncLifetime
     /// </summary>
     private async Task AttendreUneAttenteDeVerrouAsync(Task requete)
     {
-        using var portee = _fixture.Fabrique.Services.CreateScope();
+        using var portee = _fixture.PorteeAuProprietaire();
         var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
 
         for (var essai = 0; essai < 200; essai++)
@@ -463,7 +463,7 @@ public class TypesPrestationTests : IAsyncLifetime
     /// <summary>Écrit sous le contrôleur et sous <c>SaveChangesAsync</c> : seule la base répond.</summary>
     private async Task InsererEnBaseAsync(Guid entrepriseId, string libelle)
     {
-        using var portee = _fixture.Fabrique.Services.CreateScope();
+        using var portee = _fixture.PorteeAuProprietaire();
         var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
 
         await db.Database.ExecuteSqlAsync($"""

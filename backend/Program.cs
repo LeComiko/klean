@@ -176,7 +176,12 @@ builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 
-builder.Services.AddDbContext<KleanDbContext>(options => options.UseNpgsql(chaine));
+// ⚠️ L'intercepteur met chaque connexion sous la sécurité au niveau des lignes (SPEC.md,
+// étape 26). Le retirer ne casse rien de visible : l'API se connecte en superutilisateur, et
+// toutes les politiques deviendraient inertes. `SecuriteDesLignesTests` le garde.
+builder.Services.AddDbContext<KleanDbContext>(options => options
+    .UseNpgsql(chaine)
+    .AddInterceptors(new BasculeRoleApplicatif()));
 
 builder.Services.AddIdentity<Utilisateur, IdentityRole<Guid>>(options =>
     {
