@@ -45,6 +45,12 @@
  * l'origine de l'API, en plus de la déclarer dans `Cors:Origines` côté backend.
  * Les deux sont nécessaires et aucune ne remplace l'autre.
  *
+ * `blob:` dans `img-src` (étape 25) : les photos d'anomalie se lisent par
+ * `api.getBlob`, qui seul sait rafraîchir une session, puis s'affichent par
+ * `URL.createObjectURL` — tout comme l'aperçu de la photo avant l'envoi. Une URL
+ * `blob:` ne désigne qu'un objet créé par la page elle-même : elle n'ouvre aucune
+ * origine.
+ *
  * ⚠️ `font-src 'self'` et non l'absence de directive : `default-src 'none'`
  * s'appliquerait sinon par héritage et bloquerait les quatre `.woff2` de
  * `public/polices/`. Le défaut ne se verrait pas au développement — le cache du
@@ -57,7 +63,7 @@ export const CspProduction = [
   "script-src 'self'",
   "style-src 'self'",
   "font-src 'self'",
-  "img-src 'self' data:",
+  "img-src 'self' data: blob:",
   "connect-src 'self'",
   "base-uri 'none'",
   "form-action 'self'",
@@ -82,7 +88,7 @@ export const CspDeveloppement = [
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self'",
-  "img-src 'self' data:",
+  "img-src 'self' data: blob:",
   "connect-src 'self' ws: wss:",
   "base-uri 'none'",
   "form-action 'self'",

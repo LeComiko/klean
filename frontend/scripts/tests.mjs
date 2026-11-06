@@ -69,6 +69,7 @@ const Indifferentes = [
   { fichier: 'src/stock/mouvements.test.ts', libelle: 'mouvements.ts — saisie d’un mouvement' },
   { fichier: 'src/stock/prevision.test.ts', libelle: 'prevision.ts — états et phrases' },
   { fichier: 'src/comptes/comptes.test.ts', libelle: 'comptes.ts — gestes et création' },
+  { fichier: 'src/passage/passage.test.ts', libelle: 'passage.ts — gestes, preuves et checklist' },
 ]
 
 let echecs = 0

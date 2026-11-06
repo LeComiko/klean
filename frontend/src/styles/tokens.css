@@ -163,6 +163,11 @@
   --corps-mobile-interligne: 24px;
   --corps-mobile-graisse: 500;
 
+  /* L'information principale sur mobile — le site, l'heure : le plancher de 22 px de
+     §12, posé en jeton à l'étape 25 avec le premier écran qui le sert. */
+  --info-mobile-taille: 22px;
+  --info-mobile-interligne: 28px;
+
   --corps-taille: 14px;
   --corps-interligne: 20px;
   --corps-graisse: 400;

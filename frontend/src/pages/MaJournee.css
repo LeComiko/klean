@@ -1,0 +1,331 @@
+/* La densité mobile de §12 : une action par écran, corps de 16 px, information
+   principale à 22 px, cibles de 56 px, bouton primaire de 64 px. L'écran est lu
+   debout, une main occupée — rien n'y descend sous ces planchers, même sur un
+   ordinateur, où il ne sert qu'à le relire. */
+.ma-journee {
+  max-width: 560px;
+  font-size: var(--corps-mobile-taille);
+  line-height: var(--corps-mobile-interligne);
+  font-weight: var(--corps-mobile-graisse);
+}
+
+.ma-journee__liste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+}
+
+/* Une carte est un bouton entier : toute sa surface est la cible. */
+.ma-journee__carte {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espace-1);
+  width: 100%;
+  min-height: var(--cible-tactile);
+  padding: var(--espace-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-carte);
+  text-align: left;
+}
+
+.ma-journee__carte:hover {
+  border-color: var(--border-fort);
+  background: var(--surface-2);
+}
+
+.ma-journee__plage {
+  font-size: var(--corps-mobile-taille);
+  font-weight: 700;
+  color: var(--texte);
+}
+
+.ma-journee__site,
+.ma-journee__titre {
+  font-size: var(--info-mobile-taille);
+  line-height: var(--info-mobile-interligne);
+  font-weight: 700;
+  color: var(--texte);
+}
+
+.ma-journee__prestation,
+.ma-journee__texte {
+  color: var(--texte);
+}
+
+.ma-journee__note {
+  color: var(--texte-2);
+}
+
+/* Le mot porte le statut ; la pastille en est la redondance colorée (§12). Le texte
+   reste --texte, seule couleur qui tienne AA sur tous les fonds. */
+.ma-journee__statut {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espace-2);
+  margin-top: var(--espace-1);
+  font-weight: 600;
+  color: var(--texte);
+}
+
+.ma-journee__statut::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: var(--rayon-pilule);
+  background: var(--border-fort);
+}
+
+.ma-journee__statut--EnCours::before {
+  background: var(--brand);
+}
+
+.ma-journee__statut--Terminee::before {
+  background: var(--realise);
+}
+
+.ma-journee__statut--NonCertifiee::before {
+  background: var(--retard);
+}
+
+/* Annulée : le trait barré est la redondance non colorée. */
+.ma-journee__statut--Annulee {
+  text-decoration: line-through;
+}
+
+.ma-journee__vacation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+.ma-journee__retour {
+  align-self: flex-start;
+  min-height: var(--cible-tactile);
+  padding: 0 var(--espace-2);
+  margin-left: calc(-1 * var(--espace-2));
+  font-weight: 600;
+  color: var(--texte);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ma-journee__bloc {
+  margin: var(--espace-4) 0 0;
+  padding: var(--espace-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-carte);
+}
+
+.ma-journee__sous-titre {
+  margin-bottom: var(--espace-2);
+  padding: 0;
+  font-size: var(--titre-section-taille);
+  line-height: var(--titre-section-interligne);
+  font-weight: var(--titre-section-graisse);
+  color: var(--texte);
+}
+
+.ma-journee__consignes {
+  white-space: pre-line;
+  color: var(--texte);
+}
+
+.ma-journee__pointage {
+  color: var(--texte);
+}
+
+.ma-journee__bilan {
+  margin-top: var(--espace-2);
+  padding: var(--espace-3) var(--espace-4);
+  background: var(--surface);
+  border: 1px solid var(--retard);
+  border-left: 4px solid var(--retard);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+  color: var(--texte);
+}
+
+.ma-journee__bilan--certifie {
+  border-color: var(--realise);
+}
+
+.ma-journee__checklist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-1);
+}
+
+/* Toute la ligne est la cible : 56 px de haut, la case et son libellé. */
+.ma-journee__point {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-3);
+  min-height: var(--cible-tactile);
+  color: var(--texte);
+}
+
+.ma-journee__point input {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  accent-color: var(--brand);
+}
+
+.ma-journee__declares {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  color: var(--texte);
+}
+
+.ma-journee__anomalies {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  margin-bottom: var(--espace-4);
+}
+
+.ma-journee__anomalie {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  padding-bottom: var(--espace-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.ma-journee__apercu img {
+  max-height: 280px;
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-bloc);
+}
+
+.ma-journee__gestes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  margin-top: var(--espace-2);
+}
+
+/* Le champ de fichier est masqué dans son libellé : le contour de focus se pose sur
+   le libellé, sinon le clavier n'en verrait aucun. */
+.ma-journee__photo:focus-within {
+  outline: var(--focus-epaisseur) solid var(--alerte);
+  outline-offset: var(--focus-decalage);
+}
+
+.ma-journee__signalement {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+}
+
+.ma-journee__etiquette {
+  font-weight: 600;
+  color: var(--texte);
+}
+
+.ma-journee__zone {
+  width: 100%;
+  min-height: 96px;
+  padding: var(--espace-3);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-size: var(--corps-mobile-taille);
+  line-height: var(--corps-mobile-interligne);
+  resize: vertical;
+}
+
+.ma-journee__zone:focus {
+  border-color: var(--brand);
+}
+
+.ma-journee__pied {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  margin-top: var(--espace-6);
+}
+
+.ma-journee__notice {
+  padding: var(--espace-3) var(--espace-4);
+  background: var(--brand-tint);
+  border-left: 3px solid var(--brand);
+  border-radius: var(--rayon-bloc);
+  color: var(--texte);
+}
+
+.ma-journee__principal {
+  width: 100%;
+  min-height: var(--bouton-primaire-mobile);
+  padding: 0 var(--espace-4);
+  background: var(--brand);
+  color: var(--sur-brand);
+  border-radius: var(--rayon-bloc);
+  font-size: var(--info-mobile-taille);
+  font-weight: 700;
+}
+
+.ma-journee__principal:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+
+.ma-journee__secondaire {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--cible-tactile);
+  padding: 0 var(--espace-4);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ma-journee__secondaire:hover:not(:disabled) {
+  background: var(--brand-tint);
+  border-color: var(--brand);
+}
+
+/* Ni opacité ni gris de marque : un bouton en attente garde un texte AA (§12), et
+   c'est le fond éteint qui dit qu'il ne répond plus. */
+.ma-journee__principal:disabled {
+  background: var(--brand-tint);
+  color: var(--texte);
+  cursor: progress;
+}
+
+.ma-journee__secondaire:disabled {
+  color: var(--texte-2);
+  border-color: var(--border);
+  cursor: progress;
+}
+
+.ma-journee__attente {
+  display: block;
+  color: var(--texte-2);
+}
+
+.ma-journee__vide {
+  color: var(--texte-2);
+}
+
+.ma-journee__refus,
+.ma-journee__alerte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  padding: var(--espace-3) var(--espace-4);
+  background: var(--surface);
+  border: 1px solid var(--alerte);
+  border-left: 4px solid var(--alerte);
+  border-radius: var(--rayon-bloc);
+  color: var(--texte);
+}

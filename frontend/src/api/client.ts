@@ -245,13 +245,20 @@ function messageDuProbleme(details: {
 
 interface Options {
   corps?: unknown
+  /**
+   * Un corps envoyé tel quel, sous son propre type — la photo d'une anomalie
+   * (SPEC.md, étape 25). Exclusif de `corps`, que `JSON.stringify` transformerait en
+   * `{}`.
+   */
+  brut?: Blob
   signal?: AbortSignal
 }
 
 function envoyer(methode: string, chemin: string, options: Options): Promise<Response> {
   const entetes: Record<string, string> = {}
 
-  if (options.corps !== undefined) entetes['Content-Type'] = 'application/json'
+  if (options.brut !== undefined) entetes['Content-Type'] = options.brut.type
+  else if (options.corps !== undefined) entetes['Content-Type'] = 'application/json'
 
   if (!MethodesSansEffet.has(methode)) {
     const jeton = jetonCsrf()
@@ -263,12 +270,30 @@ function envoyer(methode: string, chemin: string, options: Options): Promise<Res
     method: methode,
     credentials: 'include',
     headers: entetes,
-    body: options.corps === undefined ? undefined : JSON.stringify(options.corps),
+    body: options.brut ?? (options.corps === undefined ? undefined : JSON.stringify(options.corps)),
     signal: options.signal,
   })
 }
 
-async function appeler<T>(methode: string, chemin: string, options: Options = {}): Promise<T> {
+/** Lit le corps d'une réponse réussie. */
+type Lecture<T> = (reponse: Response) => Promise<T>
+
+async function lireJson<T>(reponse: Response): Promise<T> {
+  // Un corps vide rend `undefined`, ce qui couvre le 204 d'une suppression ou
+  // d'une déconnexion sans avoir à tester le code séparément. Une branche
+  // `status === 204` explicite a existé ici : le sabotage a montré qu'on pouvait
+  // la retirer sans qu'aucune série ne rougisse, parce qu'elle était redondante.
+  const brut = await reponse.text()
+
+  return (brut === '' ? undefined : JSON.parse(brut)) as T
+}
+
+async function appeler<T>(
+  methode: string,
+  chemin: string,
+  options: Options = {},
+  lire: Lecture<T> = lireJson,
+): Promise<T> {
   let reponse = await envoyer(methode, chemin, options)
 
   if (reponse.status === 401 && !SansRafraichissement.has(chemin)) {
@@ -291,13 +316,7 @@ async function appeler<T>(methode: string, chemin: string, options: Options = {}
     throw new ErreurApi(reponse.status, await messageDErreur(reponse))
   }
 
-  // Un corps vide rend `undefined`, ce qui couvre le 204 d'une suppression ou
-  // d'une déconnexion sans avoir à tester le code séparément. Une branche
-  // `status === 204` explicite a existé ici : le sabotage a montré qu'on pouvait
-  // la retirer sans qu'aucune série ne rougisse, parce qu'elle était redondante.
-  const brut = await reponse.text()
-
-  return (brut === '' ? undefined : JSON.parse(brut)) as T
+  return lire(reponse)
 }
 
 export const api = {
@@ -311,4 +330,20 @@ export const api = {
 
   supprimer: <T>(chemin: string, signal?: AbortSignal): Promise<T> =>
     appeler<T>('DELETE', chemin, { signal }),
+
+  /**
+   * Un `POST` dont le corps part tel quel, sous le type du `Blob`. La réponse reste du
+   * JSON. Le CSRF et le rafraîchissement sont ceux de toute écriture : c'est la raison
+   * de passer par ici plutôt que par `fetch`.
+   */
+  postBrut: <T>(chemin: string, brut: Blob, signal?: AbortSignal): Promise<T> =>
+    appeler<T>('POST', chemin, { brut, signal }),
+
+  /**
+   * Une lecture binaire — une photo. ⚠️ Pas une balise `<img src="/api/…">` : elle
+   * enverrait bien les cookies, mais un jeton d'accès expiré y donnerait une image
+   * cassée, sans rafraîchissement ni message. L'écran en fait une URL `blob:`.
+   */
+  getBlob: (chemin: string, signal?: AbortSignal): Promise<Blob> =>
+    appeler<Blob>('GET', chemin, { signal }, (reponse) => reponse.blob()),
 }

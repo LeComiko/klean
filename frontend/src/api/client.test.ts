@@ -26,6 +26,8 @@ interface Appel {
   methode: string
   entetes: Record<string, string>
   corps: string | undefined
+  /** Le corps tel que reçu par `fetch`, pour un envoi brut. */
+  brut: unknown
   identifiants: string | undefined
 }
 
@@ -45,6 +47,7 @@ environnement.fetch = (entree, options) => {
     methode: options?.method ?? 'GET',
     entetes: { ...(options?.headers as Record<string, string> | undefined) },
     corps: typeof options?.body === 'string' ? options.body : undefined,
+    brut: options?.body,
     identifiants: options?.credentials,
   }
 
@@ -495,5 +498,55 @@ describe('client — messages d’erreur', () => {
       (echec: unknown) =>
         echec instanceof ErreurApi && echec.message === '{ceci n’est pas du json',
     )
+  })
+})
+
+describe('client — corps brut et lecture binaire (étape 25)', () => {
+  test('une photo part telle quelle, sous son type, avec le CSRF', async () => {
+    poserCookies('klean_csrf=JETON')
+    const photo = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: 'image/jpeg' })
+
+    await api.postBrut('/api/anomalies/1/photos', photo)
+
+    // ⚠️ Le même objet, pas sa sérialisation : `JSON.stringify` d'un Blob vaut `{}`,
+    // et le serveur refuserait « pas une photo JPEG lisible ».
+    assert.equal(appels[0].brut, photo)
+    assert.equal(appels[0].entetes['Content-Type'], 'image/jpeg')
+    assert.equal(appels[0].entetes['X-Klean-CSRF'], 'JETON')
+  })
+
+  test('une lecture binaire rend les octets, sans les lire en JSON', async () => {
+    repondre = () => new Response(new Uint8Array([0xff, 0xd8]), {
+      status: 200,
+      headers: { 'Content-Type': 'image/jpeg' },
+    })
+
+    const blob = await api.getBlob('/api/anomalies/1/photos/2')
+
+    assert.deepEqual([...new Uint8Array(await blob.arrayBuffer())], [0xff, 0xd8])
+  })
+
+  test('une lecture binaire se rafraîchit sur 401, comme toute autre', async () => {
+    // C'est la raison de ne pas poser l'URL de l'API dans une balise <img> : un jeton
+    // expiré y donnerait une image cassée, sans rafraîchissement.
+    let premiere = true
+
+    repondre = (appel) => {
+      if (appel.url === '/api/auth/rafraichir') return vide(200)
+      if (premiere) {
+        premiere = false
+        return vide(401)
+      }
+      return new Response(new Uint8Array([1]), { status: 200 })
+    }
+
+    const blob = await api.getBlob('/api/anomalies/1/photos/2')
+
+    assert.equal(blob.size, 1)
+    assert.deepEqual(trace(), [
+      'GET /api/anomalies/1/photos/2',
+      'POST /api/auth/rafraichir',
+      'GET /api/anomalies/1/photos/2',
+    ])
   })
 })

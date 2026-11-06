@@ -3153,6 +3153,67 @@ validation d'un passage par le chef, et toute notification.
   reposant, elle, que sur le filtre.
 - Série serveur complète : 687 tests verts.
 
+**Lot C — fait le 6 novembre 2026**
+
+- **Les deux migrations de l'étape** sont appliquées à la base de développement, sur
+  accord explicite.
+- **« Ma journée »**, section `MJ`, est ouverte au rôle `Agent` seul, et c'est désormais sa
+  destination d'arrivée : jusqu'ici, il tombait sur un refus. `sections.test.ts` gardait
+  cette absence, et le test a changé comme prévu.
+  - Elle est dernière dans la barre. Un compte qui porterait aussi un rôle interne arrive
+    donc sur le planning.
+  - **Le parcours** : la liste du jour, puis la vacation avec ses consignes, *Démarrer*, la
+    checklist, les anomalies et leurs photos, *Terminer*. La vacation en cours s'ouvre
+    d'elle-même.
+  - **Le bilan** dit pourquoi un passage n'est pas certifié, pointage par pointage : « le
+    début sans position, la fin hors du rayon ». « Non certifié » seul laisserait croire à
+    une panne.
+  - **Densité mobile de §12** : corps de 16 px, information principale à 22 px — un jeton
+    nouveau, `--info-mobile-taille` —, cibles de 56 px, bouton primaire de 64 px.
+- **La position n'est demandée qu'au geste**, jamais à l'ouverture.
+  - La notice qui dit ce qui est relevé, et ce qui ne l'est pas, est affichée au-dessus de
+    chaque bouton qui la demande.
+  - `maximumAge: 0` : une position mise en cache serait celle d'avant le trajet.
+  - Un refus, un téléphone sans capteur ou un délai dépassé donnent un passage sans
+    position, jamais un échec.
+- **La checklist reste un compte rendu.** *Terminer* se confirme quand un point n'est pas
+  coché, parce qu'une vacation pointée est figée et qu'un doigt qui a glissé ne se
+  rattrape pas. Seuls les points de la checklist reçue partent : le serveur refuserait toute
+  la fin sur un identifiant étranger.
+- **La photo est réduite au canevas** sous 900 Kio, soit sous le plafond d'un mébioctet de
+  l'API, à 1 600 px puis moins, et redressée selon son orientation.
+  - Le réencodage ne recopie aucune métadonnée. C'est une minimisation, pas la garde : la
+    garde reste celle du serveur.
+  - Un aperçu précède l'envoi.
+- **« Anomalies »**, section `AN`, pour les trois rôles internes :
+  - les anomalies ouvertes d'abord, ou traitées, ou toutes ;
+  - leurs photos en vignettes, à agrandir ;
+  - le geste « Marquer traitée », qui relit la liste.
+- **Les photos passent par `api.getBlob`, jamais par l'URL de l'API dans un `<img>`.**
+  Celle-ci enverrait bien les cookies, mais un jeton d'accès expiré y donnerait une image
+  cassée, sans rafraîchissement. D'où `blob:` dans `img-src`, sur les deux politiques de
+  `csp.ts`. Le client gagne aussi `api.postBrut`, qui envoie un corps tel quel sous son
+  type, avec le CSRF de toute écriture.
+- **Les points de contrôle** sont une description de référence, `pointsControle`, rangée
+  après le catalogue. On y descend depuis le type de prestation. La série de parité avec
+  `PointControleCreateDto` la couvre.
+- **`passage/passage.ts`, 26 cas**, porte ce qui s'y décide sans serveur. La réduction de
+  photo, qui exige un canevas, est à part dans `passage/photo.ts`. `client.test.ts` gagne
+  trois cas.
+- **Vingt sabotages, tous rouges.**
+- **Essayé au navigateur**, avec un compte d'essai sur la base de développement :
+  - démarrage sans position ;
+  - un point coché sur deux, puis la confirmation ;
+  - le refus d'une description vide, puis l'anomalie enregistrée ;
+  - un PNG de 33 Mo réduit à 1 600 × 1 200, montré en `blob:`, puis envoyé ;
+  - la fin hors du rayon et son bilan ;
+  - côté administrateur, la vignette, l'agrandissement et « Marquer traitée ».
+
+  Aucune erreur de console.
+- ⚠️ **Défaut constaté, antérieur à l'étape et non corrigé.** Une déconnexion laisse
+  `depuis` sur l'écran quitté. Le compte suivant y est ramené à sa connexion, même si son
+  rôle ne l'ouvre pas : l'agent arrive sur « Accès refusé » au lieu de sa journée.
+
 ---
 
 # Suite — non planifié

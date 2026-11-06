@@ -7,10 +7,12 @@ import { RouteProtegee } from './auth/RouteProtegee'
 import { Disposition } from './layout/Disposition'
 import { CheminCompte, Sections, premiereSectionOuverte } from './layout/sections'
 import type { Section } from './layout/sections'
+import { Anomalies } from './pages/Anomalies'
 import { Chantier } from './pages/Chantier'
 import { Compte } from './pages/Compte'
 import { Comptes } from './pages/Comptes'
 import { Connexion } from './pages/Connexion'
+import { MaJournee } from './pages/MaJournee'
 import { Planning } from './pages/Planning'
 import { Prevision } from './pages/Prevision'
 import { Reference } from './pages/Reference'
@@ -26,6 +28,8 @@ import { descriptionDe } from './reference/descriptions'
  */
 const Ecrans: Record<string, (section: Section) => ReactNode> = {
   '/planning': () => <Planning />,
+  '/anomalies': () => <Anomalies />,
+  '/ma-journee': () => <MaJournee />,
   '/stock': (section) => <Stock section={section} />,
   '/prevision': (section) => <Prevision section={section} />,
   '/comptes': (section) => <Comptes section={section} />,
@@ -106,13 +110,10 @@ function routesDesEcrans(): RouteEcran[] {
 /**
  * Destination d'arrivée, **dérivée** de la liste des sections plutôt que codée en
  * dur : la première ouverte au profil. Un rôle interne atterrit sur Planning, un
- * `ClientSyndic` sur Clients.
+ * `ClientSyndic` sur Clients, un `Agent` sur Ma journée depuis l'étape 25.
  *
- * Repli sur `/planning` quand **aucune** section n'est ouverte, c'est-à-dire pour
- * le rôle `Agent` : `RouteProtegee` y affiche un refus qui nomme le rôle. C'est
- * l'état documenté du produit — l'étape 8 de `SPEC.md` dit que ce rôle est
- * « sécurisé, pas servi », son parcours suppose une application mobile et des
- * endpoints conçus pour elle.
+ * Repli sur `/planning` quand **aucune** section n'est ouverte — un compte sans rôle :
+ * `RouteProtegee` y affiche un refus qui nomme le rôle.
  */
 function Accueil() {
   const { profil } = useAuth()
@@ -157,11 +158,8 @@ export default function App() {
                 garde de la route de disposition suffit — en ajouter une seconde sans
                 rôles ne fermerait rien de plus.
 
-                Il reste atteignable pour un rôle `Agent`, qui n'a aucune section et
-                tombe sur un refus en arrivant : la barre latérale est rendue, donc son
-                mot de passe lui est accessible. C'est le seul écran de KLEAN qui le
-                serve aujourd'hui, et ce n'est pas un hasard — c'est le compte, pas une
-                fonction du produit. */}
+                Il est atteignable par tout rôle, l'agent compris, depuis le pied de la
+                barre latérale : c'est le compte, pas une fonction du produit. */}
             <Route path={CheminCompte} element={<Compte />} />
           </Route>
 

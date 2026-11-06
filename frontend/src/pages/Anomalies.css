@@ -1,0 +1,172 @@
+/* Le filtre, dans l'en-tête, à la manière de l'horizon de la prévision : on choisit ce
+   qu'on regarde, on ne crée rien. */
+.anomalies__filtre {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espace-3);
+}
+
+.anomalies__filtre-libelle {
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texte-2);
+}
+
+.anomalies__filtre-liste {
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-3);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-family: var(--police);
+  font-size: var(--corps-taille);
+}
+
+.anomalies__filtre-liste:focus {
+  border-color: var(--brand);
+}
+
+.anomalies__liste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  margin-bottom: var(--espace-4);
+}
+
+.anomalies__carte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  padding: var(--espace-4) var(--espace-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-carte);
+}
+
+.anomalies__entete {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espace-4);
+}
+
+.anomalies__site {
+  font-size: var(--titre-section-taille);
+  line-height: var(--titre-section-interligne);
+  font-weight: var(--titre-section-graisse);
+  color: var(--texte);
+}
+
+.anomalies__contexte {
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  color: var(--texte-2);
+}
+
+.anomalies__description {
+  white-space: pre-line;
+  color: var(--texte);
+}
+
+/* Le mot porte le statut, la pastille le redouble (§12). « Ouverte » est en graisse :
+   c'est ce qui attend un geste. */
+.anomalies__statut {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espace-2);
+  flex-shrink: 0;
+  font-size: var(--ligne-tableau-taille);
+  line-height: var(--ligne-tableau-interligne);
+  color: var(--texte);
+}
+
+.anomalies__statut::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: var(--rayon-pilule);
+}
+
+.anomalies__statut--Ouverte {
+  font-weight: 700;
+}
+
+.anomalies__statut--Ouverte::before {
+  background: var(--retard);
+}
+
+.anomalies__statut--Traitee::before {
+  background: var(--realise);
+}
+
+.anomalies__photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-2);
+}
+
+.anomalies__photo {
+  display: block;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--rayon-bloc);
+  overflow: hidden;
+}
+
+.anomalies__photo img {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+}
+
+.anomalies__photo--grande img {
+  width: auto;
+  height: auto;
+  max-width: min(640px, 100%);
+  max-height: 480px;
+  object-fit: contain;
+}
+
+.anomalies__photo-absente {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  background: var(--surface-2);
+  border: 1px dashed var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-size: var(--ligne-tableau-taille);
+  color: var(--texte-2);
+}
+
+.anomalies__pied {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.anomalies__vide {
+  margin-bottom: var(--espace-4);
+  color: var(--texte-2);
+}
+
+@media (max-width: 900px) {
+  .anomalies__carte {
+    padding: var(--espace-4);
+  }
+
+  .anomalies__filtre-liste {
+    height: var(--cible-tactile);
+    font-size: var(--corps-mobile-taille);
+  }
+
+  .anomalies__description,
+  .anomalies__contexte {
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+}

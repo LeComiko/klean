@@ -479,6 +479,76 @@ const TypesPrestation: DescriptionRessource = {
 }
 
 /**
+ * La checklist d'un type de prestation (SPEC.md, étape 25) : ce qu'un passage de ce type
+ * vérifie. L'agent coche sur place, et la fin enregistre ce qui est fait — un compte
+ * rendu, jamais un blocage.
+ *
+ * ⚠️ Le libellé est **recopié** dans ce que l'agent déclare : le renommer ne réécrit pas
+ * les passages déjà terminés, et c'est voulu — le compte rendu dit ce qu'on a demandé
+ * ce jour-là.
+ */
+const PointsControle: DescriptionRessource = {
+  cle: 'pointsControle',
+  chemin: '/points-controle',
+  route: '/api/points-controle',
+  libelle: 'Points de contrôle',
+  singulier: 'point de contrôle',
+  genre: 'masculin',
+  sousTitre: 'Ce qu’un passage de chaque type vérifie, coché par l’agent sur place',
+  etiquette: 'libelle',
+
+  colonnes: [
+    { nom: 'typePrestationId', libelle: 'Type de prestation', reference: 'typesPrestation' },
+    { nom: 'ordre', libelle: 'Ordre', chiffres: true },
+    { nom: 'libelle', libelle: 'Libellé' },
+    { nom: 'actif', libelle: 'Actif' },
+  ],
+
+  champs: [
+    {
+      nom: 'typePrestationId',
+      libelle: 'Type de prestation',
+      type: 'reference',
+      reference: 'typesPrestation',
+      requis: true,
+      seulementActifs: true,
+    },
+    {
+      nom: 'libelle',
+      libelle: 'Libellé',
+      type: 'texte',
+      requis: true,
+      longueurMax: 200,
+      // Le point est lu par l'agent, debout, sur son téléphone : une vérification, pas
+      // une procédure.
+      aide: 'Une vérification courte : « Vitres du hall », « Conteneurs sortis ».',
+    },
+    {
+      nom: 'ordre',
+      libelle: 'Ordre',
+      type: 'nombre',
+      requis: true,
+      min: 0,
+      max: 999,
+      defaut: '0',
+      aide: 'Le rang dans la checklist de l’agent, du plus petit au plus grand.',
+    },
+    {
+      nom: 'actif',
+      libelle: 'Actif',
+      type: 'booleen',
+      defaut: true,
+      aide: 'Décoché, le point n’est plus demandé ; les passages déjà déclarés le gardent.',
+    },
+  ],
+
+  rolesLecture: RolesInternes,
+  rolesEcriture: EcritureReference,
+
+  parent: { ressource: 'typesPrestation', champ: 'typePrestationId' },
+}
+
+/**
  * Le compte rendu de l'import, en une phrase.
  *
  * ⚠️ Il nomme les types **laissés tels quels**, et ce n'est pas du remplissage : qui
@@ -828,6 +898,7 @@ export const Descriptions: readonly DescriptionRessource[] = [
   Contrats,
   Prestations,
   TypesPrestation,
+  PointsControle,
   Agents,
   Absences,
   Produits,

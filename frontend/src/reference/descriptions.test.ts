@@ -529,6 +529,8 @@ describe('enfantsDe', () => {
     assert.deepEqual(enfantsDe('sites').map((d) => d.cle), ['contrats'])
     assert.deepEqual(enfantsDe('contrats').map((d) => d.cle), ['prestations'])
     assert.deepEqual(enfantsDe('agents').map((d) => d.cle), ['absences'])
+    // Un type porte sa checklist et ses consommations (étapes 25 et 22).
+    assert.deepEqual(enfantsDe('typesPrestation').map((d) => d.cle), ['pointsControle', 'consommationsType'])
   })
 
   test('une feuille de la chaîne n’a pas d’enfant', () => {
@@ -598,6 +600,7 @@ describe('descriptions — parité avec les DTOs du serveur', () => {
   const ClassesExplicites: Readonly<Record<string, string>> = {
     typesPrestation: 'TypePrestationCreateDto',
     consommationsType: 'ConsommationTypeCreateDto',
+    pointsControle: 'PointControleCreateDto',
   }
 
   test('chaque champ du DTO de création a son champ à l’écran, et réciproquement', () => {

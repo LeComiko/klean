@@ -20,9 +20,13 @@ describe('sections — navigation et destination d’arrivée', () => {
     assert.equal(Sections.some((section) => section.pastille === 'TB'), false)
   })
 
-  test('les pastilles sont celles de SPEC.md étape 13, moins TB, revues à l’étape 22', () => {
-    // `SI` est devenu `CL` : la pastille dit la ressource où l'on arrive.
-    assert.deepEqual(Sections.map((section) => section.pastille), ['PL', 'CL', 'AG', 'ST', 'EN'])
+  test('les pastilles sont celles de SPEC.md étape 13, moins TB, revues aux étapes 22 et 25', () => {
+    // `SI` est devenu `CL` : la pastille dit la ressource où l'on arrive. `AN` et `MJ`
+    // sont les deux écrans du passage de l'agent.
+    assert.deepEqual(
+      Sections.map((section) => section.pastille),
+      ['PL', 'AN', 'CL', 'AG', 'ST', 'EN', 'MJ'],
+    )
   })
 
   test('chaque section déclare un chemin absolu et un libellé', () => {
@@ -148,12 +152,33 @@ describe('sections — navigation et destination d’arrivée', () => {
       assert.equal(premiereSectionOuverte([Roles.ClientSyndic])?.chemin, '/clients')
     })
 
-    test('un Agent n’a aucune section, et c’est l’état documenté du produit', () => {
-      // SPEC.md étape 8 : « Cette étape sécurise le rôle, elle ne le sert pas. »
-      // Son parcours suppose une application mobile et des endpoints conçus pour
-      // elle. Le jour où un écran lui est destiné, ce test devra changer — et c'est
-      // exactement ce qu'on veut qu'il signale.
-      assert.equal(premiereSectionOuverte([Roles.Agent]), undefined)
+    test('un Agent arrive sur sa journée, la seule section qui lui est ouverte', () => {
+      // Jusqu'à l'étape 25, ce test gardait l'inverse : « sécurisé, pas servi » (SPEC.md
+      // étape 8). Il a changé avec le premier écran conçu pour le rôle, comme prévu.
+      const ouvertes = Sections.filter((section) => section.roles?.includes(Roles.Agent) === true)
+
+      assert.deepEqual(ouvertes.map((section) => section.chemin), ['/ma-journee'])
+      assert.equal(premiereSectionOuverte([Roles.Agent])?.chemin, '/ma-journee')
+    })
+
+    test('aucun rôle interne ni le syndic n’ont la journée d’un agent', () => {
+      // Ses routes sont réservées au rôle Agent : la pastille leur répondrait 403.
+      for (const role of [Roles.Administrateur, Roles.Responsable, Roles.ChefEquipe, Roles.ClientSyndic]) {
+        const journee = Sections.find((section) => section.chemin === '/ma-journee')
+
+        assert.equal(journee?.roles?.includes(role), false, role)
+      }
+    })
+
+    test('un compte agent et interne arrive sur le planning, pas sur sa journée', () => {
+      assert.equal(premiereSectionOuverte([Roles.Agent, Roles.Responsable])?.chemin, '/planning')
+    })
+
+    test('les anomalies sont aux trois rôles internes, jamais à l’agent ni au syndic', () => {
+      // Rien pour le syndic avant le portail (SPEC.md, étape 25).
+      const anomalies = Sections.find((section) => section.chemin === '/anomalies')
+
+      assert.deepEqual([...(anomalies?.roles ?? [])].sort(), [Roles.Administrateur, Roles.ChefEquipe, Roles.Responsable].sort())
     })
 
     test('un compte sans rôle n’ouvre rien', () => {

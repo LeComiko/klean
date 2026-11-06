@@ -93,6 +93,11 @@ export const Sections: readonly Section[] = [
   // `GET /api/planning` est réservé aux trois rôles internes.
   { chemin: '/planning', pastille: 'PL', libelle: 'Planning', roles: RolesInternes },
 
+  // Ce que les agents ont constaté sur place (SPEC.md, étape 25). Juste après le
+  // planning : c'est de l'exploitation du jour, pas de la donnée de référence. Le chef
+  // d'équipe y lit celles de son équipe, par le filtre global des vacations.
+  { chemin: '/anomalies', pastille: 'AN', libelle: 'Anomalies', roles: RolesInternes },
+
   // La chaîne client, entière : Clients → Sites → Contrats → Prestations. Le syndic
   // y lit son propre client et ses sites, cadré par le deuxième axe d'isolation —
   // les contrats et les prestations lui sont fermés, et les rôles de la section
@@ -107,7 +112,9 @@ export const Sections: readonly Section[] = [
     roles: InternesEtClientSyndic,
     // Le catalogue clôt la chaîne : il ne descend d'aucune ressource, il sert les
     // prestations (SPEC.md, étape 21).
-    ressources: ['clients', 'sites', 'contrats', 'prestations', 'typesPrestation'],
+    //
+    // La checklist d'un type le suit (étape 25) : ce qu'un passage de ce type vérifie.
+    ressources: ['clients', 'sites', 'contrats', 'prestations', 'typesPrestation', 'pointsControle'],
   },
 
   // Agents → Absences. C'est l'ajout qui rend le panneau de remplacement de
@@ -154,6 +161,15 @@ export const Sections: readonly Section[] = [
     // plutôt qu'en pastille : on y vient à l'arrivée d'une personne et à son départ.
     ecrans: [{ chemin: '/comptes', libelle: 'Comptes', roles: [Roles.Administrateur] }],
   },
+
+  // La journée de l'agent, sur son téléphone (SPEC.md, étape 25) : la seule section qui
+  // lui soit ouverte, donc sa destination d'arrivée. Jusqu'à l'étape 25, ce rôle n'en
+  // avait aucune et tombait sur un refus en se connectant.
+  //
+  // ⚠️ Dernière, et ce n'est pas un rang d'importance : la première section ouverte est
+  // l'arrivée, et un compte qui porterait aussi un rôle interne doit arriver sur le
+  // planning. Pour l'agent seul, le rang ne change rien.
+  { chemin: '/ma-journee', pastille: 'MJ', libelle: 'Ma journée', roles: [Roles.Agent] },
 ]
 
 /**
