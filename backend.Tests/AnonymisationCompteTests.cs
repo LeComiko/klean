@@ -421,10 +421,9 @@ public class AnonymisationCompteTests : IAsyncLifetime
     private async Task<Guid> CreerCompte(
         string role, string email, Guid? agentId = null, Guid? clientId = null)
     {
-        var reponse = await _client.PostAsJsonAsync("/api/auth/comptes", new CompteCreateDto
+        var reponse = await _fixture.CreerCompteAsync(_client, new CompteCreateDto
         {
             Email = email,
-            MotDePasse = FixtureApi.MotDePasse,
             Nom = role,
             Prenom = role,
             Role = role,
@@ -439,7 +438,7 @@ public class AnonymisationCompteTests : IAsyncLifetime
                 + await reponse.Content.ReadAsStringAsync());
         }
 
-        return (await reponse.Content.ReadFromJsonAsync<ProfilDto>())!.Id;
+        return (await reponse.Content.ReadFromJsonAsync<CompteCreeDto>())!.Compte.Id;
     }
 
     private async Task<Guid> CreerAgent()

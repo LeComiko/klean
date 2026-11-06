@@ -115,6 +115,7 @@ public class SecondFacteurTests : IAsyncLifetime
     public async Task Un_compte_non_oblige_ouvre_sa_session_sur_son_mot_de_passe()
     {
         await CreerCompte(RolesKlean.ChefEquipe, Chef);
+        await _fixture.LeverProvisoireAsync(Chef);
 
         var reponse = await Connexion(_fixture.ClientAnonyme(), Chef);
 
@@ -832,10 +833,9 @@ public class SecondFacteurTests : IAsyncLifetime
     {
         admin ??= await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
 
-        var reponse = await admin.PostAsJsonAsync("/api/auth/comptes", new CompteCreateDto
+        var reponse = await _fixture.CreerCompteAsync(admin, new CompteCreateDto
         {
             Email = email,
-            MotDePasse = FixtureApi.MotDePasse,
             Nom = role,
             Role = role,
             AgentId = agentId
@@ -843,7 +843,7 @@ public class SecondFacteurTests : IAsyncLifetime
 
         reponse.EnsureSuccessStatusCode();
 
-        return (await reponse.Content.ReadFromJsonAsync<ProfilDto>())!.Id;
+        return (await reponse.Content.ReadFromJsonAsync<CompteCreeDto>())!.Compte.Id;
     }
 
     private async Task AvecComptesAsync(Func<UserManager<Utilisateur>, Task> action) =>

@@ -234,19 +234,18 @@ public class ChefEquipeTests : IAsyncLifetime
     }
 
     /// <summary>Crée le compte par l'API, donc sous ses propres contrôles, et rend son identifiant.</summary>
-    private static async Task<Guid> CreerCompte(HttpClient administrateur, string role, string email)
+    private async Task<Guid> CreerCompte(HttpClient administrateur, string role, string email)
     {
-        var reponse = await administrateur.PostAsJsonAsync("/api/auth/comptes", new CompteCreateDto
+        var reponse = await _fixture.CreerCompteAsync(administrateur, new CompteCreateDto
         {
             Email = email,
-            MotDePasse = FixtureApi.MotDePasse,
             Nom = role,
             Prenom = "Test",
             Role = role
         });
 
         reponse.EnsureSuccessStatusCode();
-        return (await reponse.Content.ReadFromJsonAsync<ProfilDto>())!.Id;
+        return (await reponse.Content.ReadFromJsonAsync<CompteCreeDto>())!.Compte.Id;
     }
 
     private async Task<Guid> IdDuCompte(string email)

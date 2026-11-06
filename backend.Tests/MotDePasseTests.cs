@@ -227,7 +227,6 @@ public class MotDePasseTests : IAsyncLifetime
         var doublon = await admin.PostAsJsonAsync("/api/auth/comptes", new CompteCreateDto
         {
             Email = FixtureApi.AdminAlpha,
-            MotDePasse = NouveauMotDePasse,
             Nom = "Doublon",
             Role = "Responsable"
         });

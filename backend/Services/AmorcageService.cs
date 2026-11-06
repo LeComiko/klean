@@ -91,7 +91,11 @@ public class AmorcageService
             Nom = "Administrateur",
             Prenom = string.Empty,
             DateCreation = DateTime.UtcNow,
-            Actif = true
+            Actif = true,
+            // Le mot de passe de l'amorçage est écrit en clair dans `.env` : il ne doit
+            // servir qu'une fois. La première connexion impose d'en choisir un autre
+            // (SPEC.md, étape 24), au lieu de compter sur DEPLOIEMENT.md pour le dire.
+            MotDePasseProvisoire = true
         };
 
         var resultat = await _utilisateurs.CreateAsync(admin, motDePasse);

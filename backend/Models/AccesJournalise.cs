@@ -94,7 +94,20 @@ public enum NatureAcces
     /// prochain équipement. Qu'il ne laisse aucune trace consultable permettrait de
     /// l'enchaîner avec une connexion par mot de passe seul.
     /// </summary>
-    ReinitialisationSecondFacteur
+    ReinitialisationSecondFacteur,
+
+    /// <summary>
+    /// Fermeture d'un compte par un administrateur (SPEC.md, étape 24) : la personne
+    /// perd son accès, et ses sessions tombent. Même exception à la règle 5 que
+    /// <see cref="ReinitialisationSecondFacteur"/> : un geste sur le compte d'autrui.
+    /// </summary>
+    Desactivation,
+
+    /// <summary>
+    /// Réouverture d'un compte fermé. Journalisée comme la fermeture : rendre un accès
+    /// est le geste qu'un compte administrateur compromis ferait pour se garder une porte.
+    /// </summary>
+    Reactivation
 }
 
 /// <summary>

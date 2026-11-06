@@ -25,7 +25,8 @@ namespace Klean.Api.Controllers;
 [Route("api/auth")]
 public class SecondFacteurController : ControllerBase
 {
-    private const string DefiPerime =
+    /// <summary>Repris par la première connexion d'un mot de passe provisoire, sur le même défi.</summary>
+    internal const string DefiPerime =
         "La connexion a expiré ou n'est plus valable. Saisir à nouveau l'adresse et le mot de passe.";
 
     private const string CompteVerrouille =

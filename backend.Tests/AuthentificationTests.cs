@@ -151,10 +151,9 @@ public class AuthentificationTests : IAsyncLifetime
     {
         var admin = await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
 
-        var creation = await admin.PostAsJsonAsync("/api/auth/comptes", new CompteCreateDto
+        var creation = await _fixture.CreerCompteAsync(admin, new CompteCreateDto
         {
             Email = "resp@test.local",
-            MotDePasse = FixtureApi.MotDePasse,
             Nom = "Martin",
             Prenom = "Claire",
             Role = RolesKlean.Responsable
@@ -169,7 +168,6 @@ public class AuthentificationTests : IAsyncLifetime
         var tentative = await responsable.PostAsJsonAsync("/api/auth/comptes", new CompteCreateDto
         {
             Email = "autre@test.local",
-            MotDePasse = FixtureApi.MotDePasse,
             Nom = "X",
             Role = RolesKlean.Responsable
         });
@@ -184,10 +182,9 @@ public class AuthentificationTests : IAsyncLifetime
         var admin = await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
         const string cible = "verrou@test.local";
 
-        await admin.PostAsJsonAsync("/api/auth/comptes", new CompteCreateDto
+        await _fixture.CreerCompteAsync(admin, new CompteCreateDto
         {
             Email = cible,
-            MotDePasse = FixtureApi.MotDePasse,
             Nom = "Verrou",
             Role = RolesKlean.Responsable
         });
@@ -200,27 +197,12 @@ public class AuthentificationTests : IAsyncLifetime
                 new ConnexionDto { Email = cible, MotDePasse = "MauvaisMotDePasse1" });
         }
 
+        // Le bon est le provisoire : le compte ne s'est jamais connecté.
         var avecLeBon = await client.PostAsJsonAsync("/api/auth/connexion",
-            new ConnexionDto { Email = cible, MotDePasse = FixtureApi.MotDePasse });
+            new ConnexionDto { Email = cible, MotDePasse = _fixture.ProvisoireDe(cible) });
 
         Assert.Equal(HttpStatusCode.Unauthorized, avecLeBon.StatusCode);
         Assert.Contains("verrouillé", await avecLeBon.Content.ReadAsStringAsync());
-    }
-
-    [Fact]
-    public async Task Mot_de_passe_sans_chiffre_refuse()
-    {
-        var admin = await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
-
-        var reponse = await admin.PostAsJsonAsync("/api/auth/comptes", new CompteCreateDto
-        {
-            Email = "faible@test.local",
-            MotDePasse = "SansChiffreIci",
-            Nom = "X",
-            Role = RolesKlean.Responsable
-        });
-
-        Assert.Equal(HttpStatusCode.BadRequest, reponse.StatusCode);
     }
 
     [Fact]
@@ -231,7 +213,6 @@ public class AuthentificationTests : IAsyncLifetime
         var reponse = await admin.PostAsJsonAsync("/api/auth/comptes", new CompteCreateDto
         {
             Email = "compta@test.local",
-            MotDePasse = FixtureApi.MotDePasse,
             Nom = "X",
             Role = "Comptable"
         });

@@ -30,6 +30,17 @@ public class Utilisateur : IdentityUser<Guid>
     public bool Actif { get; set; } = true;
 
     /// <summary>
+    /// Vrai tant que le mot de passe est celui qu'a tiré le serveur à la création du
+    /// compte, ou celui de l'amorçage (SPEC.md, étape 24). La connexion impose alors de
+    /// le changer avant toute session.
+    ///
+    /// ⚠️ C'est ce qui permet à l'administrateur de ne jamais connaître le mot de passe
+    /// d'un collègue : ce qu'il transmet ne sert qu'une fois, et ne vaut plus rien dès la
+    /// première connexion.
+    /// </summary>
+    public bool MotDePasseProvisoire { get; set; }
+
+    /// <summary>
     /// Date de la pseudonymisation du compte, nulle tant qu'elle n'a pas eu lieu
     /// (RGPD.md §9.3).
     ///

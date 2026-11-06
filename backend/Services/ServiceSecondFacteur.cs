@@ -12,7 +12,15 @@ namespace Klean.Api.Services;
 public enum EtapeDefi
 {
     SecondFacteur,
-    Equipement
+    Equipement,
+
+    /// <summary>
+    /// Le mot de passe provisoire est à remplacer (SPEC.md, étape 24). Elle passe
+    /// <b>avant</b> les deux autres : un compte obligé équipe son téléphone après avoir
+    /// choisi son mot de passe, puisque ce changement régénère l'empreinte que le défi
+    /// porte.
+    /// </summary>
+    ChangementMotDePasse
 }
 
 /// <summary>

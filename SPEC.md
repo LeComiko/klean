@@ -2781,6 +2781,52 @@ contraire.
   connexion ; la logique de conversion extraite dans un module éprouvé.
 - **C** — les documents : `RGPD.md`, `CLAUDE.md` §6 et §7 bis, `DEPLOIEMENT.md` §2.4.
 
+**Lot A — fait le 6 novembre 2026**
+
+- **La migration `MotDePasseProvisoire`**, relue avant d'être jouée : une colonne
+  `boolean` sur `AspNetUsers`, à faux par défaut. Les comptes existants gardent leur mot
+  de passe. Appliquée à `klean_test` seulement ; la base de développement attend le lot B.
+- **La création ne reçoit plus de mot de passe.** Le serveur en tire un, seize caractères
+  en quatre groupes sans caractères ambigus, soit environ 93 bits, et le rend une seule
+  fois dans `CompteCreeDto`. Le compte est marqué provisoire, comme le premier
+  administrateur de l'amorçage.
+- **La connexion gagne une étape**, `ChangementMotDePasse`, sur le même défi que le second
+  facteur et **avant** lui : choisir le mot de passe régénère l'empreinte que le défi
+  porte. `POST /api/auth/connexion/mot-de-passe` prend le nouveau mot de passe, refuse le
+  provisoire lui-même, et enchaîne sur l'équipement, le code ou la session.
+  - Le drapeau et le mot de passe changent dans la même écriture.
+  - Le mot de passe oublié lève le drapeau, lui aussi : la personne l'a choisi.
+  - ⚠️ Le défi d'une autre étape est refusé. Sans cette garde, qui tient le mot de passe
+    d'un compte équipé le remplacerait sans jamais saisir de code.
+- **`GET /api/auth/comptes`**, administrateur seul, journalisé en `Compte` / `Liste`,
+  cadré à la main sur l'entreprise. Les pseudonymisés viennent en fin de liste.
+- **Fermer et rouvrir un compte**, `POST /api/auth/comptes/{id}/desactiver` et
+  `/reactiver`, journalisés sous deux natures nouvelles, `Desactivation` et
+  `Reactivation`.
+  - Fermer régénère l'empreinte **et** révoque les sessions.
+  - Jamais sur soi-même. Une garde « dernier administrateur » serait inatteignable ici,
+    l'appelant en étant un : elle n'est pas écrite.
+  - Un compte pseudonymisé ne se rouvre pas.
+  - ⚠️ Les deux rendent le compte et non 204 : le journal ne consigne qu'une réponse
+    porteuse d'un corps, et un 204 n'aurait laissé aucune ligne.
+- **La fixture** retient le mot de passe provisoire rendu à la création, et la première
+  connexion le remplace sur un appareil à part, comme l'équipement : aucune session de
+  plus. Les neuf créations des séries existantes passent par elle. Le test du mot de passe
+  trop faible à la création n'a plus d'objet ; sa règle est éprouvée au premier mot de
+  passe.
+- **`ComptesTests`, treize tests**, et le test des actions journalisées passe à dix-sept.
+- **Quinze sabotages, tous rouges.** ⚠️ Un seul est d'abord resté vert : retirer le
+  rangement des pseudonymisés. « Compte anonymisé » se rangeait déjà en dernier par
+  l'ordre alphabétique, et le test passait par hasard. Il porte désormais un compte vivant
+  nommé « Zoé ».
+- ⚠️ **Non éprouvé par un test** : le drapeau posé par l'amorçage. Il ne joue que sur une
+  base sans aucun compte, et la série ne peut pas en offrir une. À vérifier sur une
+  instance neuve.
+- ⚠️ **L'écran de connexion ne connaît pas encore l'étape `ChangementMotDePasse`.** Aucun
+  compte provisoire n'existe tant que la base de développement n'est pas migrée, mais une
+  instance neuve ne doit pas être déployée avant le lot B.
+- Série serveur complète : 624 tests verts.
+
 ---
 
 # Suite — non planifié

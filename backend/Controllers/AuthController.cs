@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
 using Klean.Api.DTOs;
 using Klean.Api.Data;
 using Klean.Api.Filtres;
@@ -93,9 +94,80 @@ public class AuthController : ControllerBase
             return Unauthorized("Identifiants invalides.");
         }
 
-        // Le mot de passe ne suffit pas toujours (SPEC.md, étape 23). Aucune session
-        // n'est alors ouverte : un cookie de défi de cinq minutes mène au second temps,
-        // ou à l'équipement d'un compte que son rôle oblige.
+        return await SuiteDeLaConnexionAsync(utilisateur);
+    }
+
+    /// <summary>
+    /// Premier temps de la première connexion : le mot de passe provisoire est remplacé
+    /// par celui que la personne choisit (SPEC.md, étape 24). Le défi de la connexion
+    /// tient lieu de preuve, le provisoire venant d'y être vérifié.
+    ///
+    /// La suite est celle d'une connexion ordinaire : le second facteur, ou son
+    /// équipement, puis la session. ⚠️ Le changement régénère l'empreinte de sécurité,
+    /// donc périme le défi qui a servi : l'étape suivante en reçoit un neuf.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpPost("connexion/mot-de-passe")]
+    public async Task<ActionResult<SessionDto>> PremierMotDePasse(NouveauMotDePasseDto dto)
+    {
+        var limite = LimiteAtteinte("premier-mot-de-passe", null,
+            PlafondsDebit.ConnexionsParAdresse, PlafondsDebit.FenetreConnexionAdresse);
+        if (limite is not null) return limite;
+
+        var utilisateur = await _secondFacteur.CompteDuDefiAsync(HttpContext, EtapeDefi.ChangementMotDePasse);
+
+        if (utilisateur is null)
+        {
+            ServiceSecondFacteur.EffacerDefi(HttpContext);
+            return Unauthorized(SecondFacteurController.DefiPerime);
+        }
+
+        if (await _utilisateurs.CheckPasswordAsync(utilisateur, dto.NouveauMotDePasse))
+        {
+            return BadRequest("Choisir un mot de passe différent du mot de passe provisoire.");
+        }
+
+        // ⚠️ Posé AVANT la réinitialisation, qui enregistre le compte entier : le drapeau
+        // et le mot de passe changent dans la même écriture. Dans l'autre ordre, une
+        // seconde écriture qui échouerait laisserait un mot de passe choisi marqué
+        // provisoire.
+        utilisateur.MotDePasseProvisoire = false;
+
+        var jeton = await _utilisateurs.GeneratePasswordResetTokenAsync(utilisateur);
+        var resultat = await _utilisateurs.ResetPasswordAsync(utilisateur, jeton, dto.NouveauMotDePasse);
+
+        if (!resultat.Succeeded)
+        {
+            return BadRequest(string.Join(" ; ", resultat.Errors.Select(e => e.Description)));
+        }
+
+        var suite = await SuiteDeLaConnexionAsync(utilisateur);
+
+        // Une session ouverte : le défi n'a plus d'usage. Une étape suivante l'a déjà
+        // remplacé par le sien.
+        if (suite.Result is not AcceptedResult) ServiceSecondFacteur.EffacerDefi(HttpContext);
+
+        return suite;
+    }
+
+    /// <summary>
+    /// Ce qui suit un bon mot de passe. Le mot de passe ne suffit pas toujours, et aucune
+    /// session n'est alors ouverte : un cookie de défi de cinq minutes mène à l'étape
+    /// suivante.
+    ///
+    /// ⚠️ <b>L'ordre est imposé</b> : le mot de passe provisoire d'abord (étape 24), puis
+    /// le second facteur ou son équipement (étape 23). Choisir le mot de passe régénère
+    /// l'empreinte de sécurité ; un téléphone équipé avant serait lié à un défi aussitôt
+    /// périmé.
+    /// </summary>
+    private async Task<ActionResult<SessionDto>> SuiteDeLaConnexionAsync(Utilisateur utilisateur)
+    {
+        if (utilisateur.MotDePasseProvisoire)
+        {
+            _secondFacteur.PoserDefi(HttpContext, utilisateur, EtapeDefi.ChangementMotDePasse);
+            return Accepted(new EtapeConnexionDto { Etape = nameof(EtapeDefi.ChangementMotDePasse) });
+        }
+
         if (utilisateur.TwoFactorEnabled)
         {
             _secondFacteur.PoserDefi(HttpContext, utilisateur, EtapeDefi.SecondFacteur);
@@ -252,6 +324,10 @@ public class AuthController : ControllerBase
             return BadRequest(LienInvalide);
         }
 
+        // Un mot de passe choisi par la personne n'est plus provisoire. Posé avant :
+        // la réinitialisation enregistre le compte entier, dans la même écriture.
+        utilisateur.MotDePasseProvisoire = false;
+
         var resultat = await _utilisateurs.ResetPasswordAsync(
             utilisateur, dto.Jeton, dto.NouveauMotDePasse);
 
@@ -352,7 +428,7 @@ public class AuthController : ControllerBase
 
     [Authorize(Roles = RolesKlean.Administrateur)]
     [HttpPost("comptes")]
-    public async Task<ActionResult<ProfilDto>> CreerCompte(CompteCreateDto dto)
+    public async Task<ActionResult<CompteCreeDto>> CreerCompte(CompteCreateDto dto)
     {
         if (!RolesKlean.Tous.Contains(dto.Role))
         {
@@ -401,10 +477,14 @@ public class AuthController : ControllerBase
             Nom = dto.Nom,
             Prenom = dto.Prenom,
             DateCreation = DateTime.UtcNow,
-            Actif = true
+            Actif = true,
+            MotDePasseProvisoire = true
         };
 
-        var creation = await _utilisateurs.CreateAsync(utilisateur, dto.MotDePasse);
+        // Tiré ici, jamais choisi par l'administrateur (SPEC.md, étape 24) : ce qu'il
+        // transmet ne sert qu'à la première connexion, qui impose d'en changer.
+        var motDePasse = TirerMotDePasseProvisoire();
+        var creation = await _utilisateurs.CreateAsync(utilisateur, motDePasse);
         if (!creation.Succeeded)
         {
             return BadRequest(string.Join(" ; ", creation.Errors.Select(e => e.Description)));
@@ -416,7 +496,147 @@ public class AuthController : ControllerBase
             return BadRequest(string.Join(" ; ", affectation.Errors.Select(e => e.Description)));
         }
 
-        return Ok(Vers(utilisateur, [dto.Role]));
+        return Ok(new CompteCreeDto
+        {
+            Compte = VersCompte(utilisateur, dto.Role),
+            MotDePasseProvisoire = motDePasse
+        });
+    }
+
+    /// <summary>
+    /// Les comptes de l'entreprise — <c>GET /api/auth/comptes</c>, administrateur seul
+    /// (SPEC.md, étape 24). Les pseudonymisés en fin de liste, marqués de leur date.
+    ///
+    /// ⚠️ <b>Le cadrage sur l'entreprise est écrit à la main</b> : <c>AspNetUsers</c>
+    /// n'est pas filtrée (CLAUDE.md §7). Sans cette ligne, la liste rendrait les comptes
+    /// de toute l'instance.
+    ///
+    /// Non paginée, comme les candidats et les chefs d'équipe : sa taille est bornée par
+    /// l'effectif et les clients syndics, pas par la requête. Journalisée : elle nomme
+    /// des collègues.
+    /// </summary>
+    [JournaliserAcces(RessourceAccedee.Compte, NatureAcces.Liste)]
+    [Authorize(Roles = RolesKlean.Administrateur)]
+    [HttpGet("comptes")]
+    public async Task<ActionResult<List<CompteDto>>> Comptes()
+    {
+        var entrepriseId = EntrepriseIdDuJeton();
+        if (entrepriseId is null)
+        {
+            return Unauthorized("Jeton sans revendication entrepriseId.");
+        }
+
+        return Ok(await _db.Users
+            .AsNoTracking()
+            .Where(u => u.EntrepriseId == entrepriseId.Value)
+            .OrderBy(u => u.DateAnonymisation != null)
+            .ThenBy(u => u.Nom).ThenBy(u => u.Prenom).ThenBy(u => u.Email)
+            .Select(u => new CompteDto
+            {
+                Id = u.Id,
+                Email = u.Email ?? string.Empty,
+                Nom = u.Nom,
+                Prenom = u.Prenom,
+                Role = _db.UserRoles
+                    .Where(ur => ur.UserId == u.Id)
+                    .Join(_db.Roles, ur => ur.RoleId, r => r.Id, (_, r) => r.Name)
+                    .FirstOrDefault() ?? string.Empty,
+                Actif = u.Actif,
+                SecondFacteurActif = u.TwoFactorEnabled,
+                MotDePasseProvisoire = u.MotDePasseProvisoire,
+                AgentId = u.AgentId,
+                ClientId = u.ClientId,
+                DateCreation = u.DateCreation,
+                DateAnonymisation = u.DateAnonymisation
+            })
+            .ToListAsync());
+    }
+
+    /// <summary>
+    /// Ferme un compte de l'entreprise : la personne perd son accès le jour même, sans
+    /// rien effacer (SPEC.md, étape 24). Réversible, contrairement à la pseudonymisation.
+    ///
+    /// ⚠️ <b>Les deux gestes sont nécessaires</b> : l'empreinte de sécurité régénérée
+    /// périme le jeton d'accès en circulation, les sessions révoquées le rafraîchissement
+    /// (CLAUDE.md §10). <c>Actif = false</c> seul laisserait quinze minutes.
+    ///
+    /// ⚠️ <b>Jamais sur soi-même</b>, et c'est ce refus qui garde « une entreprise conserve
+    /// un administrateur actif » : l'appelant en est un, donc si la cible en est un autre,
+    /// ils sont deux. Une garde « dernier administrateur » écrite ici serait inatteignable
+    /// — la leçon de la pseudonymisation des comptes (CLAUDE.md §7 bis).
+    ///
+    /// Rend le compte, et non 204 : le journal ne consigne qu'une réponse porteuse d'un
+    /// corps, et ce geste sur le compte d'autrui doit y laisser sa ligne.
+    /// </summary>
+    [JournaliserAcces(RessourceAccedee.Compte, NatureAcces.Desactivation)]
+    [Authorize(Roles = RolesKlean.Administrateur)]
+    [HttpPost("comptes/{id:guid}/desactiver")]
+    public async Task<ActionResult<CompteDto>> DesactiverCompte(Guid id)
+    {
+        var (compte, refus) = await CompteDeLEntrepriseAsync(id);
+        if (compte is null) return refus!;
+
+        if (compte.Id.ToString() == User.FindFirstValue(ClaimTypes.NameIdentifier))
+        {
+            return Conflict("Un administrateur ne ferme pas son propre compte : un autre administrateur doit le faire.");
+        }
+
+        if (compte.DateAnonymisation is { } date)
+        {
+            return Conflict($"Ce compte a été pseudonymisé le {date:dd/MM/yyyy} : il est déjà fermé, définitivement.");
+        }
+
+        if (!compte.Actif)
+        {
+            return Conflict("Ce compte est déjà désactivé.");
+        }
+
+        compte.Actif = false;
+
+        // Enregistre le compte entier : Actif part dans la même écriture.
+        var ecriture = await _utilisateurs.UpdateSecurityStampAsync(compte);
+        if (!ecriture.Succeeded)
+        {
+            return Conflict("Le compte a été modifié en même temps. Recommencer.");
+        }
+
+        await _session.RevoquerToutAsync(compte.Id, "Compte désactivé");
+
+        return Ok(VersCompte(compte, await RoleDeAsync(compte)));
+    }
+
+    /// <summary>
+    /// Rouvre un compte fermé. Le mot de passe et le second facteur sont ceux d'avant :
+    /// la personne se reconnecte comme elle le faisait. Un compte pseudonymisé ne se
+    /// rouvre pas — son identité n'existe plus.
+    /// </summary>
+    [JournaliserAcces(RessourceAccedee.Compte, NatureAcces.Reactivation)]
+    [Authorize(Roles = RolesKlean.Administrateur)]
+    [HttpPost("comptes/{id:guid}/reactiver")]
+    public async Task<ActionResult<CompteDto>> ReactiverCompte(Guid id)
+    {
+        var (compte, refus) = await CompteDeLEntrepriseAsync(id);
+        if (compte is null) return refus!;
+
+        if (compte.DateAnonymisation is { } date)
+        {
+            return Conflict($"Ce compte a été pseudonymisé le {date:dd/MM/yyyy} : il ne se rouvre pas. Créer un compte neuf.");
+        }
+
+        if (compte.Actif)
+        {
+            return Conflict("Ce compte est déjà actif.");
+        }
+
+        compte.Actif = true;
+
+        var ecriture = await _utilisateurs.UpdateAsync(compte);
+        if (!ecriture.Succeeded)
+        {
+            return Conflict("Le compte a été modifié en même temps. Recommencer.");
+        }
+
+        return Ok(VersCompte(compte, await RoleDeAsync(compte)));
     }
 
     /// <summary>
@@ -553,6 +773,71 @@ public class AuthController : ControllerBase
     {
         var valeur = User.FindFirstValue(JwtService.RevendicationEntrepriseId);
         return Guid.TryParse(valeur, out var id) ? id : null;
+    }
+
+    /// <summary>
+    /// Le compte visé, s'il appartient à l'entreprise de l'appelant ; sinon le refus.
+    /// Un compte d'une autre entreprise rend 404, comme un compte inexistant :
+    /// <c>AspNetUsers</c> n'étant pas filtrée, le cadrage est ici (CLAUDE.md §7).
+    /// </summary>
+    private async Task<(Utilisateur? Compte, ActionResult? Refus)> CompteDeLEntrepriseAsync(Guid id)
+    {
+        var entrepriseId = EntrepriseIdDuJeton();
+        if (entrepriseId is null)
+        {
+            return (null, Unauthorized("Jeton sans revendication entrepriseId."));
+        }
+
+        var compte = await _utilisateurs.FindByIdAsync(id.ToString());
+
+        return compte is null || compte.EntrepriseId != entrepriseId.Value
+            ? (null, NotFound())
+            : (compte, null);
+    }
+
+    private async Task<string> RoleDeAsync(Utilisateur compte) =>
+        (await _utilisateurs.GetRolesAsync(compte)).FirstOrDefault() ?? string.Empty;
+
+    private static CompteDto VersCompte(Utilisateur u, string role) => new()
+    {
+        Id = u.Id,
+        Email = u.Email ?? string.Empty,
+        Nom = u.Nom,
+        Prenom = u.Prenom,
+        Role = role,
+        Actif = u.Actif,
+        SecondFacteurActif = u.TwoFactorEnabled,
+        MotDePasseProvisoire = u.MotDePasseProvisoire,
+        AgentId = u.AgentId,
+        ClientId = u.ClientId,
+        DateCreation = u.DateCreation,
+        DateAnonymisation = u.DateAnonymisation
+    };
+
+    // Sans I ni O, sans l, sans 0 ni 1 : le mot de passe se lit à voix haute ou se
+    // recopie depuis un papier, et ces caractères s'y confondent.
+    private const string Majuscules = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    private const string Minuscules = "abcdefghijkmnopqrstuvwxyz";
+    private const string Chiffres = "23456789";
+
+    /// <summary>
+    /// Seize caractères en quatre groupes — « Hk7m-Q2xa-… » —, soit environ 93 bits.
+    /// Tirés jusqu'à porter une majuscule, une minuscule et un chiffre : la règle
+    /// d'Identity (CLAUDE.md §6), qui refuserait sinon la création.
+    /// </summary>
+    private static string TirerMotDePasseProvisoire()
+    {
+        const string alphabet = Majuscules + Minuscules + Chiffres;
+
+        while (true)
+        {
+            var tire = RandomNumberGenerator.GetString(alphabet, 16);
+
+            if (tire.Any(Majuscules.Contains) && tire.Any(Minuscules.Contains) && tire.Any(Chiffres.Contains))
+            {
+                return string.Join('-', tire.Chunk(4).Select(groupe => new string(groupe)));
+            }
+        }
     }
 
     private static ProfilDto Vers(Utilisateur u, IEnumerable<string> roles) => new()

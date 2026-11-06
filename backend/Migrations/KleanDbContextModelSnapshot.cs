@@ -761,6 +761,9 @@ namespace Klean.Api.Migrations
                     b.Property<DateTimeOffset?>("LockoutEnd")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("MotDePasseProvisoire")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Nom")
                         .IsRequired()
                         .HasMaxLength(100)

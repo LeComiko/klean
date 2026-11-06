@@ -36,6 +36,13 @@ public class FixtureApi : IAsyncLifetime
     private readonly Dictionary<string, string> _cles = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IReadOnlyList<string>> _codes = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Le mot de passe provisoire de chaque compte créé par l'API et pas encore connecté
+    /// (SPEC.md, étape 24) : ce que l'administrateur aurait transmis. Consommé par la
+    /// première connexion, vidé avec la base.
+    /// </summary>
+    private readonly Dictionary<string, string> _provisoires = new(StringComparer.OrdinalIgnoreCase);
+
     public async Task InitializeAsync()
     {
         // La migration passe par un contexte autonome, avant que l'application
@@ -82,6 +89,7 @@ public class FixtureApi : IAsyncLifetime
         portee.ServiceProvider.GetRequiredService<LimiteurDebit>().Vider();
         _cles.Clear();
         _codes.Clear();
+        _provisoires.Clear();
         Fabrique.Courriels.Reinitialiser();
         Fabrique.Horloge.Liberer();
 
@@ -180,6 +188,8 @@ public class FixtureApi : IAsyncLifetime
     public async Task<HttpResponseMessage> ConnexionCompleteAsync(
         HttpClient client, string email, string motDePasse = MotDePasse)
     {
+        if (_provisoires.Remove(email, out var provisoire)) await PremierMotDePasseAsync(email, provisoire, motDePasse);
+
         var reponse = await client.PostAsJsonAsync("/api/auth/connexion",
             new ConnexionDto { Email = email, MotDePasse = motDePasse });
 
@@ -205,6 +215,81 @@ public class FixtureApi : IAsyncLifetime
 
         return await ConnexionCompleteAsync(client, email, motDePasse);
     }
+
+    /// <summary>
+    /// La première connexion d'un compte créé par l'API : le mot de passe provisoire,
+    /// puis le mot de passe choisi — celui que le test emploiera ensuite.
+    ///
+    /// Sur un client à part, comme l'équipement : un compte sans second facteur reçoit
+    /// ici une session, qui fausserait les séries comptant les sessions actives. Elle est
+    /// fermée aussitôt.
+    /// </summary>
+    private async Task PremierMotDePasseAsync(string email, string provisoire, string choisi)
+    {
+        var appareil = Fabrique.CreerClient();
+
+        var connexion = await appareil.PostAsJsonAsync("/api/auth/connexion",
+            new ConnexionDto { Email = email, MotDePasse = provisoire });
+        var etape = connexion.StatusCode == HttpStatusCode.Accepted
+            ? (await connexion.Content.ReadFromJsonAsync<EtapeConnexionDto>())!.Etape
+            : null;
+
+        if (etape != nameof(EtapeDefi.ChangementMotDePasse))
+        {
+            throw new InvalidOperationException(
+                $"La première connexion de {email} n'a pas demandé de changer le mot de passe : "
+                + $"{(int)connexion.StatusCode} {await connexion.Content.ReadAsStringAsync()}");
+        }
+
+        var changement = await appareil.PostAsJsonAsync("/api/auth/connexion/mot-de-passe",
+            new NouveauMotDePasseDto { NouveauMotDePasse = choisi });
+
+        if (changement.StatusCode == HttpStatusCode.OK)
+        {
+            ArmerCsrf(appareil, changement);
+            (await appareil.PostAsync("/api/auth/deconnexion", null)).EnsureSuccessStatusCode();
+        }
+        else if (changement.StatusCode != HttpStatusCode.Accepted)
+        {
+            throw new InvalidOperationException(
+                $"Changement du mot de passe provisoire refusé pour {email} : "
+                + await changement.Content.ReadAsStringAsync());
+        }
+    }
+
+    /// <summary>
+    /// Crée un compte par l'API et retient son mot de passe provisoire, comme
+    /// l'administrateur qui le transmet. La réponse est rendue intacte, lisible encore.
+    /// </summary>
+    public async Task<HttpResponseMessage> CreerCompteAsync(HttpClient administrateur, CompteCreateDto dto)
+    {
+        var reponse = await administrateur.PostAsJsonAsync("/api/auth/comptes", dto);
+
+        if (reponse.IsSuccessStatusCode)
+        {
+            // Lu une fois, puis remis tel quel : le flux de TestServer ne se relit pas,
+            // même mis en mémoire tampon, et l'appelant lit encore la réponse.
+            var corps = await reponse.Content.ReadAsStringAsync();
+            _provisoires[dto.Email] = System.Text.Json.JsonSerializer.Deserialize<CompteCreeDto>(
+                corps, System.Text.Json.JsonSerializerOptions.Web)!.MotDePasseProvisoire;
+            reponse.Content = new StringContent(corps, System.Text.Encoding.UTF8, "application/json");
+        }
+
+        return reponse;
+    }
+
+    /// <summary>
+    /// La première connexion seule, sans session à la clé : pour une série qui éprouve la
+    /// connexion ordinaire d'un compte créé par l'API. Ensuite, son mot de passe est
+    /// <paramref name="choisi"/>.
+    /// </summary>
+    public async Task LeverProvisoireAsync(string email, string choisi = MotDePasse)
+    {
+        if (_provisoires.Remove(email, out var provisoire)) await PremierMotDePasseAsync(email, provisoire, choisi);
+    }
+
+    /// <summary>Le mot de passe provisoire retenu à la création, s'il n'a pas encore servi.</summary>
+    public string ProvisoireDe(string email) => _provisoires[email];
 
     /// <summary>La clé que la fixture a scannée pour ce compte.</summary>
     public string CleDe(string email) => _cles[email];
@@ -316,11 +401,10 @@ public class FixtureApi : IAsyncLifetime
         HttpClient administrateur, string role, string email,
         Guid? agentId = null, Guid? clientId = null)
     {
-        var creation = await administrateur.PostAsJsonAsync("/api/auth/comptes",
+        var creation = await CreerCompteAsync(administrateur,
             new CompteCreateDto
             {
                 Email = email,
-                MotDePasse = MotDePasse,
                 Nom = role,
                 Role = role,
                 AgentId = agentId,
