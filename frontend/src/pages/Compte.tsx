@@ -1,9 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 
+import { activerSecondFacteur, lireEtatSecondFacteur, preparerSecondFacteur, regenererCodes } from '../api/secondFacteur'
 import { useAuth } from '../auth/contexte'
 import { refusLocal } from '../auth/motDePasse'
+import { saisieDe } from '../auth/secondFacteur'
+import { CodesRecuperation } from '../composants/CodesRecuperation'
 import { EnTetePage } from '../composants/EnTetePage'
+import { EquipementSecondFacteur } from '../composants/EquipementSecondFacteur'
+import type { EtatSecondFacteur } from '../types/auth'
 import './Compte.css'
 
 /**
@@ -221,6 +226,8 @@ export function Compte() {
           </form>
         </section>
 
+        <DoubleAuthentification />
+
         <section className="compte__carte" aria-labelledby="compte-appareils">
           <h2 className="compte__titre" id="compte-appareils">
             Appareils connectés
@@ -283,5 +290,241 @@ export function Compte() {
         </section>
       </div>
     </>
+  )
+}
+
+type Chargement =
+  | { etat: 'chargement' }
+  | { etat: 'erreur'; message: string }
+  | { etat: 'donnees'; valeur: EtatSecondFacteur }
+
+/**
+ * Le second facteur de son propre compte (SPEC.md, étape 23) : l'activer s'il est
+ * facultatif, régénérer les codes de récupération, le retirer.
+ *
+ * Pour un compte que son rôle oblige, « Désactiver » s'appelle **« Changer de
+ * téléphone »** et en a l'effet : toutes les sessions se ferment, celle-ci comprise, et
+ * la connexion suivante impose l'équipement du nouveau. Un compte obligé est toujours
+ * équipé ici — sans second facteur, il n'aurait pas de session pour voir cet écran.
+ */
+function DoubleAuthentification() {
+  const { adopterSession, desactiverSecondFacteur } = useAuth()
+
+  const [chargement, setChargement] = useState<Chargement>({ etat: 'chargement' })
+  const [generation, setGeneration] = useState(0)
+  const [mode, setMode] = useState<'repos' | 'equipement' | { codes: string[] }>('repos')
+  const [code, setCode] = useState('')
+  const [envoi, setEnvoi] = useState(false)
+  const [erreur, setErreur] = useState<string | null>(null)
+  const [annonce, setAnnonce] = useState<string | null>(null)
+
+  useEffect(() => {
+    const controleur = new AbortController()
+
+    lireEtatSecondFacteur(controleur.signal)
+      .then((valeur) => setChargement({ etat: 'donnees', valeur }))
+      .catch((echec: unknown) => {
+        if (controleur.signal.aborted) return
+        setChargement({ etat: 'erreur', message: echec instanceof Error ? echec.message : 'État indisponible.' })
+      })
+
+    return () => {
+      controleur.abort()
+    }
+  }, [generation])
+
+  function recharger(message: string | null) {
+    setMode('repos')
+    setCode('')
+    setErreur(null)
+    setAnnonce(message)
+    setGeneration((precedente) => precedente + 1)
+  }
+
+  /** Le code saisi, ou `null` après avoir affiché le refus local. */
+  function codeSaisi(): string | null {
+    setErreur(null)
+    setAnnonce(null)
+
+    const saisie = saisieDe(code, false)
+
+    if ('refus' in saisie) {
+      setErreur(saisie.refus)
+      return null
+    }
+
+    return 'code' in saisie.corps ? saisie.corps.code : null
+  }
+
+  async function regenerer() {
+    const valeur = codeSaisi()
+    if (valeur === null) return
+
+    setEnvoi(true)
+
+    try {
+      setMode({ codes: (await regenererCodes(valeur)).codes })
+      setCode('')
+    } catch (echec: unknown) {
+      setErreur(echec instanceof Error ? echec.message : 'Régénération impossible.')
+      setCode('')
+    } finally {
+      setEnvoi(false)
+    }
+  }
+
+  async function desactiver(obligatoire: boolean) {
+    const valeur = codeSaisi()
+    if (valeur === null) return
+
+    setEnvoi(true)
+
+    try {
+      // Obligatoire : la session tombe, et RouteProtegee renvoie à la connexion.
+      // Rien à annoncer, cet écran n'existe plus.
+      await desactiverSecondFacteur(valeur)
+
+      if (!obligatoire) recharger('Double authentification désactivée. Cet appareil reste connecté.')
+    } catch (echec: unknown) {
+      setErreur(echec instanceof Error ? echec.message : 'Désactivation impossible.')
+      setCode('')
+    } finally {
+      setEnvoi(false)
+    }
+  }
+
+  const erreurAffichee = erreur !== null && (
+    <p className="compte__erreur" role="alert">
+      <strong className="compte__erreur-mot">Erreur —</strong> {erreur}
+    </p>
+  )
+
+  return (
+    <section className="compte__carte" aria-labelledby="compte-second-facteur">
+      <h2 className="compte__titre" id="compte-second-facteur">
+        Double authentification
+      </h2>
+
+      {chargement.etat === 'chargement' && <output className="compte__note">Chargement…</output>}
+
+      {chargement.etat === 'erreur' && (
+        <p className="compte__erreur" role="alert">
+          <strong className="compte__erreur-mot">Erreur —</strong> {chargement.message}
+        </p>
+      )}
+
+      {annonce !== null && <output className="compte__annonce">{annonce}</output>}
+
+      {chargement.etat === 'donnees' && typeof mode === 'object' && (
+        <CodesRecuperation
+          codes={mode.codes}
+          libelleSuite="Terminé"
+          surSuite={() => recharger('Nouveaux codes enregistrés. Les anciens ne servent plus.')}
+        />
+      )}
+
+      {chargement.etat === 'donnees' && mode === 'equipement' && (
+        <>
+          <EquipementSecondFacteur
+            preparer={preparerSecondFacteur}
+            activer={activerSecondFacteur}
+            surTermine={(session) => {
+              if (session !== null) adopterSession(session)
+              recharger('Double authentification activée. Les autres appareils ont été déconnectés.')
+            }}
+          />
+
+          <button className="compte__annuler" type="button" onClick={() => recharger(null)}>
+            Annuler
+          </button>
+        </>
+      )}
+
+      {chargement.etat === 'donnees' && mode === 'repos' && !chargement.valeur.actif && (
+        <>
+          <p className="compte__note">
+            Facultative pour votre rôle. Une fois activée, la connexion demande en plus du mot de
+            passe un code à six chiffres, produit par une application sur votre téléphone : un mot
+            de passe volé ne suffit plus.
+          </p>
+
+          <p className="compte__consequence">
+            L’activation déconnecte <strong>tous les autres appareils</strong>. Celui-ci reste
+            connecté.
+          </p>
+
+          <button className="compte__valider" type="button" onClick={() => setMode('equipement')}>
+            Activer
+          </button>
+        </>
+      )}
+
+      {chargement.etat === 'donnees' && mode === 'repos' && chargement.valeur.actif && (
+        <form className="compte__formulaire" onSubmit={(evenement) => evenement.preventDefault()} noValidate>
+          <dl className="compte__definitions">
+            <div className="compte__ligne">
+              <dt className="compte__cle">État</dt>
+              <dd className="compte__valeur">
+                Active{chargement.valeur.obligatoire ? ', imposée par votre rôle' : ''}
+              </dd>
+            </div>
+
+            <div className="compte__ligne">
+              <dt className="compte__cle">Codes de récupération</dt>
+              <dd className="compte__valeur compte__valeur--chiffres">
+                {chargement.valeur.codesRestants} sur 10
+              </dd>
+            </div>
+          </dl>
+
+          {chargement.valeur.codesRestants <= 2 && (
+            <p className="compte__consequence">
+              Il reste peu de codes de récupération : les régénérer avant d’en avoir besoin.
+            </p>
+          )}
+
+          <div className="compte__champ">
+            <label className="compte__etiquette" htmlFor="compte-code">
+              Code affiché par l’application
+            </label>
+            <input
+              id="compte-code"
+              className="compte__saisie compte__saisie--code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              aria-describedby="compte-code-aide"
+              value={code}
+              onChange={(evenement) => setCode(evenement.target.value)}
+            />
+            <p className="compte__aide" id="compte-code-aide">
+              Demandé pour chacun des deux gestes ci-dessous : une session ouverte ne suffit pas.
+            </p>
+          </div>
+
+          <p className="compte__consequence">
+            {chargement.valeur.obligatoire
+              ? <>Changer de téléphone <strong>déconnecte tous les appareils, celui-ci compris</strong>. La connexion suivante demandera d’équiper le nouveau.</>
+              : <>La désactivation déconnecte <strong>tous les autres appareils</strong>. Celui-ci reste connecté.</>}
+          </p>
+
+          {erreurAffichee}
+
+          <div className="compte__actions">
+            <button className="compte__valider" type="button" disabled={envoi} onClick={() => void regenerer()}>
+              Régénérer les codes
+            </button>
+
+            <button
+              className="compte__declencheur"
+              type="button"
+              disabled={envoi}
+              onClick={() => void desactiver(chargement.valeur.obligatoire)}
+            >
+              {chargement.valeur.obligatoire ? 'Changer de téléphone' : 'Désactiver'}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
   )
 }

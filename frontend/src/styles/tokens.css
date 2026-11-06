@@ -127,6 +127,14 @@
      et par un daltonien. */
   --hachure: #d8d4cc;
 
+  /* ---- QR code ----
+     Noir sur blanc, dans les deux thèmes, et c'est délibéré : le bloc sombre ne
+     les redéfinit pas. Un QR code inversé — clair sur sombre — n'est pas lu par
+     toutes les applications d'authentification, et c'est le seul dessin du
+     produit qu'une machine doit lire plutôt qu'un humain (étape 23). */
+  --qr-fond: #ffffff;
+  --qr-module: #000000;
+
   /* ---- Typographie ----
      Figtree pour l'interface. IBM Plex Mono pour TOUT chiffre comparé en
      colonne — heures, km, scores, quantités : la chasse fixe aligne

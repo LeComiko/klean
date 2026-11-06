@@ -1622,6 +1622,14 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   refuserait — et un francophone lirait « The MotDePasseActuel field is required. »
   sous un formulaire entièrement en français. Un écran qui refuse n'est éprouvable
   qu'extrait ; un écran qui affiche se relit.
+
+  Et pour `src/auth/secondFacteur.ts` (étape 23), avec une raison de plus : côté
+  serveur, un code mal formé **compte dans les cinq échecs du verrouillage**. Le refus
+  local épargne un essai qui n'en était pas un.
+- **Un QR code se dessine noir sur blanc dans les deux thèmes.** `--qr-fond` et
+  `--qr-module` ne sont pas redéfinis par le bloc sombre, et c'est délibéré : un QR
+  inversé n'est pas lu par toutes les applications. C'est le seul dessin du produit
+  qu'une machine lit plutôt qu'un humain.
 - **Un écran de compte n'est pas une section.** `layout/sections.ts` déclare
   `CheminCompte` sans le mettre dans `Sections`, et `sections.test.ts` garde
   l'absence. Une section est une fonction du produit, ouverte par rôle, et

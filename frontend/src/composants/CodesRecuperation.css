@@ -1,0 +1,106 @@
+.codes-recuperation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+}
+
+.codes-recuperation__consigne {
+  color: var(--texte);
+}
+
+/* Deux colonnes de codes en chasse fixe : un code se recopie caractère par
+   caractère, et l'alignement évite de sauter une ligne. */
+.codes-recuperation__liste {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--espace-2) var(--espace-4);
+  margin: 0;
+  padding: var(--espace-4) var(--espace-4) var(--espace-4) var(--espace-8);
+  background: var(--surface-2);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+}
+
+.codes-recuperation__code {
+  font-family: var(--police-chiffres);
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  font-weight: 500;
+  color: var(--texte);
+}
+
+.codes-recuperation__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-3);
+}
+
+.codes-recuperation__copier {
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-4);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+}
+
+.codes-recuperation__copier:hover {
+  border-color: var(--brand);
+}
+
+.codes-recuperation__etat {
+  color: var(--texte-2);
+}
+
+.codes-recuperation__accord {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espace-2);
+  color: var(--texte);
+}
+
+.codes-recuperation__accord input {
+  margin-top: 4px;
+}
+
+.codes-recuperation__suite {
+  align-self: flex-start;
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-4);
+  background: var(--brand);
+  color: var(--sur-brand);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+}
+
+.codes-recuperation__suite:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+
+/* Désactivé tant que la case n'est pas cochée : l'état est dit par la case juste
+   au-dessus, le bouton n'a pas à le dire par un contraste dégradé (§12). */
+.codes-recuperation__suite:disabled {
+  cursor: not-allowed;
+  background: var(--surface-2);
+  color: var(--texte-2);
+  border: 1px solid var(--border-fort);
+}
+
+@media (max-width: 720px) {
+  .codes-recuperation__liste {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .codes-recuperation__code,
+  .codes-recuperation__consigne,
+  .codes-recuperation__accord {
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+
+  .codes-recuperation__copier,
+  .codes-recuperation__suite {
+    height: var(--cible-tactile);
+  }
+}

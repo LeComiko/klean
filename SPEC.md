@@ -2567,11 +2567,60 @@ NuGet. Les trois ont changé quelque chose, et chacune a reçu une réponse :
 - Série complète : **609 tests verts**. Sa durée passe de 3 minutes à 6 min 25 s : chaque
   première connexion d'un compte obligé coûte maintenant six requêtes.
 - ⚠️ **Écart ouvert jusqu'au lot B** : l'écran de connexion ne connaît pas le 202. Un
-  administrateur ne peut donc plus se connecter depuis le navigateur.
+  administrateur ne peut donc plus se connecter depuis le navigateur. **Fermé au lot B.**
 - ⚠️ **Limite assumée** : le premier équipement d'un compte obligé se fait sur le mot de
   passe seul. Qui détient ce mot de passe avant le titulaire peut équiper son propre
   téléphone. C'est le cas de tout premier enrôlement, et c'est le cas que la
   réinitialisation par un administrateur répare.
+
+**Lot B — fait le 6 novembre 2026**
+
+- **La connexion en trois temps**, dans `pages/Connexion.tsx` : le mot de passe ; puis le
+  code, ou un code de récupération (« Téléphone perdu ? ») ; ou l'équipement imposé.
+  - Un 401 au second temps ramène au mot de passe avec le message du serveur. Un 400
+    laisse sur place, et vide le champ.
+  - `connexion/code` rejoint `SansRafraichissement` : avant le code, il n'y a pas de
+    session à rafraîchir.
+- **Les codes de récupération ne s'adoptent qu'après avoir été vus.** L'activation rouvre
+  bien une session côté serveur, mais adopter le profil tout de suite ferait quitter
+  l'écran de connexion avant de les montrer, et ils ne se revoient jamais. D'où
+  `adopterSession` dans le contexte, et une case « rangés en lieu sûr » avant de
+  continuer.
+- **La préparation part d'un clic, jamais du montage.** Chaque appel remplace la clé : le
+  double montage de `StrictMode` en lancerait deux, et des réponses croisées montreraient
+  une clé déjà remplacée, donc un QR code qui ne marche pas, sans aucune erreur.
+- **Le QR code** est un `<path>` SVG construit en données (`traceQr`) : aucun
+  `innerHTML`, aucune politique de contenu touchée. Il est dessiné noir sur blanc dans
+  les deux thèmes, avec deux jetons que le bloc sombre ne redéfinit pas, puisqu'un QR
+  inversé n'est pas lu partout. `npm run verifier` mesure leur contraste dans les deux
+  thèmes.
+- **L'écran du compte** porte une section « Double authentification » : l'état, les
+  codes restants, et deux gestes qui exigent un code — régénérer les codes, et
+  désactiver. Pour un compte obligé, ce second geste s'appelle « Changer de téléphone ».
+  Un compte au rôle facultatif l'active depuis cet écran.
+- **Les refus locaux** sont dans `auth/secondFacteur.ts`, avec 14 tests : six chiffres,
+  seize caractères de Crockford avec les mêmes confusions ramenées que le serveur, et
+  une seule des deux clés envoyée. Ce n'est pas du confort : côté serveur, une saisie
+  mal formée compte dans les cinq échecs du verrou.
+- Huit sabotages côté écran, tous rouges :
+  - le second temps rafraîchi ;
+  - cinq chiffres acceptés ;
+  - O non ramené à 0 ;
+  - les axes du QR inversés ;
+  - la marge comptée une fois ;
+  - un code de récupération envoyé comme code ;
+  - une étape non reconnue ;
+  - les espaces gardés.
+- **Vérifié dans le navigateur**, avec le compte administrateur de développement et un
+  vrai téléphone :
+  - l'ancienne session est tombée au déploiement ;
+  - l'équipement imposé, puis l'arrivée sur le planning ;
+  - l'écran du compte affiche « Active, imposée par votre rôle », 10 codes sur 10 ;
+  - le refus local d'un champ vide ;
+  - la déconnexion, puis une connexion par code.
+- ⚠️ **Reste ouvert** : la réinitialisation par un administrateur n'a pas d'écran. Aucune
+  liste des comptes n'existe, ni pour réinitialiser, ni pour créer un compte. C'est un
+  lot à part, à cadrer : la liste nomme des personnes, donc elle se journalise.
 
 ---
 

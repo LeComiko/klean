@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import { ErreurApi, api, surSessionPerdue } from '../api/client'
-import type { Profil, Session } from '../types/auth'
+import type { EtapeConnexion, Profil, ReponseEtape, SaisieSecondFacteur, Session } from '../types/auth'
+import { estEtape } from './secondFacteur'
 import { ContexteAuth } from './contexte'
 import type { ValeurAuth } from './contexte'
 
@@ -89,14 +90,49 @@ export function FournisseurAuth({ children }: { children: ReactNode }) {
     }
   }, [expiration])
 
-  const connecter = useCallback(async (email: string, motDePasse: string) => {
-    // L'erreur remonte volontairement : c'est la page de connexion qui possède
-    // les trois états — chargement, erreur, données.
-    const session = await api.post<Session>('/api/auth/connexion', { email, motDePasse })
-
+  const adopterSession = useCallback((session: Session) => {
     setProfil(session.profil)
     setExpiration(session.expiration)
   }, [])
+
+  const connecter = useCallback(
+    async (email: string, motDePasse: string): Promise<EtapeConnexion | null> => {
+      // L'erreur remonte volontairement : c'est la page de connexion qui possède
+      // les trois états — chargement, erreur, données.
+      const reponse = await api.post<Session | ReponseEtape>('/api/auth/connexion', { email, motDePasse })
+
+      // 202 : aucune session, seulement un cookie de défi. Rien à adopter.
+      if (estEtape(reponse)) return reponse.etape
+
+      adopterSession(reponse)
+      return null
+    },
+    [adopterSession],
+  )
+
+  const saisirCode = useCallback(
+    async (saisie: SaisieSecondFacteur) => {
+      adopterSession(await api.post<Session>('/api/auth/connexion/code', saisie))
+    },
+    [adopterSession],
+  )
+
+  const desactiverSecondFacteur = useCallback(
+    async (code: string) => {
+      const session = await api.post<Session | undefined>('/api/auth/second-facteur/desactiver', { code })
+
+      // 204 : un compte obligé change de téléphone, et ses sessions sont fermées,
+      // celle-ci comprise. Comme pour `deconnecterPartout`, on ne purge qu'au succès.
+      if (session === undefined) {
+        setProfil(null)
+        setExpiration(null)
+        return
+      }
+
+      adopterSession(session)
+    },
+    [adopterSession],
+  )
 
   const deconnecter = useCallback(async () => {
     try {
@@ -143,11 +179,24 @@ export function FournisseurAuth({ children }: { children: ReactNode }) {
       profil,
       restauration,
       connecter,
+      saisirCode,
+      adopterSession,
+      desactiverSecondFacteur,
       deconnecter,
       changerMotDePasse,
       deconnecterPartout,
     }),
-    [profil, restauration, connecter, deconnecter, changerMotDePasse, deconnecterPartout],
+    [
+      profil,
+      restauration,
+      connecter,
+      saisirCode,
+      adopterSession,
+      desactiverSecondFacteur,
+      deconnecter,
+      changerMotDePasse,
+      deconnecterPartout,
+    ],
   )
 
   return <ContexteAuth.Provider value={valeur}>{children}</ContexteAuth.Provider>

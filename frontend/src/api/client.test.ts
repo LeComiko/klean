@@ -325,6 +325,20 @@ describe('client — rafraîchissement sur 401', () => {
 
     assert.deepEqual(trace(), ['POST /api/auth/rafraichir', 'POST /api/auth/deconnexion'])
   })
+
+  test('un défi échu au second temps de la connexion ne déclenche aucun rafraîchissement', async () => {
+    // Avant le code, aucune session n'existe (étape 23). Rafraîchir échouerait, et
+    // l'écran afficherait « Session expirée » au lieu de « La connexion a expiré ».
+    repondre = () => texte('La connexion a expiré ou n’est plus valable.', 401)
+
+    await assert.rejects(
+      () => api.post('/api/auth/connexion/code', { code: '123456' }),
+      (echec: unknown) =>
+        echec instanceof ErreurApi && echec.message === 'La connexion a expiré ou n’est plus valable.',
+    )
+
+    assert.deepEqual(trace(), ['POST /api/auth/connexion/code'])
+  })
 })
 
 describe('client — corps de réponse', () => {

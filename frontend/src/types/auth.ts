@@ -7,7 +7,10 @@
  * backend aurait régressé.
  */
 
-/** Réponse de `POST /api/auth/connexion` et de `POST /api/auth/rafraichir`. */
+/**
+ * Réponse de `POST /api/auth/rafraichir`, de `POST /api/auth/connexion/code`, et de
+ * `POST /api/auth/connexion` quand le mot de passe suffit (200).
+ */
 export interface Session {
   /**
    * Expiration du jeton d'accès, en ISO 8601 UTC (suffixe `Z`).
@@ -15,6 +18,42 @@ export interface Session {
    */
   expiration: string
   profil: Profil
+}
+
+/**
+ * L'étape que rend `POST /api/auth/connexion` en **202**, quand le mot de passe ne
+ * suffit pas (SPEC.md, étape 23) : saisir un code, ou équiper d'abord un téléphone.
+ * Miroir de `backend/DTOs/SecondFacteurDto.cs`, comme les quatre types qui suivent.
+ */
+export type EtapeConnexion = 'SecondFacteur' | 'Equipement'
+
+export interface ReponseEtape {
+  etape: EtapeConnexion
+}
+
+/** Un code de l'application, ou un code de récupération : l'un des deux, jamais les deux. */
+export type SaisieSecondFacteur = { code: string } | { codeRecuperation: string }
+
+/** De quoi équiper un téléphone. La clé n'est montrée qu'à cet instant. */
+export interface PreparationSecondFacteur {
+  /** En Base32, par groupes de quatre. */
+  cle: string
+  uri: string
+  /** Lignes de modules, `true` pour un module sombre, sans la marge blanche. */
+  modules: boolean[][]
+}
+
+/** Les codes de récupération, montrés une seule fois, et la session rouverte s'il y a lieu. */
+export interface CodesRecuperation {
+  codes: string[]
+  session: Session | null
+}
+
+export interface EtatSecondFacteur {
+  actif: boolean
+  /** Le rôle l'impose : « Désactiver » devient alors « Changer de téléphone ». */
+  obligatoire: boolean
+  codesRestants: number
 }
 
 /** Réponse de `GET /api/auth/moi`. */

@@ -34,6 +34,9 @@ const MethodesSansEffet = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE'])
 const SansRafraichissement = new Set([
   '/api/auth/rafraichir',
   '/api/auth/connexion',
+  // Le second temps de la connexion (étape 23) : il n'y a pas encore de session à
+  // rafraîchir, et son 401 dit « recommencer la connexion », pas « session morte ».
+  '/api/auth/connexion/code',
   '/api/auth/deconnexion',
 ])
 

@@ -104,6 +104,17 @@
   line-height: var(--corps-interligne);
 }
 
+/* Le code à six chiffres : chasse fixe et espacé, il se compare au téléphone. */
+.compte__saisie--code {
+  max-width: 200px;
+  font-family: var(--police-chiffres);
+  letter-spacing: 0.2em;
+}
+
+.compte__valeur--chiffres {
+  font-family: var(--police-chiffres);
+}
+
 .compte__saisie:focus {
   border-color: var(--brand);
 }

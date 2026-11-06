@@ -23,6 +23,36 @@
   border-radius: var(--rayon-carte);
 }
 
+/* L'équipement montre un QR code et dix codes : 400 px les serrerait. */
+.connexion__carte--large {
+  max-width: 520px;
+}
+
+.connexion__explication {
+  margin-bottom: var(--espace-4);
+  color: var(--texte);
+}
+
+/* Le code à six chiffres, en chasse fixe et espacé : il se compare à l'écran du
+   téléphone chiffre par chiffre. */
+.connexion__champ--code {
+  font-family: var(--police-chiffres);
+  letter-spacing: 0.2em;
+}
+
+/* Un geste secondaire en texte souligné, en --texte : jamais en gris de marque,
+   qui s'effondre en thème sombre (CLAUDE.md §10). */
+.connexion__lien {
+  align-self: flex-start;
+  margin-top: var(--espace-4);
+  padding: 0;
+  background: none;
+  color: var(--texte);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 600;
+}
+
 /* Pastille de marque, même gabarit que celle de la barre latérale. */
 .connexion__marque {
   display: flex;
@@ -113,14 +143,20 @@
 
 @media (max-width: 720px) {
   .connexion__accroche,
+  .connexion__explication,
   .connexion__champ,
-  .connexion__erreur {
+  .connexion__erreur,
+  .connexion__lien {
     font-size: var(--corps-mobile-taille);
     line-height: var(--corps-mobile-interligne);
   }
 
   .connexion__champ {
     height: var(--cible-tactile);
+  }
+
+  .connexion__lien {
+    min-height: var(--cible-tactile);
   }
 
   .connexion__bouton {

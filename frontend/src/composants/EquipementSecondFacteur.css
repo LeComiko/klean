@@ -1,0 +1,145 @@
+.equipement {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-4);
+}
+
+.equipement__etapes {
+  margin: 0;
+  padding-left: var(--espace-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-2);
+  color: var(--texte);
+}
+
+/* Les deux jetons du QR code ne changent pas avec le thème (tokens.css) : une
+   application d'authentification lit du noir sur blanc. */
+.equipement__qr {
+  width: 220px;
+  height: 220px;
+  align-self: center;
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+}
+
+.equipement__qr-fond {
+  fill: var(--qr-fond);
+}
+
+.equipement__qr-modules {
+  fill: var(--qr-module);
+}
+
+.equipement__cle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-1);
+}
+
+.equipement__cle-libelle {
+  color: var(--texte-2);
+}
+
+.equipement__cle-valeur {
+  font-family: var(--police-chiffres);
+  font-weight: 500;
+  color: var(--texte);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.equipement__etiquette {
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texte-2);
+}
+
+.equipement__champ {
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-3);
+  background: var(--surface-2);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-family: var(--police-chiffres);
+  font-size: var(--corps-taille);
+  letter-spacing: 0.2em;
+}
+
+.equipement__champ:hover {
+  border-color: var(--brand);
+}
+
+.equipement__erreur {
+  padding: var(--espace-3);
+  color: var(--alerte);
+  background: var(--surface-2);
+  /* Trait pointillé : redondance non colorée du signal d'erreur. */
+  border: 1px dashed var(--alerte);
+  border-radius: var(--rayon-bloc);
+}
+
+.equipement__erreur-mot {
+  font-weight: 700;
+}
+
+.equipement__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-3);
+}
+
+.equipement__bouton {
+  align-self: flex-start;
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-4);
+  background: var(--brand);
+  color: var(--sur-brand);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+}
+
+.equipement__bouton:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+
+.equipement__bouton:disabled {
+  cursor: progress;
+  background: var(--surface-2);
+  color: var(--texte-2);
+  border: 1px solid var(--border-fort);
+}
+
+.equipement__secondaire {
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-4);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+}
+
+.equipement__secondaire:hover:not(:disabled) {
+  border-color: var(--brand);
+}
+
+@media (max-width: 720px) {
+  .equipement__etapes,
+  .equipement__champ,
+  .equipement__erreur,
+  .equipement__cle-valeur {
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+
+  .equipement__champ,
+  .equipement__bouton,
+  .equipement__secondaire {
+    height: var(--cible-tactile);
+  }
+}

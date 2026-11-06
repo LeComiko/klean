@@ -195,6 +195,9 @@ if (blocSombre === null) {
     ['alerte / surface-2', '--alerte', '--surface-2', SeuilTexte],
     ['retard / surface-2', '--retard', '--surface-2', SeuilTexte],
     ['realise / surface', '--realise', '--surface', SeuilTexte],
+    // Le QR code du second facteur : une machine le lit, dans les deux thèmes. Un
+    // `--qr-module` redéfini en sombre pour « suivre le thème » tomberait ici.
+    ['QR : module / fond', '--qr-module', '--qr-fond', SeuilTexte],
     // Le contour de focus est décalé de 2 px : il se dessine sur le fond du
     // parent, jamais sur celui de l'élément focalisé. Seuil non textuel.
     ['contour de focus : alerte / canvas', '--alerte', '--canvas', SeuilNonTextuel],

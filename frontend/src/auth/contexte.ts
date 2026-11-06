@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
 
-import type { Profil } from '../types/auth'
+import type { EtapeConnexion, Profil, SaisieSecondFacteur, Session } from '../types/auth'
 
 /**
  * Le contexte et son crochet vivent dans un `.ts` séparé du fournisseur pour
@@ -19,7 +19,30 @@ export interface ValeurAuth {
    */
   restauration: boolean
 
-  connecter: (email: string, motDePasse: string) => Promise<void>
+  /**
+   * Premier temps de la connexion. Rend `null` si la session est ouverte, sinon
+   * l'étape qui suit : le mot de passe ne suffit pas pour un compte équipé, ou pour un
+   * compte que son rôle oblige à s'équiper (SPEC.md, étape 23).
+   */
+  connecter: (email: string, motDePasse: string) => Promise<EtapeConnexion | null>
+
+  /** Second temps : le code ouvre la session. L'erreur remonte, l'écran la dit. */
+  saisirCode: (saisie: SaisieSecondFacteur) => Promise<void>
+
+  /**
+   * Adopte une session que le serveur a déjà ouverte — celle que rend l'activation du
+   * second facteur. Appelée **après** que l'utilisateur a vu ses codes de
+   * récupération : adoptée plus tôt, elle ferait quitter l'écran de connexion avant.
+   */
+  adopterSession: (session: Session) => void
+
+  /**
+   * Retire le second facteur, sur un code de l'application. Pour un compte que son
+   * rôle oblige, le serveur ferme toutes ses sessions (204) : la session locale est
+   * alors purgée, et la connexion suivante impose l'équipement du nouveau téléphone.
+   */
+  desactiverSecondFacteur: (code: string) => Promise<void>
+
   deconnecter: () => Promise<void>
 
   /**
