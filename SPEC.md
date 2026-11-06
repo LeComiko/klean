@@ -3323,6 +3323,108 @@ validation d'un passage par le chef, et toute notification.
 
 ---
 
+# Étape 26 — La sécurité au niveau des lignes : la base garde l'entreprise
+
+Le cloisonnement des entreprises tient aujourd'hui à du code : vingt et un filtres globaux
+d'EF, le forçage d'`EntrepriseId` à l'écriture, et `IsolationTests`, qui refuse une entité
+portant `EntrepriseId` sans filtre. Le jour où l'une de ces gardes manque, une entreprise
+lit celles des autres, et rien ne casse de visible. La base doit refuser quand même.
+
+**Ce qui existe, relu le 6 novembre 2026**
+
+- ⚠️ **Une RLS posée aujourd'hui n'aurait aucun effet, nulle part.** L'API se connecte en
+  superutilisateur dans les trois environnements :
+  - en développement et en test, sous le compte du système, propriétaire des tables ;
+  - en production, sous `klean`, le `POSTGRES_USER` de l'image officielle.
+
+  Un superutilisateur ignore la RLS, même forcée. Tout commence donc par faire travailler
+  l'API sous un rôle ordinaire.
+- **Les chemins anonymes** — connexion, rafraîchissement, mot de passe oublié — ne lisent
+  que `AspNetUsers` et `JetonsRafraichissement`. Ces deux tables n'ont pas d'`EntrepriseId`,
+  et `CLAUDE.md` §7 dit pourquoi elles ne sont pas filtrées.
+- **Le filtrage n'est contourné qu'à un endroit**, l'amorçage, par `DesactiverFiltrage`.
+- ⚠️ **Les migrations passent par le `DbContext` de l'API** : le bundle `migrer` exécute
+  `Program.cs`, et la fixture de test joue `MigrateAsync` puis un `TRUNCATE`. Sous un rôle
+  sans droits de structure, les deux échoueraient.
+- **Trois verrous consultatifs** passent par `ExecuteSqlAsync` : génération, stock, import
+  du catalogue. Les fonctions de verrou sont ouvertes à tout rôle.
+
+**Réponses obtenues le 6 novembre 2026**
+
+| Question | Réponse | Ce que cela veut dire dans le code |
+|---|---|---|
+| Comment l'API passe sous la RLS | **`SET ROLE`** | à chaque ouverture de connexion, l'API bascule sur `klean_app`, un rôle **sans connexion** et sans droits de structure. Aucun secret ni chaîne de connexion de plus ; développement, tests et production identiques. ⚠️ Une injection SQL pourrait revenir au rôle d'origine : c'est un filet contre un filtre oublié, pas un moindre privilège contre une injection |
+| Sans entreprise dans le jeton | **rien, sauf contournement** | aucune ligne lue ni écrite. Seul `DesactiverFiltrage` ouvre tout, explicitement. Ferme aussi le trou de `CLAUDE.md` §7 : un `[Authorize]` retiré n'ouvrirait plus toutes les entreprises |
+| Les axes gardés par la base | **l'entreprise seule** | les tables qui portent `EntrepriseId`, et `Entreprises` par son `Id`. Les axes client, agent et équipe restent aux filtres d'EF |
+
+**Ce que je propose**
+
+1. **Une migration, présentée avant d'être jouée.**
+   - `klean_app`, créé s'il n'existe pas — un rôle vit dans la grappe, et `klean` et
+     `klean_test` en partagent une en développement.
+   - Ses droits : lire et écrire les lignes, rien d'autre. Des privilèges par défaut, pour
+     qu'une table de la prochaine migration les reçoive sans qu'on y pense.
+   - `ENABLE ROW LEVEL SECURITY` et une politique par table filtrée :
+     `"EntrepriseId" = nullif(current_setting('klean.entreprise', true), '')::uuid`, en
+     lecture comme en écriture (`WITH CHECK`).
+   - ⚠️ `nullif` n'est pas décoratif : convertir une chaîne vide en `uuid` lève une erreur,
+     et un réglage vide doit donner « aucune ligne », pas une panne.
+   - Pas de `FORCE` : le propriétaire, qui joue les migrations et les scripts de
+     conservation, n'est pas soumis — c'est le contournement voulu.
+2. **Un intercepteur de connexion.** À chaque ouverture, une seule instruction :
+   `set_config('klean.entreprise', …)`, puis `SET ROLE klean_app`. Le réglage est posé
+   **toujours**, vide sans entreprise, jamais omis : une connexion du pool ne doit pas
+   garder celui de la requête précédente.
+3. **Le contournement veut dire « rester propriétaire ».** Sous `DesactiverFiltrage`,
+   l'intercepteur ne bascule pas. C'est le cas de l'amorçage. La fixture de test lui
+   ajoute ses écritures directes, qui posent des lignes sous l'API : `AvecServicesAsync`
+   désactive donc le filtrage, ce qui ne change rien côté EF, où l'absence de tenant
+   valait déjà absence de filtre.
+4. **Les migrations hors de l'intercepteur.** Penchant : une fabrique de conception,
+   `IDesignTimeDbContextFactory`, sans intercepteur, que l'outil `ef` et le bundle
+   préfèrent au `Program.cs`. ⚠️ À vérifier au lot A sur le bundle lui-même, et non sur la
+   documentation : la note de `CLAUDE.md` §13 dit qu'il exécute `Program.cs` jusqu'à
+   `Build()`.
+5. **Hors de la RLS, et écrit** : `AspNetUsers`, `JetonsRafraichissement`, les tables
+   d'Identity et l'historique des migrations.
+
+**Les tests**
+
+- **Un filtre oublié est refusé par la base.** Le test lit avec `IgnoreQueryFilters()`
+  — interdit dans l'application, permis ici pour simuler l'oubli — et ne voit que son
+  entreprise.
+- **Une écriture vers une autre entreprise est refusée**, par `WITH CHECK`, sous le forçage
+  d'`EntrepriseId`.
+- **Sans entreprise, aucune ligne** ; sous `DesactiverFiltrage`, toutes.
+- **Une invariante sur le catalogue de la base**, comme `IsolationTests` sur le modèle :
+  toute table qui porte `EntrepriseId` a la RLS active et sa politique. Une table ajoutée
+  demain sans elle fait rougir la série.
+- **L'API travaille bien sous `klean_app`** : une requête authentifiée lit `current_user`
+  et le réglage. Sans cette garde, un intercepteur retiré rendrait la RLS inerte en silence.
+- **Le coût** est mesuré : une instruction de plus par ouverture de connexion, et le plan
+  d'une liste paginée sous la politique, avec `force_generic_plan` (`CLAUDE.md` §10).
+
+**À trancher au lot A** — des penchants, retenus par défaut sauf avis contraire.
+
+| Question | Penchant |
+|---|---|
+| Le nom des réglages | `klean.entreprise` — préfixe à point, qu'aucune extension n'emploie |
+| `Entreprises` | une politique sur son `Id`, comme son filtre EF |
+| `AccesJournalises` | sous la RLS, comme sous son filtre : le journal d'une entreprise est à elle |
+| Une base gérée dont le compte principal n'est pas superutilisateur | `GRANT klean_app TO` ce compte dans la migration, pour que `SET ROLE` reste permis. À écrire dans `DEPLOIEMENT.md`, non éprouvé faute d'une telle base |
+
+**Hors de cette étape, et dit tel quel** : les axes client, agent et équipe ; un second
+rôle de connexion contre l'injection ; la RLS sur les tables d'Identity.
+
+**Lots, provisoires**
+
+- **A** — la migration, l'intercepteur, le contournement, la fabrique de conception, les
+  tests et la mesure du coût.
+- **B** — les documents : `CLAUDE.md` §7 et §10, `DEPLOIEMENT.md` (une instance existante,
+  une base gérée), `RGPD.md` §10.
+
+---
+
 # Suite — non planifié
 
 Par ordre de valeur, à cadrer le moment venu.
@@ -3330,9 +3432,8 @@ Par ordre de valeur, à cadrer le moment venu.
 ~~**Double authentification** pour les rôles Administrateur et Responsable.~~ Cadrée à
 l'étape 23.
 
-**RLS PostgreSQL** en défense en profondeur : si un filtre global est oublié
-sur une entité future, la base refuse quand même. Ceinture et bretelles sur le
-seul invariant dont une erreur est catastrophique.
+~~**RLS PostgreSQL** en défense en profondeur.~~ Cadrée à l'étape 26, sur l'axe de
+l'entreprise seul.
 
 **Test d'intrusion externe** avant la première mise en production réelle.
 
