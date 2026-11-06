@@ -52,3 +52,16 @@ export function refusLocal(
 
   return null
 }
+
+/**
+ * Le refus local du premier mot de passe (SPEC.md, étape 24) : la même règle, sans
+ * mot de passe actuel — le défi de la connexion en tient lieu. Le refus de reprendre
+ * le provisoire appartient au serveur, qui seul le connaît.
+ */
+export function refusPremierMotDePasse(nouveau: string, confirmation: string): string | null {
+  if (nouveau === '') return 'Le nouveau mot de passe est obligatoire.'
+
+  if (nouveau !== confirmation) return 'Les deux saisies du nouveau mot de passe diffèrent.'
+
+  return null
+}

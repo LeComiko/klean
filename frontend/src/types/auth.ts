@@ -24,8 +24,11 @@ export interface Session {
  * L'étape que rend `POST /api/auth/connexion` en **202**, quand le mot de passe ne
  * suffit pas (SPEC.md, étape 23) : saisir un code, ou équiper d'abord un téléphone.
  * Miroir de `backend/DTOs/SecondFacteurDto.cs`, comme les quatre types qui suivent.
+ *
+ * `ChangementMotDePasse` (étape 24) passe avant les deux autres : le mot de passe est
+ * le provisoire que l'administrateur a transmis, et la personne en choisit un.
  */
-export type EtapeConnexion = 'SecondFacteur' | 'Equipement'
+export type EtapeConnexion = 'SecondFacteur' | 'Equipement' | 'ChangementMotDePasse'
 
 export interface ReponseEtape {
   etape: EtapeConnexion

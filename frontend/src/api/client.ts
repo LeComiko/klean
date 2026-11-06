@@ -37,6 +37,8 @@ const SansRafraichissement = new Set([
   // Le second temps de la connexion (étape 23) : il n'y a pas encore de session à
   // rafraîchir, et son 401 dit « recommencer la connexion », pas « session morte ».
   '/api/auth/connexion/code',
+  // La première connexion (étape 24), pour la même raison : un défi, pas une session.
+  '/api/auth/connexion/mot-de-passe',
   '/api/auth/deconnexion',
 ])
 

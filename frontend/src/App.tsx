@@ -9,6 +9,7 @@ import { CheminCompte, Sections, premiereSectionOuverte } from './layout/section
 import type { Section } from './layout/sections'
 import { Chantier } from './pages/Chantier'
 import { Compte } from './pages/Compte'
+import { Comptes } from './pages/Comptes'
 import { Connexion } from './pages/Connexion'
 import { Planning } from './pages/Planning'
 import { Prevision } from './pages/Prevision'
@@ -27,6 +28,7 @@ const Ecrans: Record<string, (section: Section) => ReactNode> = {
   '/planning': () => <Planning />,
   '/stock': (section) => <Stock section={section} />,
   '/prevision': (section) => <Prevision section={section} />,
+  '/comptes': (section) => <Comptes section={section} />,
 }
 
 function ecranDe(section: Section, chemin: string, libelle: string): ReactNode {

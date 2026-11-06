@@ -3,7 +3,7 @@ import { describe, test } from 'node:test'
 
 // ⚠️ Extension explicite : `node --test` n'applique pas la résolution sans
 // extension de Vite (CLAUDE.md §10).
-import { refusLocal } from './motDePasse.ts'
+import { refusLocal, refusPremierMotDePasse } from './motDePasse.ts'
 
 /**
  * Les deux refus locaux du changement de mot de passe.
@@ -98,5 +98,24 @@ describe('refusLocal — ce que l’écran refuse avant d’appeler', () => {
       // autres appareils.
       assert.equal(refusLocal('MemeSecret2026', 'MemeSecret2026', 'MemeSecret2026'), null)
     })
+  })
+})
+
+describe('refusPremierMotDePasse — la première connexion', () => {
+  test('une saisie complète et cohérente part', () => {
+    assert.equal(refusPremierMotDePasse('ChoisiParMoi2026', 'ChoisiParMoi2026'), null)
+  })
+
+  test('un mot de passe vide est refusé, même confirmé vide', () => {
+    assert.match(refusPremierMotDePasse('', '') ?? '', /obligatoire/)
+  })
+
+  test('deux saisies différentes sont refusées', () => {
+    assert.match(refusPremierMotDePasse('ChoisiParMoi2026', 'ChoisiParMoi2025') ?? '', /diffèrent/)
+  })
+
+  test('une espace est un caractère comme un autre : rien n’est rogné', () => {
+    assert.equal(refusPremierMotDePasse(' Choisi 2026 ', ' Choisi 2026 '), null)
+    assert.match(refusPremierMotDePasse('Choisi2026 ', 'Choisi2026') ?? '', /diffèrent/)
   })
 })

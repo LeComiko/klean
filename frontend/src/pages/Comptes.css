@@ -1,0 +1,110 @@
+.comptes__filtre {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-3);
+  margin-bottom: var(--espace-4);
+}
+
+.comptes__filtre-libelle {
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texte-2);
+}
+
+.comptes__filtre-liste {
+  min-width: 200px;
+  height: var(--ligne-compacte);
+  padding: 0 var(--espace-3);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-family: var(--police);
+  font-size: var(--corps-taille);
+}
+
+.comptes__filtre-liste:focus {
+  border-color: var(--brand);
+}
+
+.comptes__vous {
+  font-weight: 400;
+  color: var(--texte-2);
+}
+
+/* Le mot porte l'état, jamais la couleur seule (§12) : la graisse distingue ce qui
+   attend un geste — une première connexion —, le gris ce qui n'a plus d'accès. */
+.comptes__etat--Actif {
+  color: var(--texte);
+}
+
+.comptes__etat--PremiereConnexion {
+  font-weight: 600;
+  color: var(--texte);
+}
+
+.comptes__etat--Ferme,
+.comptes__etat--Pseudonymise,
+.comptes__date {
+  color: var(--texte-2);
+}
+
+/* Le mot de passe provisoire : encadré comme une annonce, parce qu'il ne se reverra
+   pas. Le liséré de marque, pas d'alerte — c'est une consigne, pas une erreur. */
+.comptes__provisoire {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  margin-bottom: var(--espace-4);
+  padding: var(--espace-4) var(--espace-6);
+  background: var(--surface);
+  border: 1px solid var(--border-fort);
+  border-left: 3px solid var(--brand);
+  border-radius: var(--rayon-carte);
+}
+
+.comptes__provisoire-titre {
+  font-size: var(--titre-section-taille);
+  line-height: var(--titre-section-interligne);
+  font-weight: var(--titre-section-graisse);
+  color: var(--texte);
+}
+
+.comptes__provisoire-texte {
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  color: var(--texte);
+}
+
+.comptes__provisoire-valeur {
+  font-family: var(--police-chiffres);
+  font-size: var(--titre-section-taille);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--texte);
+  user-select: all;
+}
+
+.comptes__provisoire-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-3);
+}
+
+/* Les questions de cet écran disent l'effet du geste, et dépassent la ligne : sur une
+   seule, elles élargissaient la cellule au point d'écraser la colonne des noms et de
+   couper « Confirmer ». Elles passent à la ligne, au-dessus de leurs boutons. */
+.comptes__actions {
+  flex-wrap: wrap;
+}
+
+.comptes__question {
+  flex-basis: 100%;
+  max-width: 360px;
+  margin-left: auto;
+  white-space: normal;
+  text-align: right;
+}

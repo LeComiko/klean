@@ -339,6 +339,17 @@ describe('client — rafraîchissement sur 401', () => {
 
     assert.deepEqual(trace(), ['POST /api/auth/connexion/code'])
   })
+
+  test('le 401 du premier mot de passe ne tente aucun rafraîchissement', async () => {
+    repondre = () => texte('La connexion a expiré ou n’est plus valable.', 401)
+
+    await assert.rejects(
+      () => api.post('/api/auth/connexion/mot-de-passe', { nouveauMotDePasse: 'ChoisiParMoi2026' }),
+      (echec: unknown) => echec instanceof ErreurApi && echec.statut === 401,
+    )
+
+    assert.deepEqual(trace(), ['POST /api/auth/connexion/mot-de-passe'])
+  })
 })
 
 describe('client — corps de réponse', () => {

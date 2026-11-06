@@ -68,6 +68,7 @@ const Indifferentes = [
   { fichier: 'src/auth/secondFacteur.test.ts', libelle: 'secondFacteur.ts — codes et QR' },
   { fichier: 'src/stock/mouvements.test.ts', libelle: 'mouvements.ts — saisie d’un mouvement' },
   { fichier: 'src/stock/prevision.test.ts', libelle: 'prevision.ts — états et phrases' },
+  { fichier: 'src/comptes/comptes.test.ts', libelle: 'comptes.ts — gestes et création' },
 ]
 
 let echecs = 0

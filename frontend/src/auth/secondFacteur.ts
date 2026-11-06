@@ -23,6 +23,7 @@ export function estEtape(reponse: Session | ReponseEtape): reponse is ReponseEta
 export const LibellesEtape: Readonly<Record<EtapeConnexion, string>> = {
   SecondFacteur: 'Code de vérification',
   Equipement: 'Activer la double authentification',
+  ChangementMotDePasse: 'Choisir votre mot de passe',
 }
 
 /**

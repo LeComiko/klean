@@ -30,6 +30,13 @@ export interface ValeurAuth {
   saisirCode: (saisie: SaisieSecondFacteur) => Promise<void>
 
   /**
+   * La première connexion : le mot de passe choisi remplace le provisoire (SPEC.md,
+   * étape 24). Rend `null` si la session est ouverte, sinon l'étape qui suit — le
+   * second facteur ou l'équipement, sur un défi neuf.
+   */
+  choisirPremierMotDePasse: (nouveauMotDePasse: string) => Promise<EtapeConnexion | null>
+
+  /**
    * Adopte une session que le serveur a déjà ouverte — celle que rend l'activation du
    * second facteur. Appelée **après** que l'utilisateur a vu ses codes de
    * récupération : adoptée plus tôt, elle ferait quitter l'écran de connexion avant.

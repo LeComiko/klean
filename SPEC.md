@@ -2827,6 +2827,50 @@ contraire.
   instance neuve ne doit pas être déployée avant le lot B.
 - Série serveur complète : 624 tests verts.
 
+**Lot B — fait le 6 novembre 2026**
+
+- **L'écran « Comptes »**, `pages/Comptes.tsx`, dans la section *Entreprise*, administrateur
+  seul : un écran propre (`ecrans` de `sections.ts`), pas une description de référence.
+  - La liste, filtrée par rôle côté écran. Chaque compte y porte son état en mot —
+    Actif, Jamais connecté, Fermé, Pseudonymisé —, sa double authentification, et ce à
+    quoi il est rattaché, nommé par `/api/agents/choix` et `/api/clients`.
+  - Les gestes de ligne : fermer, rouvrir, réinitialiser la double authentification,
+    pseudonymiser. Aucun sur sa propre ligne ni sur un compte pseudonymisé. Un compte
+    rattaché à une fiche agent renvoie vers celle-ci au lieu d'offrir un 409. Chaque
+    geste qui coupe quelque chose demande une confirmation qui nomme la personne et dit
+    l'effet.
+  - La création : aucun mot de passe à saisir. Celui que tire le serveur s'affiche
+    **une seule fois**, avec la consigne de le transmettre hors de l'adresse de la
+    personne, et ce qu'il faut faire s'il se perd.
+- **La connexion** gagne l'étape « Choisir votre mot de passe », avec sa confirmation.
+  `connexion/mot-de-passe` rejoint `SansRafraichissement`.
+- **La logique est extraite** dans `comptes/comptes.ts` : l'état d'une ligne, ses gestes,
+  la question de confirmation, et le corps de la création. Un champ masqué part à `null` :
+  une fiche agent choisie avant de passer au rôle « Client syndic » ne suit pas. 26 tests,
+  plus le refus local du premier mot de passe dans `auth/motDePasse.ts` et le test
+  d'exemption de `client.ts`.
+- Huit sabotages côté écran, tous rouges.
+- **Vérifié dans le navigateur** sur la base de développement, migrée pour l'occasion :
+  - la liste, et sa ligne « (vous) » sans aucun geste ;
+  - la création d'un chef d'équipe, et son mot de passe affiché une fois ;
+  - fermer, puis rouvrir.
+
+  ⚠️ La première connexion du compte d'essai a été jouée **par l'API**, et non dans
+  l'écran. Le navigateur partageait les cookies de la session de l'administrateur, et
+  `127.0.0.1` ne répond pas sur le serveur de Vite. L'API a confirmé :
+  - l'étape `ChangementMotDePasse` ;
+  - le refus du provisoire repris, et celui d'un mot de passe trop faible, en français ;
+  - la session ouverte ensuite ;
+  - après fermeture, le 401 de la session et le refus « Ce compte est désactivé » ;
+  - après réouverture, la connexion.
+- ⚠️ **Trouvé à l'essai, et corrigé** : la question de confirmation tenait sur une seule
+  ligne. Elle élargissait la cellule au point d'écraser la colonne des noms et de couper
+  « Confirmer ». Elle passe désormais à la ligne.
+- Observé, non modifié : le rafraîchissement d'une session coupée par la fermeture répond
+  « ce jeton de rafraîchissement avait déjà servi », le message du rejeu. Le message est
+  faux pour ce cas, mais l'effet est le bon ; c'est le comportement de
+  `ServiceSession.RafraichirAsync` depuis l'étape 12.
+
 ---
 
 # Suite — non planifié

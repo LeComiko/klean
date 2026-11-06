@@ -150,6 +150,9 @@ export const Sections: readonly Section[] = [
     libelle: 'Entreprise',
     roles: RolesInternes,
     ressources: ['entreprises'],
+    // Les comptes (SPEC.md, étape 24) : qui a accès, administrateur seul. Rangés ici
+    // plutôt qu'en pastille : on y vient à l'arrivée d'une personne et à son départ.
+    ecrans: [{ chemin: '/comptes', libelle: 'Comptes', roles: [Roles.Administrateur] }],
   },
 ]
 

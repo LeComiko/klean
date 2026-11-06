@@ -117,6 +117,18 @@ export function FournisseurAuth({ children }: { children: ReactNode }) {
     [adopterSession],
   )
 
+  const choisirPremierMotDePasse = useCallback(
+    async (nouveauMotDePasse: string): Promise<EtapeConnexion | null> => {
+      const reponse = await api.post<Session | ReponseEtape>('/api/auth/connexion/mot-de-passe', { nouveauMotDePasse })
+
+      if (estEtape(reponse)) return reponse.etape
+
+      adopterSession(reponse)
+      return null
+    },
+    [adopterSession],
+  )
+
   const desactiverSecondFacteur = useCallback(
     async (saisie: SaisieSecondFacteur) => {
       const session = await api.post<Session | undefined>('/api/auth/second-facteur/desactiver', saisie)
@@ -180,6 +192,7 @@ export function FournisseurAuth({ children }: { children: ReactNode }) {
       restauration,
       connecter,
       saisirCode,
+      choisirPremierMotDePasse,
       adopterSession,
       desactiverSecondFacteur,
       deconnecter,
@@ -191,6 +204,7 @@ export function FournisseurAuth({ children }: { children: ReactNode }) {
       restauration,
       connecter,
       saisirCode,
+      choisirPremierMotDePasse,
       adopterSession,
       desactiverSecondFacteur,
       deconnecter,
