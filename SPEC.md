@@ -2900,6 +2900,154 @@ contraire.
 
 ---
 
+# Étape 25 — Le passage de l'agent : certification, checklist, anomalies
+
+Le produit promet de **prouver** au client que le travail a été fait, et rien n'enregistre
+encore un passage. Le planning dit ce qui était prévu ; aucune vacation ne passe à
+`EnCours` ni à `Terminee` autrement que par un `PUT` d'un rôle interne. L'agent, lui, n'a
+aucun écran.
+
+**Ce qui existe, relu le 6 novembre 2026**
+
+- **Le rôle `Agent` lit ses vacations**, `GET /api/interventions`, cadrées sur lui par le
+  filtre global (`TenantAgentId`). Mais `InterventionDto` ne porte que `PrestationId` :
+  ni le nom du site, ni son adresse, ni ses consignes, ni la durée. Les sites et les
+  prestations sont fermés à l'agent.
+- **L'agent n'a aucune section** : il arrive sur un refus, et seul l'écran *Compte* lui est
+  atteignable (`CLAUDE.md` §11).
+- `StatutIntervention` porte déjà `EnCours`, `Terminee` et **`NonCertifiee`**, qu'aucun
+  chemin ne pose. Rien n'enregistre **quand** ni **où** un passage a eu lieu.
+- **Chaque site a des coordonnées**, obligatoires et bornées. ⚠️ Un site saisi à `0, 0`
+  passe les bornes : tous ses passages seraient « hors du rayon ».
+- **Le corps d'une requête est plafonné à 1 Mio** (`Http:TailleMaxCorpsOctets`), et rien
+  ne bloque la géolocalisation : aucun en-tête `Permissions-Policy` n'est posé.
+  ⚠️ **La CSP du document ne prévoit pas `blob:` dans `img-src`** : l'aperçu d'une photo
+  avant son envoi serait bloqué.
+- **La prévision du stock compte les vacations `Planifiee` et `EnCours`.** La déduction à
+  chaque passage « attend la certification » (étape 22) : elle reste **hors de cette
+  étape**, qui ne fait que rendre la certification possible.
+- `RGPD.md` §9.6 juge déjà une AIPD probablement requise, pour les coordonnées du
+  domicile. La localisation d'un salarié au travail en ajoute une raison.
+
+**La doctrine de la CNIL, relue le 6 novembre 2026** — à confirmer par une relecture
+juridique, que ce fichier ne remplace pas.
+
+- **Justifier une prestation auprès d'un client est une finalité admise** de la
+  géolocalisation d'un salarié.
+- **Ponctuelle, jamais continue**, et jamais hors du temps de travail.
+- **Deux mois de conservation par défaut ; un an pour prouver une prestation**, mais
+  seulement si la preuve ne peut être apportée **par un autre moyen**.
+- **Accès** limité à l'employeur, aux services habilités et au client concerné.
+- Ces règles viennent de la norme NS-051, écrite pour les **véhicules**. Elle n'a plus de
+  valeur juridique depuis le RGPD et reste la référence de la CNIL. Aucune page propre au
+  téléphone d'un salarié n'a été trouvée : les appliquer ici est une **analogie**.
+
+**Réponses obtenues le 6 novembre 2026**
+
+| Question | Réponse | Ce que cela veut dire dans le code |
+|---|---|---|
+| La preuve d'un passage | **localisation minimisée** | à *Démarrer* et à *Terminer*, un point capté sur le geste de l'agent. Le serveur en déduit la distance au site, puis **jette les coordonnées** : il ne garde que la preuve, la distance et la précision annoncée. L'heure est celle du serveur |
+| Un passage sans preuve | **terminé, non certifié** | l'agent termine toujours ; la vacation passe à `NonCertifiee`, et la cause est dite. Jamais « réalisé » au seul motif que c'était prévu |
+| Le périmètre de l'écran agent | **tout le parcours** | ses vacations du jour, les consignes, démarrer, la checklist, une anomalie avec photo, terminer |
+| Sans réseau | **en ligne seulement** | chaque geste part aussitôt. Sans réseau, l'écran le dit ; l'agent certifie là où il capte. Aucun service worker, aucune file d'attente |
+| Où vivent les photos | **dans PostgreSQL** | une table à part, en `bytea`, sous le filtre multi-tenant comme toute entité. Une seule sauvegarde |
+| À quoi se rattache une photo | **aux anomalies seulement** | pas de photos « avant / après » |
+| Une checklist incomplète | **compte rendu, sans blocage** | les points non cochés sont enregistrés et affichés ; *Terminer* n'est jamais refusé pour eux. La certification dit la présence, la checklist dit ce qui a été fait |
+| Qui traite une anomalie | **chef d'équipe et responsable** | une liste des anomalies ouvertes pour les rôles internes, le chef cadré sur son équipe, et un geste « Traitée ». Rien pour le syndic avant le portail |
+
+**Ce que je propose**
+
+1. **Le pointage, une table à part et non des colonnes de l'intervention.** `Pointage` :
+   la vacation, le moment (`Debut` ou `Fin`), l'horodatage du serveur, la preuve, la
+   distance et la précision en mètres, l'auteur. ⚠️ **La séparation tient à la
+   conservation** : une intervention se garde cinq ans (`RGPD.md` §5), une donnée dérivée
+   d'une localisation un an au plus. Une table à part se purge sans toucher la vacation,
+   dont le statut reste.
+2. **Quatre preuves** : `SurSite`, `HorsRayon`, `Imprecise` — la précision annoncée
+   dépasse le seuil, fréquent à l'intérieur d'un bâtiment —, et `NonLocalisee` — refusée
+   ou indisponible. Une vacation est **certifiée** si ses deux pointages sont `SurSite` ;
+   sinon elle termine en `NonCertifiee`.
+3. **Pour l'agent, une lecture conçue pour lui** : ses vacations du jour du territoire,
+   avec le nom du site, son adresse, ses consignes, l'heure, la durée, le statut et la
+   checklist du type. Elle ne nomme personne d'autre que lui. Puis
+   `POST /api/interventions/{id}/demarrer` et `/terminer`, qui reçoivent la position du
+   geste, ou son absence.
+   - ⚠️ **Seul l'agent affecté pointe**, et seulement une vacation du jour. Un chef qui
+     pointerait pour lui viderait la preuve de son sens.
+   - ⚠️ **Les coordonnées traversent la requête et n'en sortent pas** : ni en base, ni au
+     journal d'accès, ni dans les journaux du serveur. Un test le vérifie **en base**.
+   - Rien en arrière-plan : la position n'est demandée qu'au geste, et l'écran dit avant
+     la première demande ce qui est relevé et ce qui ne l'est pas.
+4. **La checklist**, des points de contrôle **par type de prestation** — le catalogue de
+   l'étape 21. Une vacation sans type n'a pas de checklist. Ce qui a été coché est
+   enregistré à *Terminer*, avec **le libellé du moment** : un point renommé plus tard ne
+   doit pas réécrire l'histoire.
+5. **Les anomalies et leurs photos.** Une anomalie se rattache à la vacation, porte une
+   description et son état, `Ouverte` ou `Traitee`. Jusqu'à trois photos par anomalie.
+   - ⚠️ **Une photo de téléphone porte souvent ses coordonnées GPS** dans ses métadonnées
+     EXIF : la garder telle quelle ferait entrer la localisation brute que la réponse 1
+     écarte. L'écran la réduit par un `canvas`, ce qui retire les métadonnées et la fait
+     tenir sous 1 Mio. **Le serveur ne s'y fie pas** : il vérifie la signature JPEG et
+     retire lui-même les segments de métadonnées, sans dépendance, par une lecture des
+     segments écrite à la main. Le test part d'un JPEG qui porte une position.
+   - La description est un **texte libre**, comme les consignes d'un site (`RGPD.md`
+     §3) : elle dissuadera de nommer une personne.
+   - ⚠️ La CSP gagne `blob:` dans `img-src`, pour l'aperçu, et `npm run verifier` doit
+     l'accepter. C'est une origine locale, pas un tiers.
+6. **Pas d'`ICertificationProvider`.** La suite de cette feuille de route l'envisageait.
+   `CLAUDE.md` §11 n'admet une interface de service que si la substitution est
+   nécessaire, et aucun prestataire n'existe à substituer.
+7. **Les écrans** :
+   - **« Ma journée »**, une section du seul rôle `Agent`, qui devient enfin sa
+     destination d'arrivée. Densité mobile du §12 : une action par écran, cibles de
+     56 px, corps de 16 px.
+   - **« Anomalies »**, un écran propre de la section *Exploitation* pour les rôles
+     internes, cadré par l'équipe pour le chef.
+   - Les points de contrôle se saisissent depuis le type de prestation.
+
+**À trancher au lot A** — des penchants, retenus par défaut sauf avis contraire.
+
+| Question | Penchant |
+|---|---|
+| Le rayon et la précision | **200 m de rayon, 100 m de précision au plus**, en constantes. À éprouver sur le terrain pendant le pilote, avant d'en faire un réglage |
+| Démarrer en retard, ou terminer tôt | **accepté**, et visible : les heures réelles s'affichent à côté des heures prévues. Le pointage prouve la présence, pas la ponctualité |
+| Une vacation jamais démarrée | **reste `Planifiee`**, et les écrans la disent non réalisée une fois sa journée passée. Aucun passage automatique à `NonCertifiee` : rien n'a eu lieu, il n'y a rien à certifier |
+| Journaliser les vacations de l'agent | **non** : elles ne nomment que l'appelant, comme `ProfilDto`. L'exemption s'écrit dans `JournalAccesTests` |
+| Journaliser les anomalies | **non**, à motiver : l'auteur n'y est qu'un identifiant, comme sur un mouvement de stock. À relire au lot D, puisqu'une photo peut montrer une personne |
+
+**Conséquences, à porter au lot D**
+
+- **`RGPD.md`** :
+  - un traitement **T7**, la certification des passages ;
+  - les tables nouvelles dans la cartographie ;
+  - des durées : **un an pour les pointages**, par l'analogie ci-dessus, puis une purge
+    réelle comme celle du journal ; une durée à proposer pour les anomalies et leurs photos ;
+  - la note d'information aux agents, et l'AIPD du §9.6.
+- ⚠️ **Hors du code, pour l'exploitant** : un dispositif qui contrôle l'activité des salariés
+  doit être porté à leur connaissance **avant** sa mise en œuvre (Code du travail,
+  L1222-4), et soumis au CSE quand il en existe un. À écrire dans `DEPLOIEMENT.md`, et à
+  faire relire.
+- **Des tables nouvelles, donc des migrations additives**, chacune présentée avant d'être
+  jouée.
+
+**Hors de cette étape, et dit tel quel** : la déduction du stock à chaque passage, l'accès
+du syndic aux passages et aux anomalies, les photos avant/après, le hors-ligne, la
+validation d'un passage par le chef, et toute notification.
+
+**Lots, provisoires**
+
+- **A** — la certification côté serveur : les vacations de l'agent, démarrer, terminer, le
+  pointage et le statut, sa migration.
+- **B** — la checklist et les anomalies côté serveur : les points de contrôle du type, le
+  compte rendu à *Terminer*, les anomalies, les photos et le retrait des métadonnées, la
+  liste et le geste « Traitée », leur migration.
+- **C** — les écrans : « Ma journée » et le parcours de l'agent, les anomalies, les points
+  de contrôle du type, la CSP.
+- **D** — les documents : `RGPD.md`, `CLAUDE.md`, `DEPLOIEMENT.md`, et le script de purge
+  des pointages.
+
+---
+
 # Suite — non planifié
 
 Par ordre de valeur, à cadrer le moment venu.
@@ -2916,7 +3064,8 @@ seul invariant dont une erreur est catastrophique.
 ~~**Génération automatique des interventions** depuis les contrats.~~ Cadrée et
 en cours : voir l'étape 20.
 
-**Écran agent mobile (PWA).** Une action par écran, cibles 56 px. Voir son
+~~**Écran agent mobile (PWA).**~~ Cadré à l'étape 25, en ligne seulement, donc sans
+service worker. Une action par écran, cibles 56 px. Voir son
 intervention → consignes → démarrer → checklist → anomalie avec photo →
 terminer. Suppose les entités `Checklist` et `Anomalie`. Suppose aussi un
 `GET /api/planning/moi` : le planning général est réservé aux rôles internes
@@ -2931,9 +3080,8 @@ figurait ici y devient une consommation **par type de prestation**, et les alert
 filtrage et au périmètre du chef d'équipe. Ne remplace pas le calcul
 d'expérience du moteur, fondé sur l'historique réel.
 
-**Certification des passages.** Couche d'abstraction
-`ICertificationProvider` plutôt qu'un couplage direct à un prestataire.
-Règle absolue : ne jamais considérer une intervention comme réalisée au seul
+~~**Certification des passages.**~~ Cadrée à l'étape 25, sans `ICertificationProvider` :
+aucun prestataire n'existe à substituer. Règle absolue : ne jamais considérer une intervention comme réalisée au seul
 motif qu'elle était planifiée.
 
 **Jeu de démonstration installable.** Le `README` doit permettre à un inconnu de
