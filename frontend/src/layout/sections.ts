@@ -1,8 +1,9 @@
 // ⚠️ Extension explicite, et elle est nécessaire : ce module est chargé par
 // `node --test` via sections.test.ts, et Node n'applique pas la résolution sans
 // extension de Vite. Voir le piège des extensions d'import en CLAUDE.md §10.
-import { descriptionsLisibles } from '../reference/descriptions.ts'
+import { descriptionDe, descriptionsLisibles } from '../reference/descriptions.ts'
 import { Roles, RolesInternes } from '../types/auth.ts'
+import type { DescriptionRessource } from '../types/reference.ts'
 
 /**
  * Les sections de la barre latérale, source unique pour la navigation **et**
@@ -198,4 +199,95 @@ export function premiereSectionOuverte(roles: readonly string[]): Section | unde
   return Sections.find(
     (section) => section.roles === undefined || section.roles.some((role) => roles.includes(role)),
   )
+}
+
+/** Un chemin que monte `App.tsx`, avec les rôles qui l'ouvrent. */
+export interface RouteSection {
+  chemin: string
+  /** Absent : tout compte connecté. */
+  roles?: readonly string[]
+  section: Section
+  libelle: string
+  /** La ressource de référence rendue sur ce chemin ; absente pour un écran écrit à la main. */
+  description?: DescriptionRessource
+}
+
+/**
+ * Les routes, **dérivées** des sections et de leurs ressources. `App.tsx` les monte, et
+ * `destinationApresConnexion` les lit : la règle qui dit qui ouvre un chemin n'est
+ * écrite qu'ici.
+ *
+ * Une section sans ressources donne une route ; une section qui en porte donne une
+ * route par ressource, gardée par les rôles de **lecture de cette ressource** et
+ * non par ceux de la section. C'est plus fin, et c'est la seule façon de ne pas
+ * ouvrir une liste à qui la section laisse entrer. Ses écrans propres suivent, gardés
+ * par **leurs** rôles : la prévision est fermée au chef d'équipe, à qui la section
+ * reste ouverte.
+ *
+ * ⚠️ Aucune route n'est créée pour le `chemin` d'une section à ressources : il vaut
+ * celui de sa première, qui la crée déjà. Deux `<Route>` sur le même chemin
+ * laisseraient la seconde inatteignable, sans erreur.
+ */
+export function routesDesSections(): readonly RouteSection[] {
+  const routes: RouteSection[] = []
+
+  for (const section of Sections) {
+    if (section.ressources === undefined) {
+      routes.push({ chemin: section.chemin, roles: section.roles, section, libelle: section.libelle })
+      continue
+    }
+
+    for (const cle of section.ressources) {
+      const description = descriptionDe(cle)
+
+      if (description === undefined) continue
+
+      routes.push({
+        chemin: description.chemin,
+        roles: description.rolesLecture,
+        section,
+        libelle: description.libelle,
+        description,
+      })
+    }
+
+    for (const ecran of section.ecrans ?? []) {
+      routes.push({ chemin: ecran.chemin, roles: ecran.roles, section, libelle: ecran.libelle })
+    }
+  }
+
+  return routes
+}
+
+/**
+ * Où mener un compte qui vient de se connecter : l'écran qu'il demandait, **si son
+ * rôle l'ouvre** ; sinon la racine, où `Accueil` choisit sa première section.
+ *
+ * `depuis` est posé par `RouteProtegee` sur l'écran où la session a manqué. C'est ce qui
+ * rend un F5 sur une page profonde indolore — et c'est aussi ce qu'une **déconnexion**
+ * laisse derrière elle. ⚠️ Honoré tel quel, il ramenait le compte suivant sur l'écran
+ * quitté par le précédent : un agent qui se connectait après un responsable arrivait sur
+ * « Accès refusé » au lieu de sa journée (SPEC.md, étape 25, lot C). Le rôle tranche, pas
+ * l'origine de la redirection : une session expirée et une déconnexion se ressemblent
+ * trait pour trait vues d'ici.
+ *
+ * La racine plutôt qu'un écran nommé : viser une section en dur pourrait envoyer sur une
+ * section fermée au rôle qui vient de se connecter.
+ */
+export function destinationApresConnexion(
+  depuis: string | undefined,
+  roles: readonly string[],
+): string {
+  if (depuis === undefined) return '/'
+
+  // Ouvert à tout compte connecté, et monté hors de `Sections`.
+  if (depuis === CheminCompte) return depuis
+
+  const route = routesDesSections().find((candidate) => candidate.chemin === depuis)
+
+  if (route === undefined) return '/'
+
+  const ouverte = route.roles === undefined || route.roles.some((role) => roles.includes(role))
+
+  return ouverte ? depuis : '/'
 }

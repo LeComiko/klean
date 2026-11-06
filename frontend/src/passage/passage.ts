@@ -50,6 +50,14 @@ export const NoticeLocalisation =
   + 'pour mesurer la distance au site. Seules la distance et l’heure sont gardées, jamais '
   + 'la position. Sans position, le passage compte quand même, mais n’est pas certifié.'
 
+/**
+ * Ce que l'écran dit sous « Ajouter une photo » (RGPD.md §9.9). Une photo de couloir peut
+ * montrer l'occupant qui y passe, et c'est la seule donnée du passage qui peut identifier
+ * un tiers : la description a sa consigne, la photo a la sienne. C'est la condition de la
+ * décision de ne pas journaliser les photos (RGPD.md §8.4).
+ */
+export const ConsignePhoto = 'Photographie le lieu ou le dégât, jamais une personne.'
+
 export const LibellesStatut: Readonly<Record<StatutVacation, string>> = {
   Planifiee: 'À faire',
   EnCours: 'En cours',

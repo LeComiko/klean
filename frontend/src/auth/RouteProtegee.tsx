@@ -31,7 +31,8 @@ export function RouteProtegee({ roles, children }: Proprietes) {
 
   if (profil === null) {
     // `depuis` permet de revenir sur l'écran demandé après la connexion, ce qui
-    // rend un F5 sur une page profonde indolore.
+    // rend un F5 sur une page profonde indolore. Une déconnexion le pose aussi : la
+    // connexion ne l'honore donc que si le rôle l'ouvre (`destinationApresConnexion`).
     return <Navigate to="/connexion" replace state={{ depuis: emplacement.pathname }} />
   }
 

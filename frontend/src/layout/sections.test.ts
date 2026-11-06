@@ -3,7 +3,14 @@ import { describe, test } from 'node:test'
 
 import { descriptionDe } from '../reference/descriptions.ts'
 import { Roles } from '../types/auth.ts'
-import { CheminCompte, Sections, ongletsDe, premiereSectionOuverte } from './sections.ts'
+import {
+  CheminCompte,
+  Sections,
+  destinationApresConnexion,
+  ongletsDe,
+  premiereSectionOuverte,
+  routesDesSections,
+} from './sections.ts'
 
 /**
  * `Sections` est la source unique de la navigation, des routes et de la
@@ -84,18 +91,20 @@ describe('sections — navigation et destination d’arrivée', () => {
       }
     })
 
+    // Sur les routes que monte `App.tsx`, et non sur une dérivation recopiée ici.
     test('aucun chemin de ressource ou d’écran n’est monté deux fois', () => {
-      const chemins = [
-        ...Sections.map((section) => section.chemin).filter((chemin) =>
-          !avecRessources.some((section) => section.chemin === chemin)),
-        ...avecRessources.flatMap((section) => [
-          ...(section.ressources ?? []).map((cle) => descriptionDe(cle)?.chemin ?? cle),
-          ...(section.ecrans ?? []).map((ecran) => ecran.chemin),
-        ]),
-        CheminCompte,
-      ]
+      const chemins = [...routesDesSections().map((route) => route.chemin), CheminCompte]
 
       assert.equal(new Set(chemins).size, chemins.length, chemins.join(' '))
+    })
+
+    test('chaque ressource et chaque écran d’une section a sa route', () => {
+      const chemins = new Set(routesDesSections().map((route) => route.chemin))
+
+      for (const section of avecRessources) {
+        for (const cle of section.ressources ?? []) assert.ok(chemins.has(descriptionDe(cle)?.chemin ?? cle), cle)
+        for (const ecran of section.ecrans ?? []) assert.ok(chemins.has(ecran.chemin), ecran.chemin)
+      }
     })
 
     test('aucune section sans ressources ne collisionne avec une route de ressource', () => {
@@ -218,5 +227,51 @@ describe('sections — navigation et destination d’arrivée', () => {
         assert.notEqual(premiereSectionOuverte([role])?.chemin, CheminCompte, role)
       }
     })
+  })
+})
+
+/**
+ * Le défaut constaté au lot C de l'étape 25 : une déconnexion laisse `depuis` sur l'écran
+ * quitté, et le compte suivant y était ramené même si son rôle ne l'ouvre pas — l'agent
+ * arrivait sur « Accès refusé » au lieu de sa journée.
+ */
+describe('sections — la destination après connexion', () => {
+  test('un agent ne revient pas sur le planning laissé par un responsable', () => {
+    assert.equal(destinationApresConnexion('/planning', [Roles.Agent]), '/')
+  })
+
+  test('un responsable revient sur le planning après un F5', () => {
+    assert.equal(destinationApresConnexion('/planning', [Roles.Responsable]), '/planning')
+  })
+
+  test('une route de ressource suit ses rôles de lecture, pas ceux de sa section', () => {
+    const agents = descriptionDe('agents')
+
+    assert.ok(agents !== undefined)
+    assert.equal(destinationApresConnexion(agents.chemin, [Roles.Administrateur]), agents.chemin)
+    assert.equal(destinationApresConnexion(agents.chemin, [Roles.ClientSyndic]), '/')
+  })
+
+  test('un écran propre suit ses rôles : la prévision est fermée au chef d’équipe', () => {
+    assert.equal(destinationApresConnexion('/prevision', [Roles.ChefEquipe]), '/')
+    assert.equal(destinationApresConnexion('/prevision', [Roles.Responsable]), '/prevision')
+  })
+
+  test('le compte est ouvert à tout rôle', () => {
+    assert.equal(destinationApresConnexion(CheminCompte, [Roles.Agent]), CheminCompte)
+  })
+
+  test('sans demande, ou sur un chemin inconnu, la racine', () => {
+    assert.equal(destinationApresConnexion(undefined, [Roles.Responsable]), '/')
+    assert.equal(destinationApresConnexion('/nulle-part', [Roles.Administrateur]), '/')
+    assert.equal(destinationApresConnexion('/connexion', [Roles.Administrateur]), '/')
+  })
+
+  test('chaque route est honorée pour les rôles qui l’ouvrent', () => {
+    for (const route of routesDesSections()) {
+      for (const role of route.roles ?? Object.values(Roles)) {
+        assert.equal(destinationApresConnexion(route.chemin, [role]), route.chemin, `${route.chemin} ${role}`)
+      }
+    }
   })
 })

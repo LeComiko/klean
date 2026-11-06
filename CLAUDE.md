@@ -811,7 +811,7 @@ ferait disparaître l'export dans le bruit des consultations.
 
 `GET /api/agents/{id}/dossier`, administrateur seul, journalisé en `NatureAcces.Export`.
 Il sert l'accès de l'article 15 et la portabilité de l'article 20 ; le détail de son
-contenu et de ses exclusions est en `RGPD.md` §6. Trois choses à savoir avant d'y
+contenu et de ses exclusions est en `RGPD.md` §6. Quatre choses à savoir avant d'y
 toucher :
 
 - ⚠️ **Il est borné autant que complet, et les bornes sont testées sur le corps brut.**
@@ -824,6 +824,12 @@ toucher :
   L'article 15 exige une forme intelligible, et une liste de `PrestationId` en UUID ne
   dit rien à un salarié qui demande où il a travaillé. C'est la seule raison pour
   laquelle `InterventionDuDossierDto` existe à côté d'`InterventionDto`.
+- ⚠️ **Chaque vacation porte son passage** depuis `RGPD.md` §9.8 : ses pointages, sa
+  checklist déclarée et ses anomalies, rangés sous elle. **Les photos n'y sont que
+  comptées, et qui a traité une anomalie n'y figure pas** : une photo peut montrer un
+  tiers, et qui a traité est un collègue — l'article 15(4), comme pour les lecteurs de la
+  fiche. Une table ajoutée au passage demain manquerait au dossier sans qu'aucun test ne
+  rougisse : c'est ainsi que ces trois-là avaient manqué.
 - ⚠️ **Le compte lié est cadré à la main sur `EntrepriseId`**, `AspNetUsers` n'étant pas
   filtrée (§7). Le test construit le compte intrus **directement en base**, sous les
   validations qui le rendraient incréable par l'API — même raison qu'au lot B de
@@ -1814,6 +1820,13 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   porterait aussi un rôle interne arrive sur le planning. *Anomalies* (`AN`), juste après
   le planning, est aux trois rôles internes. Les deux sont des écrans propres, montés par
   `Ecrans` dans `App.tsx`, sans ressource de référence.
+
+  ⚠️ **Après connexion, `depuis` n'est honoré que si le rôle ouvre ce chemin**
+  (`destinationApresConnexion`). `RouteProtegee` le pose sur l'écran où la session a
+  manqué, ce qu'une session expirée **et** une déconnexion font pareillement : honoré tel
+  quel, il ramenait le compte suivant sur l'écran du précédent, et un agent arrivait sur
+  « Accès refusé ». La règle qui dit qui ouvre un chemin vit dans `routesDesSections`,
+  que monte `App.tsx` et que lit la connexion : elle n'est écrite qu'une fois.
 
   Ne pas confondre avec l'écran **Comptes**, au pluriel : celui-là gère les comptes de
   l'entreprise, est réservé à l'administrateur, et vit donc dans une section, *Entreprise*.

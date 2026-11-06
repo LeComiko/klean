@@ -5,6 +5,7 @@ import { EnTetePage } from '../composants/EnTetePage'
 import {
   LibellesStatut,
   LongueurMaxDescription,
+  ConsignePhoto,
   NoticeLocalisation,
   bilanDe,
   gesteDe,
@@ -376,25 +377,32 @@ export function MaJournee() {
                       )}
 
                       {ouverte.statut === 'EnCours' && apercu === null && photosRestantes(anomalie) > 0 && (
-                        // Le champ de fichier est masqué, pas retiré : il reste focalisable,
-                        // et le libellé porte la cible tactile et le contour de focus.
-                        <label className="ma-journee__secondaire ma-journee__photo">
-                          Ajouter une photo
-                          <input
-                            className="pour-lecteur-d-ecran"
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            disabled={occupe}
-                            onChange={(evenement) => {
-                              const fichier = evenement.target.files?.[0]
+                        <>
+                          {/* Le champ de fichier est masqué, pas retiré : il reste focalisable,
+                              et le libellé porte la cible tactile et le contour de focus. */}
+                          <label className="ma-journee__secondaire ma-journee__photo">
+                            Ajouter une photo
+                            <input
+                              className="pour-lecteur-d-ecran"
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              aria-describedby={`consigne-photo-${anomalie.id}`}
+                              disabled={occupe}
+                              onChange={(evenement) => {
+                                const fichier = evenement.target.files?.[0]
 
-                              // Vidé aussitôt : choisir deux fois la même photo doit déclencher.
-                              evenement.target.value = ''
-                              void preparer(anomalie, fichier)
-                            }}
-                          />
-                        </label>
+                                // Vidé aussitôt : choisir deux fois la même photo doit déclencher.
+                                evenement.target.value = ''
+                                void preparer(anomalie, fichier)
+                              }}
+                            />
+                          </label>
+                          {/* Sous le bouton, et lue avec lui : la consigne doit précéder la prise. */}
+                          <p className="ma-journee__notice" id={`consigne-photo-${anomalie.id}`}>
+                            {ConsignePhoto}
+                          </p>
+                        </>
                       )}
                     </li>
                   ))}

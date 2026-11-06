@@ -8,15 +8,9 @@ import { useAuth } from '../auth/contexte'
 import { refusPremierMotDePasse } from '../auth/motDePasse'
 import { LibellesEtape, saisieDe } from '../auth/secondFacteur'
 import { EquipementSecondFacteur } from '../composants/EquipementSecondFacteur'
+import { destinationApresConnexion } from '../layout/sections'
 import type { EtapeConnexion } from '../types/auth'
 import './Connexion.css'
-
-/**
- * La racine, pas un écran nommé : c'est `Accueil` dans `App.tsx` qui choisit la
- * première section ouverte au profil. Viser un écran en dur ici pourrait envoyer
- * sur une section fermée au rôle qui vient de se connecter.
- */
-const ApresConnexion = '/'
 
 type Etape = 'MotDePasse' | EtapeConnexion
 
@@ -47,8 +41,10 @@ export function Connexion() {
   const [envoi, setEnvoi] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
 
-  // Écran demandé avant la redirection, posé par RouteProtegee.
-  const depuis = (emplacement.state as { depuis?: string } | null)?.depuis ?? ApresConnexion
+  // Écran demandé avant la redirection, posé par RouteProtegee — ou laissé par la
+  // déconnexion du compte précédent : `destinationApresConnexion` ne l'honore que si le
+  // rôle de celui-ci l'ouvre.
+  const depuis = (emplacement.state as { depuis?: string } | null)?.depuis
 
   function recommencer(message: string | null = null) {
     setEtape('MotDePasse')
@@ -156,7 +152,7 @@ export function Connexion() {
     )
   }
 
-  if (profil !== null) return <Navigate to={depuis} replace />
+  if (profil !== null) return <Navigate to={destinationApresConnexion(depuis, profil.roles)} replace />
 
   // Le mot « Erreur » est écrit, et role="alert" le fait annoncer par un lecteur
   // d'écran : la couleur ne porte pas seule l'information.

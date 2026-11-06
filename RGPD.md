@@ -300,7 +300,7 @@ Les tables du modèle, plus celles d'Identity. « DP » = donnée personnelle.
 - **`Anomalies.Description`** est un texte libre, comme les consignes, et l'écran demande
   de l'écrire « sans nommer de personne ».
 - **`PhotosAnomalie.Contenu`** est une image, et une image de couloir peut montrer
-  l'occupant qui y passe. Aucune consigne ne le dit encore à l'agent : §9.9.
+  l'occupant qui y passe. L'écran le dit sous le bouton qui la prend : §9.9.
 
 **Ce qui n'existe pas, et qu'il est utile de pouvoir affirmer :** aucune position
 historisée — `Pointages` garde une distance, jamais des coordonnées (T7) —, aucun suivi
@@ -402,7 +402,7 @@ contrat de travail.
 | Droit | Servi aujourd'hui par | État |
 |---|---|---|
 | Information (art. 13) | pour T7 seulement, la notice que *Ma journée* affiche avant chaque geste qui relève la position ; rien d'autre dans le produit | **à remettre par l'exploitant** — modèle de note au §7. La notice dit l'essentiel au moment où il compte ; elle ne remplace pas la note |
-| Accès (art. 15) | **`GET /api/agents/{id}/dossier`**, administrateur seul | ✅ dossier consolidé en une réponse — ⚠️ **sans les passages** de l'étape 25, voir §9.8 |
+| Accès (art. 15) | **`GET /api/agents/{id}/dossier`**, administrateur seul | ✅ dossier consolidé en une réponse, passages de l'étape 25 compris depuis §9.8 |
 | Rectification (art. 16) | `PUT /api/agents/{id}` | ✅ |
 | Effacement (art. 17) | `POST /api/agents/{id}/anonymiser` et `POST /api/auth/comptes/{id}/anonymiser` | ✅ sur les deux chemins — mais c'est une **pseudonymisation**, voir §8.1 |
 | Limitation (art. 18) | `Actif = false` sur l'agent et sur le compte | approximatif : c'est une désactivation, pas un gel |
@@ -457,9 +457,6 @@ est indéfendable quelle que soit la qualité de son code.
 ⚠️ **Pour T7, la remettre ne suffit pas : elle doit l'être avant.** Un dispositif qui
 collecte une information sur un salarié doit avoir été porté à sa connaissance **avant**
 (Code du travail, L1222-4) ; et le CSE consulté s'il existe. Voir `DEPLOIEMENT.md` §11.
-
-⚠️ **Le paragraphe sur les photos promet une consigne que l'écran ne donne pas encore** :
-§9.9. Le garder, c'est s'engager à la corriger.
 
 > **Traitement de vos données dans l'outil de planification**
 >
@@ -879,7 +876,7 @@ Trois choses à savoir sur cette correction :
 date d'ouverture de la relation contractuelle, de même nature que les dates d'un
 contrat, et non une information sur l'interlocuteur.
 
-### 9.8 — Le dossier d'un agent ne contient pas ses passages
+### 9.8 — ✅ CORRIGÉ — le dossier d'un agent ne contenait pas ses passages
 
 Constaté en écrivant ce lot, le 6 novembre 2026. `GET /api/agents/{id}/dossier` a été
 écrit à l'étape 17, avant les passages : il ne porte ni les **pointages** de l'agent, ni
@@ -887,18 +884,31 @@ la **checklist** qu'il a déclarée, ni les **anomalies** qu'il a signalées. Or
 données le concernant, et l'article 15 en exige la communication. Ce sont même les seules
 dont il est l'**auteur** et non le sujet.
 
-Le défaut a la forme que §6 redoutait : une réponse d'accès qui a l'air complète.
-Proposition, à prendre : ajouter au dossier ses pointages — heure, distance, précision,
-preuve —, ses déclarations de checklist et ses anomalies, description comprise, mais
-**sans le contenu des photos**, dont il donnerait le nombre. Une photo peut montrer un
-tiers, que l'article 15(4) protège ; l'agent qui la veut la demande, et l'administrateur
-la lui remet après l'avoir regardée.
+Le défaut avait la forme que §6 redoutait : une réponse d'accès qui a l'air complète.
+
+**Corrigé le 6 novembre 2026.** Chaque vacation du dossier porte désormais ses deux
+pointages — heure, preuve, distance et précision —, sa checklist déclarée, point par point,
+et ses anomalies, description comprise. Rangés **sous la vacation** et non en listes à
+part : un pointage ne dit rien sans le site et le jour qu'il certifie, et l'article 15 veut
+une forme intelligible.
+
+Deux retenues, dites dans `nonInclus` pour ne pas ressembler à un oubli :
+
+- **le contenu des photos**, dont le dossier ne donne que le nombre. Une photo peut montrer
+  un tiers, que l'article 15(4) protège ; l'agent qui en veut une la demande, et
+  l'administrateur la lui remet après l'avoir regardée ;
+- **qui a traité** chaque anomalie : c'est un collègue, comme les lecteurs de la fiche.
+
+`nonInclus` dit aussi que la position relevée n'a jamais été conservée : à qui demande
+« où m'avez-vous localisé », la réponse exacte est « nulle part, seulement à telle distance
+du site ». Les deux retenues sont vérifiées sur le **corps brut** de la réponse, et six
+sabotages ont rougi la série.
 
 ⚠️ La pseudonymisation d'un agent ne touche pas ses passages, et c'est juste : ils
 tiennent à ses vacations, dont l'identifiant survit, et ne le nomment pas. Ils partent
 avec leur durée — un an —, pas avec lui.
 
-### 9.9 — Rien ne dit à l'agent de ne photographier personne
+### 9.9 — ✅ CORRIGÉ — rien ne disait à l'agent de ne photographier personne
 
 Constaté en écrivant §8.4. La description d'une anomalie porte la consigne « Sans nommer
 de personne », dans son texte d'aide. Le bouton *Ajouter une photo* ne porte aucune
@@ -906,9 +916,12 @@ consigne équivalente, alors que c'est la photo qui peut montrer quelqu'un — l
 d'un couloir, un collègue, l'agent lui-même dans un miroir.
 
 C'est la même mesure que §9.5 sur les consignes d'un site, à la source et presque sans
-coût : une phrase sous le bouton — « Photographier le lieu, jamais une personne » —, et un
-test nommé qui la garde, parce qu'une phrase d'aide retirée ne casse rien de visible.
-Elle est la condition de la décision de §8.4, et la note du §7 la promet déjà.
+coût. **Corrigé le 6 novembre 2026** : « Photographie le lieu ou le dégât, jamais une
+personne. » s'affiche sous *Ajouter une photo*, et le champ de fichier la désigne comme sa
+description, pour qu'un lecteur d'écran la lise avec le bouton. La phrase est
+`ConsignePhoto`, dans `frontend/src/passage/passage.ts`, et deux tests la gardent : son
+texte, et sa présence dans l'écran — une phrase d'aide retirée ne casse rien de visible.
+Elle est la condition de la décision de §8.4.
 
 ---
 
@@ -948,7 +961,7 @@ Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail es
 - **Mots de passe des comptes créés** (étape 24) : tirés par le serveur, montrés une seule
   fois, et remplacés obligatoirement à la première connexion — un administrateur ne garde
   la connaissance du mot de passe d'un collègue que jusque-là.
-- **Traçabilité du code** : 687 tests côté serveur, 320 cas côté interface — dont 106
+- **Traçabilité du code** : 689 tests côté serveur, 330 cas côté interface — dont 106
   rejoués dans cinq fuseaux —, et la discipline de validation par sabotage décrite dans
   `CLAUDE.md`.
 - ⚠️ **Les valeurs de paramètres SQL ne sont pas journalisées** :
@@ -983,15 +996,13 @@ ces sauvegardes, tenir l'AIPD du §9.6, désigner un point de contact.
 | §5 — les mouvements de stock et leur auteur, écrits à l'étape 22 sans conservation | 📋 `conservation-donnees-metier.sql` §8, rapport avec `DELETE` commenté |
 | §5 — les pointages des passages, étape 25 | ✅ `purge-pointages.sql`, qui supprime sur `-v confirmer=1` |
 | §5 — checklist, anomalies et photos, étape 25 | 📋 `conservation-donnees-metier.sql` §9, rapport avec `DELETE` commenté |
-| §9.8 — le dossier d'un agent sans ses passages | **ouvert** |
-| §9.9 — aucune consigne de ne photographier personne | **ouvert** |
+| §9.8 — le dossier d'un agent sans ses passages | ✅ pointages, checklist et anomalies sous chaque vacation ; les photos comptées |
+| §9.9 — aucune consigne de ne photographier personne | ✅ `ConsignePhoto` sous le bouton, gardée par deux tests |
 
-**Deux écarts restent ouverts côté logiciel**, tous deux relevés en écrivant ce lot, et
-tous deux petits : §9.8 complète une réponse d'accès, §9.9 est une phrase sous un bouton.
-Le reste est à l'exploitant : valider les durées, dont celle des prospects (§9.7) et
+**Aucun écart ne reste ouvert côté logiciel.** Ce qui reste est à l'exploitant : valider les durées, dont celle des prospects (§9.7) et
 celles des anomalies, et décommenter les purges.
 
-⚠️ **Quatre des onze corrections sont des rapports, pas des purges**, et il ne faut pas lire
+⚠️ **Quatre des treize corrections sont des rapports, pas des purges**, et il ne faut pas lire
 le tableau trop vite : `conservation-donnees-metier.sql` — pour trois lignes du
 tableau — et `degradation-absences-maladie.sql` portent leurs `DELETE` et `UPDATE` en
 commentaire. Ils

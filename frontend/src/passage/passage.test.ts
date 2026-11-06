@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { describe, test } from 'node:test'
 
 import type { PointChecklist, Pointage, VacationAgent } from '../types/passage.ts'
 import {
+  ConsignePhoto,
   LongueurMaxDescription,
   NoticeLocalisation,
   TailleMaxPhoto,
@@ -247,6 +249,18 @@ describe('passage — la position', () => {
 
   test('la notice dit que la position n’est pas gardée', () => {
     assert.match(NoticeLocalisation, /jamais\s+la position/)
+  })
+
+  // ⚠️ Une phrase d'aide retirée ne casse rien de visible : c'est pour cela qu'elle a
+  // deux gardes, son texte et sa présence sur l'écran (RGPD.md §9.9).
+  test('la consigne photo dit de ne photographier personne', () => {
+    assert.match(ConsignePhoto, /jamais une personne/)
+  })
+
+  test('Ma journée affiche la consigne photo', () => {
+    const ecran = readFileSync(new URL('../pages/MaJournee.tsx', import.meta.url), 'utf8')
+
+    assert.match(ecran, /\{ConsignePhoto\}/)
   })
 })
 

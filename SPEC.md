@@ -3210,8 +3210,8 @@ validation d'un passage par le chef, et toute notification.
   - côté administrateur, la vignette, l'agrandissement et « Marquer traitée ».
 
   Aucune erreur de console.
-- ⚠️ **Défaut constaté, antérieur à l'étape et non corrigé.** Une déconnexion laisse
-  `depuis` sur l'écran quitté. Le compte suivant y est ramené à sa connexion, même si son
+- ⚠️ **Défaut constaté, antérieur à l'étape** — corrigé après le lot D, voir plus bas.
+  Une déconnexion laisse `depuis` sur l'écran quitté. Le compte suivant y est ramené à sa connexion, même si son
   rôle ne l'ouvre pas : l'agent arrive sur « Accès refusé » au lieu de sa journée.
 
 **Lot D — fait le 6 novembre 2026**
@@ -3288,6 +3288,38 @@ validation d'un passage par le chef, et toute notification.
   d'essai, et le fichier le dit.
 - Aucun code applicatif touché. Séries frontend vertes ; serveur non relancé, rien n'y
   ayant changé.
+
+**Après le lot D — trois corrections, le 6 novembre 2026**
+
+- **`RGPD.md` §9.8, le dossier d'un agent.** Chaque vacation y porte maintenant :
+  - ses pointages : heure, preuve, distance, précision ;
+  - sa checklist déclarée ;
+  - ses anomalies.
+
+  Les photos n'y sont que comptées, et qui a traité n'y figure pas. Les deux retenues sont
+  dites dans `nonInclus` et vérifiées sur le corps brut. Deux tests et six sabotages, tous
+  rouges. ⚠️ Le premier sabotage des retenues est resté vert : il changeait la phrase sans
+  en retirer les mots que le test cherche. Refait en retirant la mention entière.
+- **`RGPD.md` §9.9, la consigne photo.** `ConsignePhoto` s'affiche sous *Ajouter une
+  photo*, et le champ la désigne comme sa description. Deux tests la gardent : son texte,
+  et sa présence dans `MaJournee.tsx`.
+- **Le défaut `depuis`.** La connexion ne ramène plus sur l'écran demandé que si le rôle
+  l'ouvre ; sinon la racine, qui choisit la première section.
+  - La règle « qui ouvre ce chemin » est passée d'`App.tsx` à `routesDesSections` dans
+    `sections.ts`, que l'application monte et que la connexion lit. Elle n'est plus écrite
+    qu'une fois, et elle est éprouvée.
+  - Huit cas, dont un qui balaie chaque route pour chacun des rôles qui l'ouvrent.
+  - Cinq sabotages côté interface, tous rouges.
+  - ⚠️ Le câblage dans `Connexion.tsx` n'est couvert par aucun test, la page étant un
+    `.tsx`. **Rejoué au navigateur**, sur la base de développement :
+    - l'administrateur se déconnecte depuis *Comptes* et laisse `depuis: /comptes` ;
+      le chef d'équipe qui se connecte ensuite arrive sur le planning, et non sur
+      « Accès refusé » ;
+    - le chef se déconnecte depuis *Anomalies*, se reconnecte, et y revient.
+
+    Aucune erreur de console. Le cas de l'agent n'a pas été rejoué : son compte d'essai
+    est fermé, et la règle est la même.
+- Série serveur : 689 tests verts. Frontend : tests, lint, vérificateur et build verts.
 
 ---
 

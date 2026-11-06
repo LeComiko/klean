@@ -103,6 +103,45 @@ public class InterventionDuDossierDto
     public string Prestation { get; set; } = string.Empty;
     public string Site { get; set; } = string.Empty;
     public string? Ville { get; set; }
+
+    /// <summary>
+    /// Les deux pointages du passage, s'ils existent encore — ils se purgent à un an
+    /// (RGPD.md §5, T7). Une distance au site, jamais une position : il n'en existe pas à
+    /// rendre.
+    /// </summary>
+    public PointageDto? Debut { get; set; }
+    public PointageDto? Fin { get; set; }
+
+    /// <summary>Ce que l'agent a déclaré à <i>Terminer</i>, point par point, avec le libellé du moment.</summary>
+    public List<ControleDuDossierDto> Checklist { get; set; } = [];
+
+    /// <summary>Les anomalies qu'il a signalées sur ce passage.</summary>
+    public List<AnomalieDuDossierDto> Anomalies { get; set; } = [];
+}
+
+public class ControleDuDossierDto
+{
+    public string Libelle { get; set; } = string.Empty;
+    public bool Fait { get; set; }
+}
+
+/// <summary>
+/// Une anomalie signalée par l'agent, telle qu'il peut la demander.
+///
+/// ⚠️ <b>Ses photos n'y sont que comptées</b>, et ce n'est pas une économie d'octets : une
+/// photo peut montrer un tiers — un occupant, un collègue —, que l'article 15(4) protège.
+/// L'agent qui en veut une la demande, et l'administrateur la lui remet après l'avoir
+/// regardée. Pour la même raison, <b>qui a traité</b> l'anomalie n'y figure pas : c'est un
+/// collègue, comme les lecteurs de la fiche.
+/// </summary>
+public class AnomalieDuDossierDto
+{
+    public Guid Id { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public string Statut { get; set; } = string.Empty;
+    public DateTime DateSignalement { get; set; }
+    public DateTime? DateTraitement { get; set; }
+    public int Photos { get; set; }
 }
 
 /// <summary>

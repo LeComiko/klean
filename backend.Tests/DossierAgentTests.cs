@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
+using Klean.Api.Data;
 using Klean.Api.DTOs;
 using Klean.Api.Models;
 using Klean.Api.Services;
@@ -92,6 +94,89 @@ public class DossierAgentTests : IAsyncLifetime
         Assert.Equal("Paris", vacation.Ville);
         Assert.Equal("Nettoyage parties communes", vacation.Prestation);
         Assert.Equal(new TimeSpan(8, 30, 0), vacation.HeurePrevue);
+    }
+
+    /// <summary>
+    /// Ses passages sont des données le concernant, et les seules dont il est l'auteur
+    /// (RGPD.md §9.8) : ils manquaient au dossier, écrit à l'étape 17, et la réponse
+    /// d'accès avait l'air complète. Rangés sous leur vacation, et seulement les siens.
+    /// </summary>
+    [Fact]
+    public async Task Le_dossier_porte_ses_passages_sous_leur_vacation()
+    {
+        var agent = await CreerAgentRenseigne();
+        var collegue = await CreerAgentRenseigne("Keita", "Awa");
+        var vacation = await ChaineAvecVacation(agent);
+        var autre = await ChaineAvecVacation(collegue);
+
+        await AvecDbAsync(async db =>
+        {
+            db.Pointages.AddRange(
+                Pointage(vacation, MomentPointage.Debut, PreuvePointage.SurSite, 40, 15),
+                Pointage(vacation, MomentPointage.Fin, PreuvePointage.HorsRayon, 900, 30),
+                Pointage(autre, MomentPointage.Debut, PreuvePointage.SurSite, 10, 10));
+            db.ControlesEffectues.AddRange(
+                Controle(vacation, "Vitres", 1, fait: true),
+                Controle(vacation, "Hall", 0, fait: false),
+                Controle(autre, "Ascenseur", 0, fait: true));
+            db.Anomalies.AddRange(
+                AnomalieDe(vacation, "Fuite sous l'escalier"),
+                AnomalieDe(autre, "Porte cassée"));
+            await db.SaveChangesAsync();
+        });
+
+        var passage = Assert.Single((await Dossier(agent)).Interventions);
+
+        Assert.Equal(nameof(PreuvePointage.SurSite), passage.Debut!.Preuve);
+        Assert.Equal(40, passage.Debut.DistanceMetres);
+        Assert.Equal(nameof(PreuvePointage.HorsRayon), passage.Fin!.Preuve);
+        Assert.Equal(900, passage.Fin.DistanceMetres);
+
+        // Dans l'ordre de la checklist, coché ou non : un point non fait est aussi une
+        // déclaration de l'agent.
+        Assert.Equal(["Hall", "Vitres"], passage.Checklist.Select(c => c.Libelle));
+        Assert.Equal([false, true], passage.Checklist.Select(c => c.Fait));
+
+        var anomalie = Assert.Single(passage.Anomalies);
+        Assert.Equal("Fuite sous l'escalier", anomalie.Description);
+        Assert.Equal(nameof(StatutAnomalie.Traitee), anomalie.Statut);
+        Assert.Equal(2, anomalie.Photos);
+    }
+
+    /// <summary>
+    /// ⚠️ Une photo peut montrer un tiers, et qui a traité l'anomalie est un collègue :
+    /// l'article 15(4) écarte les deux. Vérifié sur le <b>corps brut</b>, comme l'empreinte
+    /// du mot de passe : une propriété ajoutée demain n'apparaîtrait dans aucune
+    /// assertion typée.
+    /// </summary>
+    [Fact]
+    public async Task Le_dossier_compte_les_photos_sans_les_livrer_ni_nommer_qui_a_traite()
+    {
+        var agent = await CreerAgentRenseigne();
+        var vacation = await ChaineAvecVacation(agent);
+        var anomalie = AnomalieDe(vacation, "Tache au plafond");
+
+        await AvecDbAsync(async db =>
+        {
+            db.Anomalies.Add(anomalie);
+            await db.SaveChangesAsync();
+        });
+
+        var reponse = await _client.GetAsync($"/api/agents/{agent}/dossier");
+        var brut = await reponse.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, reponse.StatusCode);
+        Assert.DoesNotContain(Convert.ToBase64String(ContenuPhoto), brut);
+        // Des noms de propriété, entre guillemets : `NonInclus` dit en toutes lettres que
+        // « le contenu des photos » est retenu, et le mot nu s'y trouverait.
+        Assert.DoesNotContain("\"contenu\"", brut, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(anomalie.TraiteeParId!.Value.ToString(), brut);
+        Assert.DoesNotContain("\"traiteeParId\"", brut, StringComparison.OrdinalIgnoreCase);
+
+        // Et la retenue est dite, sinon elle ressemble à un oubli.
+        var dossier = (await reponse.Content.ReadFromJsonAsync<DossierAgentDto>())!;
+        Assert.Contains(dossier.NonInclus, n => n.Contains("photos d'anomalie"));
+        Assert.Contains(dossier.NonInclus, n => n.Contains("jamais été conservée"));
     }
 
     /// <summary>
@@ -414,6 +499,65 @@ public class DossierAgentTests : IAsyncLifetime
     }
 
     // ------------------------------------------------------------------------ outils
+
+    /// <summary>Des octets reconnaissables : il suffit de les chercher dans le corps.</summary>
+    private static readonly byte[] ContenuPhoto = Encoding.ASCII.GetBytes("PHOTO-QUI-NE-SORT-PAS-DU-DOSSIER");
+
+    private Pointage Pointage(
+        Guid vacation, MomentPointage moment, PreuvePointage preuve, int distance, int precision) => new()
+    {
+        EntrepriseId = _fixture.EntrepriseAlpha,
+        InterventionId = vacation,
+        Moment = moment,
+        Horodatage = DateTime.UtcNow,
+        Preuve = preuve,
+        DistanceMetres = distance,
+        PrecisionMetres = precision,
+        AuteurId = Guid.NewGuid()
+    };
+
+    private ControleEffectue Controle(Guid vacation, string libelle, int ordre, bool fait) => new()
+    {
+        EntrepriseId = _fixture.EntrepriseAlpha,
+        InterventionId = vacation,
+        Libelle = libelle,
+        Ordre = ordre,
+        Fait = fait
+    };
+
+    /// <summary>Une anomalie traitée par un collègue, avec deux photos.</summary>
+    private Anomalie AnomalieDe(Guid vacation, string description) => new()
+    {
+        EntrepriseId = _fixture.EntrepriseAlpha,
+        InterventionId = vacation,
+        Description = description,
+        Statut = StatutAnomalie.Traitee,
+        DateSignalement = DateTime.UtcNow.AddHours(-2),
+        AuteurId = Guid.NewGuid(),
+        DateTraitement = DateTime.UtcNow,
+        TraiteeParId = Guid.NewGuid(),
+        Photos =
+        [
+            new PhotoAnomalie
+            {
+                EntrepriseId = _fixture.EntrepriseAlpha,
+                Contenu = ContenuPhoto,
+                Taille = ContenuPhoto.Length,
+                DateAjout = DateTime.UtcNow
+            },
+            new PhotoAnomalie
+            {
+                EntrepriseId = _fixture.EntrepriseAlpha,
+                Contenu = ContenuPhoto,
+                Taille = ContenuPhoto.Length,
+                DateAjout = DateTime.UtcNow
+            }
+        ]
+    };
+
+    /// <summary>Sous l'API : aucune route n'écrit un pointage daté librement, ni une anomalie traitée d'avance.</summary>
+    private Task AvecDbAsync(Func<KleanDbContext, Task> action) =>
+        _fixture.AvecServicesAsync(services => action(services.GetRequiredService<KleanDbContext>()));
 
     private async Task<DossierAgentDto> Dossier(Guid agent)
     {

@@ -5,8 +5,8 @@ import { FournisseurAuth } from './auth/AuthContext'
 import { useAuth } from './auth/contexte'
 import { RouteProtegee } from './auth/RouteProtegee'
 import { Disposition } from './layout/Disposition'
-import { CheminCompte, Sections, premiereSectionOuverte } from './layout/sections'
-import type { Section } from './layout/sections'
+import { CheminCompte, premiereSectionOuverte, routesDesSections } from './layout/sections'
+import type { RouteSection, Section } from './layout/sections'
 import { Anomalies } from './pages/Anomalies'
 import { Chantier } from './pages/Chantier'
 import { Compte } from './pages/Compte'
@@ -17,7 +17,6 @@ import { Planning } from './pages/Planning'
 import { Prevision } from './pages/Prevision'
 import { Reference } from './pages/Reference'
 import { Stock } from './pages/Stock'
-import { descriptionDe } from './reference/descriptions'
 
 /**
  * Écrans écrits à la main, par chemin. Ce qui n'y figure pas tombe sur `Chantier`.
@@ -39,72 +38,26 @@ function ecranDe(section: Section, chemin: string, libelle: string): ReactNode {
   return Ecrans[chemin]?.(section) ?? <Chantier titre={libelle} />
 }
 
-/** Une route montée sous la disposition. */
-interface RouteEcran {
-  chemin: string
-  roles?: readonly string[]
-  element: ReactNode
-}
-
 /**
- * Les routes, **dérivées** des sections et de leurs ressources.
- *
- * Une section sans ressources donne une route ; une section qui en porte donne une
- * route par ressource, gardée par les rôles de **lecture de cette ressource** et
- * non par ceux de la section. C'est plus fin, et c'est la seule façon de ne pas
- * ouvrir une liste à qui la section laisse entrer.
- *
- * ⚠️ Aucune route n'est créée pour le `chemin` d'une section à ressources : il vaut
- * celui de sa première, qui la crée déjà. Deux `<Route>` sur le même chemin
- * laisseraient la seconde inatteignable, sans erreur.
+ * Ce que rend une route de `routesDesSections` : la page de référence d'une ressource
+ * décrite, sinon l'écran écrit à la main pour ce chemin.
  */
-function routesDesEcrans(): RouteEcran[] {
-  const routes: RouteEcran[] = []
+function elementDe(route: RouteSection): ReactNode {
+  const { description, section } = route
 
-  for (const section of Sections) {
-    if (section.ressources === undefined) {
-      routes.push({
-        chemin: section.chemin,
-        roles: section.roles,
-        element: ecranDe(section, section.chemin, section.libelle),
-      })
-      continue
-    }
+  if (description === undefined) return ecranDe(section, route.chemin, route.libelle)
 
-    for (const cle of section.ressources) {
-      const description = descriptionDe(cle)
-
-      if (description === undefined) continue
-
-      routes.push({
-        chemin: description.chemin,
-        roles: description.rolesLecture,
-        element: (
-          <Reference
-            // La `key` remonte la page quand on passe de Clients à Sites : l'état
-            // de pagination, de formulaire et de confirmation appartient à une
-            // ressource, et le traîner d'une liste à l'autre afficherait « page 3 »
-            // sur une liste qui n'en a qu'une.
-            key={description.cle}
-            description={description}
-            section={section}
-          />
-        ),
-      })
-    }
-
-    // Les écrans propres, gardés par **leurs** rôles : la prévision est fermée au chef
-    // d'équipe, à qui la section reste ouverte.
-    for (const ecran of section.ecrans ?? []) {
-      routes.push({
-        chemin: ecran.chemin,
-        roles: ecran.roles,
-        element: ecranDe(section, ecran.chemin, ecran.libelle),
-      })
-    }
-  }
-
-  return routes
+  return (
+    <Reference
+      // La `key` remonte la page quand on passe de Clients à Sites : l'état
+      // de pagination, de formulaire et de confirmation appartient à une
+      // ressource, et le traîner d'une liste à l'autre afficherait « page 3 »
+      // sur une liste qui n'en a qu'une.
+      key={description.cle}
+      description={description}
+      section={section}
+    />
+  )
 }
 
 /**
@@ -145,11 +98,11 @@ export default function App() {
           >
             <Route index element={<Accueil />} />
 
-            {routesDesEcrans().map((route) => (
+            {routesDesSections().map((route) => (
               <Route
                 key={route.chemin}
                 path={route.chemin}
-                element={<RouteProtegee roles={route.roles}>{route.element}</RouteProtegee>}
+                element={<RouteProtegee roles={route.roles}>{elementDe(route)}</RouteProtegee>}
               />
             ))}
 

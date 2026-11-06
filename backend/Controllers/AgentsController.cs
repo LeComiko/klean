@@ -305,6 +305,8 @@ public class AgentsController : ControllerBase
             })
             .ToListAsync();
 
+        await CompleterLesPassagesAsync(id, interventions);
+
         // La conversion des jours en noms se fait en mémoire : EnListe n'a pas de
         // traduction SQL, et un agent est titulaire de quelques prestations, pas de
         // milliers.
@@ -393,6 +395,17 @@ public class AgentsController : ControllerBase
             "Les consignes des sites et les coordonnées des clients : elles décrivent le "
             + "lieu et le donneur d'ordre, pas l'agent.");
 
+        dossier.NonInclus.Add(
+            "La position relevée au début et à la fin d'un passage : elle n'a jamais été "
+            + "conservée. Seules la distance au site, sa précision et l'heure le sont, et "
+            + "figurent ci-dessus tant qu'elles n'ont pas atteint leur durée d'un an.");
+
+        dossier.NonInclus.Add(
+            "Le contenu des photos d'anomalie, dont seul le nombre figure ci-dessus, et "
+            + "l'identité de qui a traité chaque anomalie : une photo peut montrer un "
+            + "tiers, et qui a traité est un collègue (article 15(4)). Une photo se "
+            + "demande à part, et se remet après avoir été regardée.");
+
         if (agent.DateAnonymisation is not null)
         {
             // Le dossier d'un agent pseudonymisé ne doit pas se lire comme un dossier
@@ -408,6 +421,76 @@ public class AgentsController : ControllerBase
 
         return Ok(dossier);
     }
+
+    /// <summary>
+    /// Les passages de l'étape 25, rangés sous leur vacation (RGPD.md §9.8) : pointages,
+    /// checklist déclarée, anomalies signalées. Sous la vacation plutôt qu'en listes à
+    /// part, pour la forme intelligible de l'article 15 — un pointage ne dit rien sans le
+    /// site et le jour qu'il certifie.
+    ///
+    /// Trois requêtes par la sous-requête des vacations de l'agent, puis l'assemblage en
+    /// mémoire : un agent a quelques centaines de vacations, pas des millions.
+    /// </summary>
+    private async Task CompleterLesPassagesAsync(Guid agentId, List<InterventionDuDossierDto> interventions)
+    {
+        var vacations = _db.Interventions.Where(i => i.AgentId == agentId).Select(i => i.Id);
+
+        var pointages = await _db.Pointages.AsNoTracking()
+            .Where(p => vacations.Contains(p.InterventionId))
+            .ToListAsync();
+
+        var controles = await _db.ControlesEffectues.AsNoTracking()
+            .Where(c => vacations.Contains(c.InterventionId))
+            .OrderBy(c => c.Ordre).ThenBy(c => c.Libelle)
+            .ToListAsync();
+
+        // ⚠️ Le nombre des photos, jamais leur contenu ni `TraiteeParId` : voir
+        // `AnomalieDuDossierDto`.
+        var anomalies = await _db.Anomalies.AsNoTracking()
+            .Where(a => vacations.Contains(a.InterventionId))
+            .OrderBy(a => a.DateSignalement)
+            .Select(a => new
+            {
+                a.InterventionId,
+                Anomalie = new AnomalieDuDossierDto
+                {
+                    Id = a.Id,
+                    Description = a.Description,
+                    Statut = a.Statut.ToString(),
+                    DateSignalement = a.DateSignalement,
+                    DateTraitement = a.DateTraitement,
+                    Photos = a.Photos.Count
+                }
+            })
+            .ToListAsync();
+
+        foreach (var vacation in interventions)
+        {
+            vacation.Debut = PointageDuDossier(pointages, vacation.Id, MomentPointage.Debut);
+            vacation.Fin = PointageDuDossier(pointages, vacation.Id, MomentPointage.Fin);
+            vacation.Checklist = controles
+                .Where(c => c.InterventionId == vacation.Id)
+                .Select(c => new ControleDuDossierDto { Libelle = c.Libelle, Fait = c.Fait })
+                .ToList();
+            vacation.Anomalies = anomalies
+                .Where(a => a.InterventionId == vacation.Id)
+                .Select(a => a.Anomalie)
+                .ToList();
+        }
+    }
+
+    private static PointageDto? PointageDuDossier(
+        List<Pointage> pointages, Guid interventionId, MomentPointage moment) =>
+        pointages
+            .Where(p => p.InterventionId == interventionId && p.Moment == moment)
+            .Select(p => new PointageDto
+            {
+                Horodatage = p.Horodatage,
+                Preuve = p.Preuve.ToString(),
+                DistanceMetres = p.DistanceMetres,
+                PrecisionMetres = p.PrecisionMetres
+            })
+            .SingleOrDefault();
 
     /// <summary>
     /// Le compte de connexion rattaché, s'il existe.
