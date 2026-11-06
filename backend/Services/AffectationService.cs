@@ -386,7 +386,8 @@ public class AffectationService
                || (o.Debut >= fin && o.Debut < reposFin);
     }
 
-    private static double Haversine(double lat1, double lon1, double lat2, double lon2)
+    /// <summary>En kilomètres. Partagée avec le pointage (étape 25) : une seule formule.</summary>
+    internal static double Haversine(double lat1, double lon1, double lat2, double lon2)
     {
         var dLat = Radians(lat2 - lat1);
         var dLon = Radians(lon2 - lon1);

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Klean.Api.DTOs;
 using Klean.Api.Filtres;
 using Klean.Api.Data;
@@ -17,14 +18,53 @@ public class InterventionsController : ControllerBase
     private readonly KleanDbContext _db;
     private readonly AffectationService _affectation;
     private readonly RemplacementService _remplacements;
+    private readonly ServicePassage _passages;
 
     public InterventionsController(
-        KleanDbContext db, AffectationService affectation, RemplacementService remplacements)
+        KleanDbContext db, AffectationService affectation, RemplacementService remplacements,
+        ServicePassage passages)
     {
         _db = db;
         _affectation = affectation;
         _remplacements = remplacements;
+        _passages = passages;
     }
+
+    /// <summary>
+    /// Les deux statuts qui disent qu'un passage a eu lieu, et dont la seule source est le
+    /// pointage de l'agent (SPEC.md, étape 25). Une saisie qui les poserait fabriquerait une
+    /// vacation certifiée sans aucune preuve. <c>NonCertifiee</c> reste saisissable : il
+    /// veut dire « fait, sans preuve », le recours d'un chef dont l'agent n'avait pas de
+    /// téléphone.
+    /// </summary>
+    private static readonly StatutIntervention[] StatutsDuPointage =
+        [StatutIntervention.EnCours, StatutIntervention.Terminee];
+
+    /// <summary>
+    /// La journée de l'agent : ses vacations du jour, et celles qu'il a laissées en cours.
+    /// Non journalisée : elle ne nomme que l'appelant, comme <c>GET /api/auth/moi</c>.
+    /// </summary>
+    [Authorize(Roles = RolesKlean.Agent)]
+    [HttpGet("ma-journee")]
+    public async Task<ActionResult<List<VacationAgentDto>>> MaJournee(CancellationToken annulation) =>
+        Ok(await _passages.MaJourneeAsync(annulation));
+
+    /// <summary>
+    /// Le premier pointage. La position est celle du geste, ou nulle si l'agent l'a refusée :
+    /// le passage démarre quand même, et ne sera pas certifié.
+    /// </summary>
+    [Authorize(Roles = RolesKlean.Agent)]
+    [HttpPost("{id:guid}/demarrer")]
+    public async Task<ActionResult<VacationAgentDto>> Demarrer(
+        Guid id, PointageCreateDto dto, CancellationToken annulation) =>
+        Repondre(await _passages.DemarrerAsync(id, dto.Position, Appelant(), annulation));
+
+    /// <summary>Le second pointage, qui tranche entre <c>Terminee</c> et <c>NonCertifiee</c>.</summary>
+    [Authorize(Roles = RolesKlean.Agent)]
+    [HttpPost("{id:guid}/terminer")]
+    public async Task<ActionResult<VacationAgentDto>> Terminer(
+        Guid id, PointageCreateDto dto, CancellationToken annulation) =>
+        Repondre(await _passages.TerminerAsync(id, dto.Position, Appelant(), annulation));
 
     [Authorize(Roles = RolesKlean.InterneEtAgent)]
     [HttpGet]
@@ -145,6 +185,8 @@ public class InterventionsController : ControllerBase
             return BadRequest($"Statut d'intervention « {dto.Statut} » invalide. Valeurs acceptées : {string.Join(", ", Enum.GetNames<StatutIntervention>())}.");
         }
 
+        if (StatutsDuPointage.Contains(statut)) return BadRequest(RefusStatutDuPointage(statut));
+
         if (!await _db.Prestations.AnyAsync(p => p.Id == dto.PrestationId))
         {
             return BadRequest($"Prestation {dto.PrestationId} inconnue.");
@@ -186,6 +228,15 @@ public class InterventionsController : ControllerBase
         var intervention = await _db.Interventions.FindAsync(id);
         if (intervention is null) return NotFound();
 
+        if (await EstPointeeAsync(id)) return Conflict(RefusVacationPointee);
+
+        // Un statut du pointage reste admis s'il ne change pas : une ligne antérieure à
+        // l'étape 25, terminée à la main, doit rester modifiable.
+        if (StatutsDuPointage.Contains(statut) && statut != intervention.Statut)
+        {
+            return BadRequest(RefusStatutDuPointage(statut));
+        }
+
         if (intervention.PrestationId != dto.PrestationId
             && !await _db.Prestations.AnyAsync(p => p.Id == dto.PrestationId))
         {
@@ -218,6 +269,8 @@ public class InterventionsController : ControllerBase
     {
         var intervention = await _db.Interventions.FindAsync(id);
         if (intervention is null) return NotFound();
+
+        if (await EstPointeeAsync(id)) return Conflict(RefusVacationPointee);
 
         _db.Interventions.Remove(intervention);
 
@@ -278,6 +331,32 @@ public class InterventionsController : ControllerBase
             ? null
             : BadRequest(AffectationService.MessageIneligibilite(dto.AgentId.Value, ouVoir));
     }
+
+    /// <summary>
+    /// ⚠️ Une vacation pointée est figée (SPEC.md, étape 25) : son agent, sa date et son
+    /// statut sont désormais la preuve d'un passage. La modifier détacherait la preuve de ce
+    /// qu'elle certifie ; la supprimer l'effacerait.
+    /// </summary>
+    private const string RefusVacationPointee =
+        "Cette vacation a été pointée par son agent : son agent, sa date et son statut sont "
+        + "la preuve d'un passage, et ne se modifient ni ne se suppriment plus.";
+
+    private Task<bool> EstPointeeAsync(Guid interventionId) =>
+        _db.Pointages.AnyAsync(p => p.InterventionId == interventionId);
+
+    private static string RefusStatutDuPointage(StatutIntervention statut) =>
+        $"Le statut {statut} ne se saisit pas : il naît du pointage de l'agent. "
+        + $"Pour une vacation faite sans pointage, saisir {StatutIntervention.NonCertifiee}.";
+
+    private Guid Appelant() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    private ActionResult<VacationAgentDto> Repondre(ResultatPassage resultat) => resultat.Issue switch
+    {
+        IssuePassage.Introuvable => NotFound(),
+        IssuePassage.Refusee => BadRequest(resultat.Message),
+        IssuePassage.Conflit => Conflict(resultat.Message),
+        _ => Ok(resultat.Valeur)
+    };
 
     private static InterventionDto Vers(Intervention i) => new()
     {

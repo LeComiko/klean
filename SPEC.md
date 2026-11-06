@@ -3046,6 +3046,59 @@ validation d'un passage par le chef, et toute notification.
 - **D** — les documents : `RGPD.md`, `CLAUDE.md`, `DEPLOIEMENT.md`, et le script de purge
   des pointages.
 
+**Deux réponses de plus, obtenues au lot A le 6 novembre 2026**
+
+| Question | Réponse | Ce que cela veut dire dans le code |
+|---|---|---|
+| Les statuts qu'une saisie manuelle peut poser | **ni `Terminee` ni `EnCours`** | ils naissent du pointage seul. `POST` et `PUT` gardent `Planifiee` et `Annulee`, et peuvent poser `NonCertifiee` — « fait, sans preuve », le recours d'un chef dont l'agent n'avait pas de téléphone |
+| Une vacation déjà pointée | **figée** | `PUT` et `DELETE` la refusent en 409 en disant pourquoi |
+
+**Lot A — fait le 6 novembre 2026**
+
+- **La migration `Pointages`**, relue avant d'être jouée : une table neuve, une clé
+  `Restrict` vers les interventions, un index unique sur la vacation et le moment, un index
+  de purge par date. Rien d'existant n'est touché. Appliquée à `klean_test` seulement.
+- **`Pointage`** n'a aucune colonne pour une position. Le serveur calcule la distance au
+  site, la précision et la preuve, puis jette les coordonnées. Un test fige la liste des
+  colonnes de la table.
+- **`GET /api/interventions/ma-journee`**, rôle `Agent` seul : ses vacations du jour du
+  territoire, et celles qu'il a laissées en cours un jour passé. Elle porte le site, son
+  adresse, ses consignes, la prestation, la durée et les deux pointages. Elle n'est pas
+  journalisée : `VacationAgentDto` rejoint les exemptions motivées de `JournalAccesTests`,
+  sur le précédent de `ProfilDto`.
+- **`POST /api/interventions/{id}/demarrer` et `/terminer`**, rôle `Agent` seul. La position
+  du geste est facultative.
+  - Démarrer n'accepte qu'une vacation `Planifiee` du jour ; terminer, une `EnCours`.
+  - Deux pointages `SurSite` donnent `Terminee`, tout autre couple `NonCertifiee`.
+  - Une position hors des bornes est refusée en français.
+  - Un pointage déjà écrit par un double appui rend 409, par l'index unique.
+- **La preuve se tranche dans cet ordre** :
+  1. hors du rayon même en accordant la marge d'erreur ;
+  2. sinon imprécise au-delà de 100 m ;
+  3. sinon sur site dans 200 m.
+
+  Dix kilomètres à trois cents mètres près ne laissent donc aucun doute.
+- **La saisie manuelle** refuse `Terminee` et `EnCours`, sauf pour une ligne antérieure qui
+  garde le statut qu'elle a. Une vacation pointée refuse `PUT` et `DELETE`.
+- **Accepter un remplacement** refuse désormais une vacation passée hors de `Planifiee`
+  depuis la proposition : sinon, une vacation démarrée changeait d'agent, et son pointage se
+  détachait de la ligne qu'il certifie.
+- **Les tests qui posaient `Terminee` à la main** — chef d'équipe, éligibilité, génération,
+  détection d'impacts — posent `NonCertifiee`. La prévision du stock pose `EnCours` et
+  `Terminee` en base, la saisie ne le permettant plus.
+- **`PassagesTests`, 28 cas**, dont sept bornes de la preuve.
+- **Dix-huit sabotages, seize rouges d'emblée.** ⚠️ Les deux autres retiraient le cadrage
+  explicite sur l'agent, au pointage et à la journée. Le premier est resté vert ; le
+  second ne compilait pas dans sa première forme. Ce cadrage double le filtre global, qui
+  restreint déjà un agent à ses vacations. Les deux gardes ont donc été séparées :
+  - chacune retirée seule laisse la série verte ;
+  - les deux retirées ensemble la font rougir, au pointage comme à la journée.
+
+  Le filtre global est éprouvé seul par `AutorisationsTests`.
+- Aucun écran n'écrit un statut de vacation : le refus de la saisie ne casse rien côté
+  interface. Le planning ne fait que les lire.
+- Série serveur complète : 652 tests verts.
+
 ---
 
 # Suite — non planifié

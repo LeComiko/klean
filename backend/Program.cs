@@ -226,6 +226,7 @@ builder.Services.AddScoped<PlanningService>();
 builder.Services.AddScoped<ServiceGeneration>();
 builder.Services.AddScoped<ServiceStock>();
 builder.Services.AddScoped<ServicePrevisionStock>();
+builder.Services.AddScoped<ServicePassage>();
 
 // L'horloge de la génération (étape 20), substituée par la série de tests : « douze
 // semaines à partir d'aujourd'hui » ne s'éprouve pas sur un jour qui change.

@@ -109,7 +109,14 @@ public class JournalAccesTests : IAsyncLifetime
         // jour où un endpoint **listera** les comptes, il sortira du nom et du courriel
         // d'autrui et devra être journalisé. Aucun n'existe (CLAUDE.md §7), et cette
         // exemption ne le couvrirait pas puisqu'elle porte sur le DTO, non sur l'action.
-        "ProfilDto"
+        "ProfilDto",
+
+        // `VacationAgentDto` porte l'`Adresse` d'un **site**, personne morale comme pour
+        // `SiteDto`, et le rend à **l'agent affecté lui-même**, sur ses propres vacations
+        // (étape 25) : ni le nom d'un collègue, ni celui de l'agent. Même raisonnement
+        // que `ProfilDto`. ⚠️ Les consignes y sortent aussi, avec leur limite connue
+        // (RGPD.md §9.5) : un texte libre peut nommer un résident.
+        "VacationAgentDto"
     ];
 
     [Fact]

@@ -65,6 +65,9 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
     /// <summary>Ce qu'un passage de chaque type consomme (SPEC.md, étape 22, lot B).</summary>
     public DbSet<ConsommationType> ConsommationsType => Set<ConsommationType>();
 
+    /// <summary>Le début et la fin d'un passage, pointés par l'agent (SPEC.md, étape 25).</summary>
+    public DbSet<Pointage> Pointages => Set<Pointage>();
+
     /// <summary>
     /// Journal d'accès aux données personnelles (SPEC.md étape 17). La seule
     /// entité qui n'existe pas pour le métier : elle existe pour rendre compte de
@@ -108,6 +111,8 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Remplacement>().Property(e => e.Statut).HasConversion<string>();
         modelBuilder.Entity<Emplacement>().Property(e => e.Type).HasConversion<string>();
         modelBuilder.Entity<MouvementStock>().Property(e => e.Nature).HasConversion<string>();
+        modelBuilder.Entity<Pointage>().Property(e => e.Moment).HasConversion<string>();
+        modelBuilder.Entity<Pointage>().Property(e => e.Preuve).HasConversion<string>();
         modelBuilder.Entity<AccesJournalise>().Property(e => e.Ressource).HasConversion<string>();
         modelBuilder.Entity<AccesJournalise>().Property(e => e.Nature).HasConversion<string>();
 
@@ -302,6 +307,19 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
             .HasIndex(e => new { e.ProduitId, e.SiteId }).IsUnique()
             .HasFilter("\"SiteId\" IS NOT NULL");
 
+        // Le pointage (SPEC.md, étape 25) : **Restrict**. Il est la preuve d'un passage, et
+        // une vacation pointée ne se supprime pas — le contrôleur le refuse avant la base, en
+        // disant pourquoi ; la base le refuse sous lui.
+        modelBuilder.Entity<Pointage>()
+            .HasOne(e => e.Intervention).WithMany()
+            .HasForeignKey(e => e.InterventionId).OnDelete(DeleteBehavior.Restrict);
+
+        // Un début et une fin par vacation, pas davantage. ⚠️ C'est aussi la garde d'un double
+        // appui sur « Démarrer » : la seconde insertion tombe sur l'index, et le service
+        // répond 409 au lieu d'écrire deux débuts.
+        modelBuilder.Entity<Pointage>()
+            .HasIndex(e => new { e.InterventionId, e.Moment }).IsUnique();
+
         // Une absence porte des dates à valeur légale, et l'étape 16 bis lot B lui
         // donne son écran. Elle ne part donc pas avec son agent sans qu'on le
         // demande — d'autant qu'un agent déjà planifié est de toute façon
@@ -452,6 +470,17 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<ConsommationType>().HasQueryFilter(e =>
             !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
 
+        // Les pointages des vacations que l'appelant voit : l'agent les siens, le chef ceux de
+        // son équipe. La règle n'est pas recopiée, comme pour les remplacements : le filtre
+        // des interventions s'applique à la sous-requête. ⚠️ Rien pour le syndic, dont le
+        // filtre des interventions ne restreint pas le client : il attend le portail.
+        modelBuilder.Entity<Pointage>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null
+            || (e.EntrepriseId == TenantEntrepriseId
+                && TenantClientId == null
+                && ((TenantAgentId == null && TenantChefEquipeId == null)
+                    || Interventions.Any(i => i.Id == e.InterventionId))));
+
         // ⚠️ Le journal d'accès est filtré comme le reste, et l'oublier serait pire
         // qu'ailleurs : GET /api/journal-acces est réservé à l'administrateur, donc un
         // administrateur non filtré lirait les habitudes de consultation des autres
@@ -492,6 +521,11 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         // L'historique se lit du plus récent au plus ancien, comme le journal d'accès.
         modelBuilder.Entity<MouvementStock>()
             .HasIndex(e => new { e.EntrepriseId, e.DateMouvement })
+            .IsDescending(false, true);
+
+        // Les pointages se purgent par date, à un an (RGPD.md §5) : même forme d'index.
+        modelBuilder.Entity<Pointage>()
+            .HasIndex(e => new { e.EntrepriseId, e.Horodatage })
             .IsDescending(false, true);
 
         // ⚠️ Le journal se lit toujours du plus récent au plus ancien, et se purge

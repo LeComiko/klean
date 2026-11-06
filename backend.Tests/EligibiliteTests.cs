@@ -204,11 +204,11 @@ public class EligibiliteTests : IAsyncLifetime
                 AgentId = _sow.Id,
                 DatePrevue = Mercredi,
                 HeurePrevue = NeufHeures,
-                Statut = "Terminee"
+                Statut = "NonCertifiee"
             });
 
         Assert.Equal(HttpStatusCode.NoContent, reponse.StatusCode);
-        Assert.Equal("Terminee", (await Relire(intervention.Id)).Statut);
+        Assert.Equal("NonCertifiee", (await Relire(intervention.Id)).Statut);
     }
 
     [Fact]

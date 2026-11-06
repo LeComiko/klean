@@ -424,14 +424,29 @@ public class PrevisionStockTests : IAsyncLifetime
     private static DateTime Utc(DateOnly jour) =>
         DateTime.SpecifyKind(jour.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
 
-    private async Task Vacation(Guid prestation, int dansJours, StatutIntervention statut = StatutIntervention.Planifiee) =>
-        await Creer<InterventionDto>("/api/interventions", new InterventionCreateDto
+    /// <summary>
+    /// ⚠️ <c>EnCours</c> et <c>Terminee</c> ne se saisissent plus depuis l'étape 25 : ils
+    /// naissent du pointage d'un agent. La vacation est donc créée planifiée, puis son statut
+    /// posé en base — la prévision lit le statut, pas la façon dont il est venu.
+    /// </summary>
+    private async Task Vacation(Guid prestation, int dansJours, StatutIntervention statut = StatutIntervention.Planifiee)
+    {
+        var duPointage = statut is StatutIntervention.EnCours or StatutIntervention.Terminee;
+
+        var vacation = await Creer<InterventionDto>("/api/interventions", new InterventionCreateDto
         {
             PrestationId = prestation,
             DatePrevue = Utc(Aujourdhui.AddDays(dansJours)),
             HeurePrevue = new TimeSpan(8, 0, 0),
-            Statut = statut.ToString()
+            Statut = (duPointage ? StatutIntervention.Planifiee : statut).ToString()
         });
+
+        if (!duPointage) return;
+
+        await _fixture.AvecServicesAsync(services => services.GetRequiredService<KleanDbContext>()
+            .Interventions.Where(i => i.Id == vacation.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.Statut, statut)));
+    }
 
     private static MouvementStockCreateDto Entree(Guid produit, Guid? emplacement = null, Guid? site = null, decimal quantite = 1) => new()
     {

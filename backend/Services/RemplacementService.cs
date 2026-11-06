@@ -291,6 +291,16 @@ public class RemplacementService
                 $"Intervention {remplacement.InterventionId} introuvable : remplacement orphelin.");
         }
 
+        // ⚠️ Entre la proposition et l'acceptation, l'agent en place a pu démarrer la
+        // vacation (SPEC.md, étape 25). Changer d'agent détacherait son pointage de la ligne
+        // qu'il certifie.
+        if (intervention.Statut != StatutIntervention.Planifiee)
+        {
+            return ResultatRemplacement.Refusee(
+                $"Vacation passée au statut {intervention.Statut} depuis la proposition : "
+                + "elle ne change plus d'agent. Refuser ce remplacement.");
+        }
+
         intervention.AgentId = agentId;
 
         remplacement.Score = candidat.Score;

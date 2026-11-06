@@ -429,7 +429,7 @@ public class GenerationTests : IAsyncLifetime
             AgentId = (Guid?)null,
             premiere.DatePrevue,
             premiere.HeurePrevue,
-            Statut = "Terminee"
+            Statut = "NonCertifiee"
         });
 
         await Modifier($"/api/contrats/{contrat.Id}", new

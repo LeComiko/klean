@@ -123,7 +123,7 @@ public class RemplacementTests : IAsyncLifetime
     public async Task La_detection_ne_couvre_que_les_interventions_planifiees()
     {
         var terminee = await CreerIntervention(
-            _titulaire.Id, Mercredi, new TimeSpan(14, 0, 0), "Terminee");
+            _titulaire.Id, Mercredi, new TimeSpan(14, 0, 0), "NonCertifiee");
 
         await CreerAbsence(_titulaire.Id, Mercredi, Mercredi);
 

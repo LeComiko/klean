@@ -469,6 +469,48 @@ namespace Klean.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Klean.Api.Models.Pointage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AuteurId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("DistanceMetres")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("EntrepriseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("Horodatage")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("InterventionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Moment")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("PrecisionMetres")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Preuve")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntrepriseId", "Horodatage")
+                        .IsDescending(false, true);
+
+                    b.HasIndex("InterventionId", "Moment")
+                        .IsUnique();
+
+                    b.ToTable("Pointages");
+                });
+
             modelBuilder.Entity("Klean.Api.Models.Prestation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1090,6 +1132,17 @@ namespace Klean.Api.Migrations
                     b.Navigation("OrigineSite");
 
                     b.Navigation("Produit");
+                });
+
+            modelBuilder.Entity("Klean.Api.Models.Pointage", b =>
+                {
+                    b.HasOne("Klean.Api.Models.Intervention", "Intervention")
+                        .WithMany()
+                        .HasForeignKey("InterventionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Intervention");
                 });
 
             modelBuilder.Entity("Klean.Api.Models.Prestation", b =>

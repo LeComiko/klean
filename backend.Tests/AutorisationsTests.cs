@@ -136,7 +136,7 @@ public class AutorisationsTests : IAsyncLifetime
                 AgentId = intervention.AgentId,
                 DatePrevue = intervention.DatePrevue,
                 HeurePrevue = intervention.HeurePrevue,
-                Statut = "Terminee"
+                Statut = "NonCertifiee"
             });
         Assert.Equal(HttpStatusCode.NoContent, modification.StatusCode);
 
