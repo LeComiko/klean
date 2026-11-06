@@ -273,6 +273,18 @@
   cursor: not-allowed;
 }
 
+/* La bascule vers le code de récupération : le même lien qu'à la connexion,
+   distingué par la graisse et le soulignement, jamais par une couleur de marque (§10). */
+.compte__lien {
+  align-self: flex-start;
+  padding: 0;
+  background: none;
+  color: var(--texte);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 600;
+}
+
 /* Densité mobile : plancher de 16 px pour le corps, cibles de 56 px. Un écran de
    compte est consulté depuis un téléphone au moins autant que depuis un poste. */
 @media (max-width: 900px) {
@@ -308,5 +320,10 @@
   .compte__valider,
   .compte__declencheur {
     align-self: stretch;
+  }
+
+  .compte__lien {
+    min-height: var(--cible-tactile);
+    font-size: var(--corps-mobile-taille);
   }
 }

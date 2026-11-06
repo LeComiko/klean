@@ -221,7 +221,15 @@ public class SecondFacteurController : ControllerBase
     }
 
     /// <summary>
-    /// Retire le second facteur de son propre compte, sur un code de l'application.
+    /// Retire le second facteur de son propre compte, sur un code de l'application
+    /// <b>ou un code de récupération</b>, qui est alors consommé.
+    ///
+    /// ⚠️ Le code de récupération n'est pas une commodité : c'est le seul cas où ce geste
+    /// sert vraiment. Qui change de téléphone a perdu le sien, ou l'a remplacé ; sur le
+    /// code de l'application seul, il se connecterait par ses codes de récupération sans
+    /// jamais pouvoir rééquiper, en brûlant un code par connexion jusqu'à ce qu'un
+    /// administrateur intervienne — et le dernier administrateur, jusqu'au script
+    /// d'exploitation. La preuve est la même qu'à la connexion.
     ///
     /// Pour un compte que son rôle <b>oblige</b>, c'est le geste « changer de
     /// téléphone » : ses sessions sont fermées, celle-ci comprise, et la connexion
@@ -244,9 +252,17 @@ public class SecondFacteurController : ControllerBase
             return Conflict("La double authentification n'est pas active sur ce compte.");
         }
 
-        if (!await _secondFacteur.VerifierCodeAsync(utilisateur, dto.Code))
+        if (RefusDeForme(dto) is { } refus) return BadRequest(refus);
+
+        var reconnu = dto.Code is not null
+            ? await _secondFacteur.VerifierCodeAsync(utilisateur, dto.Code)
+            : await _secondFacteur.ConsommerCodeRecuperationAsync(utilisateur, dto.CodeRecuperation);
+
+        if (!reconnu)
         {
-            return BadRequest("Code invalide. Saisir le code affiché maintenant par l'application.");
+            return BadRequest(dto.Code is not null
+                ? "Code invalide. Saisir le code affiché maintenant par l'application."
+                : "Code de récupération invalide ou déjà utilisé.");
         }
 
         if (!await _secondFacteur.RetirerAsync(utilisateur))
@@ -274,10 +290,12 @@ public class SecondFacteurController : ControllerBase
     /// n'est pas filtrée (CLAUDE.md §7). Un compte d'une autre entreprise rend 404,
     /// comme un compte inexistant.
     ///
-    /// ⚠️ <b>Jamais sur soi-même.</b> Qui est connecté a son second facteur ; qui a tout
-    /// perdu ne peut pas l'être. Le dernier administrateur dans ce cas n'a pas de sortie
-    /// par l'API, délibérément : il passe par le script d'exploitation (SPEC.md,
-    /// étape 23, lot C).
+    /// ⚠️ <b>Jamais sur soi-même.</b> Qui est connecté l'est par son téléphone ou par un
+    /// code de récupération, et l'un comme l'autre lui ouvre « Changer de téléphone »
+    /// sur son propre compte, qui exige ce code : il n'a donc pas besoin de cette route,
+    /// qui n'en exige aucun. Qui a tout perdu ne peut pas être connecté. Le dernier
+    /// administrateur dans ce cas n'a pas de sortie par l'API, délibérément : il passe
+    /// par le script d'exploitation, `Scripts/reinitialiser-second-facteur.sql`.
     ///
     /// Journalisée, alors que rien n'est lu : c'est l'exception écrite à la règle 5 de
     /// CLAUDE.md §7 bis, sur le précédent de l'anonymisation.
@@ -298,8 +316,9 @@ public class SecondFacteurController : ControllerBase
         {
             return Conflict(
                 "Un administrateur ne réinitialise pas son propre second facteur. Pour "
-                + "changer de téléphone : « Désactiver » depuis l'écran du compte, puis "
-                + "équiper le nouveau à la connexion suivante.");
+                + "changer de téléphone : « Changer de téléphone » depuis l'écran du compte, "
+                + "avec un code de l'application ou un code de récupération, puis équiper le "
+                + "nouveau à la connexion suivante.");
         }
 
         if (!compte.TwoFactorEnabled)

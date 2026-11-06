@@ -2622,6 +2622,37 @@ NuGet. Les trois ont changé quelque chose, et chacune a reçu une réponse :
   liste des comptes n'existe, ni pour réinitialiser, ni pour créer un compte. C'est un
   lot à part, à cadrer : la liste nomme des personnes, donc elle se journalise.
 
+**Correctif des lots A et B — 6 novembre 2026**
+
+Trouvé en écrivant la procédure « téléphone perdu » du lot C : **« Changer de téléphone »
+n'acceptait que le code de l'application**, c'est-à-dire précisément ce que n'a plus qui a
+perdu son téléphone.
+- Un code de récupération ouvrait bien une session, mais aucun geste ne permettait ensuite
+  de rééquiper. Chaque connexion brûlait un code, jusqu'à ce qu'un administrateur
+  réinitialise le compte.
+- Le dernier administrateur, lui, ne peut pas se réinitialiser lui-même : avec ses dix
+  codes en main, il finissait quand même au script d'exploitation.
+- Le commentaire de `Reinitialiser`, « qui est connecté a son second facteur », était faux
+  pour la même raison.
+
+Corrigé :
+- `POST /api/auth/second-facteur/desactiver` accepte un code de récupération, qu'il
+  consomme, avec la règle de la connexion : une saisie et une seule. La régénération des
+  codes reste sur le code de l'application ; sans téléphone, ce n'est pas elle qu'il faut.
+- L'écran du compte porte la même bascule qu'à la connexion, « Téléphone perdu ? Utiliser
+  un code de récupération », qui masque la régénération.
+- Trois tests :
+  - le téléphone perdu de bout en bout, où le code de la connexion ne resert pas ;
+  - les deux saisies ensemble, ou aucune ;
+  - **le trousseau perdu** : la clé chiffrée par un autre trousseau rend une erreur
+    serveur sans compter d'échec, et les codes de récupération suffisent à changer de
+    téléphone. Aucun test n'éprouvait encore la clé indéchiffrable.
+- Quatre sabotages, tous rouges :
+  - le code de l'application seul ;
+  - un code de récupération accepté sans vérification ;
+  - la forme non contrôlée ;
+  - la clé indéchiffrable lue comme absente.
+
 ---
 
 # Suite — non planifié

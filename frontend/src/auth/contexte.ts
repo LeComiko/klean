@@ -37,11 +37,12 @@ export interface ValeurAuth {
   adopterSession: (session: Session) => void
 
   /**
-   * Retire le second facteur, sur un code de l'application. Pour un compte que son
-   * rôle oblige, le serveur ferme toutes ses sessions (204) : la session locale est
-   * alors purgée, et la connexion suivante impose l'équipement du nouveau téléphone.
+   * Retire le second facteur, sur un code de l'application ou un code de récupération
+   * — le seul que garde qui a perdu son téléphone. Pour un compte que son rôle oblige,
+   * le serveur ferme toutes ses sessions (204) : la session locale est alors purgée, et
+   * la connexion suivante impose l'équipement du nouveau téléphone.
    */
-  desactiverSecondFacteur: (code: string) => Promise<void>
+  desactiverSecondFacteur: (saisie: SaisieSecondFacteur) => Promise<void>
 
   deconnecter: () => Promise<void>
 

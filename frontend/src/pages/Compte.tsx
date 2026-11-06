@@ -8,7 +8,7 @@ import { saisieDe } from '../auth/secondFacteur'
 import { CodesRecuperation } from '../composants/CodesRecuperation'
 import { EnTetePage } from '../composants/EnTetePage'
 import { EquipementSecondFacteur } from '../composants/EquipementSecondFacteur'
-import type { EtatSecondFacteur } from '../types/auth'
+import type { EtatSecondFacteur, SaisieSecondFacteur } from '../types/auth'
 import './Compte.css'
 
 /**
@@ -306,6 +306,11 @@ type Chargement =
  * téléphone »** et en a l'effet : toutes les sessions se ferment, celle-ci comprise, et
  * la connexion suivante impose l'équipement du nouveau. Un compte obligé est toujours
  * équipé ici — sans second facteur, il n'aurait pas de session pour voir cet écran.
+ *
+ * ⚠️ **Ce geste accepte un code de récupération**, et c'est son cas principal : qui
+ * change de téléphone a souvent perdu l'ancien, et s'est connecté par un de ces codes.
+ * Sur le code de l'application seul, il n'aurait aucune sortie sans un administrateur.
+ * La régénération des codes, elle, reste sur le code de l'application.
  */
 function DoubleAuthentification() {
   const { adopterSession, desactiverSecondFacteur } = useAuth()
@@ -314,6 +319,7 @@ function DoubleAuthentification() {
   const [generation, setGeneration] = useState(0)
   const [mode, setMode] = useState<'repos' | 'equipement' | { codes: string[] }>('repos')
   const [code, setCode] = useState('')
+  const [recuperation, setRecuperation] = useState(false)
   const [envoi, setEnvoi] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
   const [annonce, setAnnonce] = useState<string | null>(null)
@@ -336,34 +342,38 @@ function DoubleAuthentification() {
   function recharger(message: string | null) {
     setMode('repos')
     setCode('')
+    setRecuperation(false)
     setErreur(null)
     setAnnonce(message)
     setGeneration((precedente) => precedente + 1)
   }
 
-  /** Le code saisi, ou `null` après avoir affiché le refus local. */
-  function codeSaisi(): string | null {
+  /**
+   * La saisie à envoyer, ou `null` après avoir affiché le refus local — qui épargne un
+   * essai au plafond de débit du serveur.
+   */
+  function saisieFaite(): SaisieSecondFacteur | null {
     setErreur(null)
     setAnnonce(null)
 
-    const saisie = saisieDe(code, false)
+    const saisie = saisieDe(code, recuperation)
 
     if ('refus' in saisie) {
       setErreur(saisie.refus)
       return null
     }
 
-    return 'code' in saisie.corps ? saisie.corps.code : null
+    return saisie.corps
   }
 
   async function regenerer() {
-    const valeur = codeSaisi()
-    if (valeur === null) return
+    const saisie = saisieFaite()
+    if (saisie === null || !('code' in saisie)) return
 
     setEnvoi(true)
 
     try {
-      setMode({ codes: (await regenererCodes(valeur)).codes })
+      setMode({ codes: (await regenererCodes(saisie.code)).codes })
       setCode('')
     } catch (echec: unknown) {
       setErreur(echec instanceof Error ? echec.message : 'Régénération impossible.')
@@ -374,15 +384,15 @@ function DoubleAuthentification() {
   }
 
   async function desactiver(obligatoire: boolean) {
-    const valeur = codeSaisi()
-    if (valeur === null) return
+    const saisie = saisieFaite()
+    if (saisie === null) return
 
     setEnvoi(true)
 
     try {
       // Obligatoire : la session tombe, et RouteProtegee renvoie à la connexion.
       // Rien à annoncer, cet écran n'existe plus.
-      await desactiverSecondFacteur(valeur)
+      await desactiverSecondFacteur(saisie)
 
       if (!obligatoire) recharger('Double authentification désactivée. Cet appareil reste connecté.')
     } catch (echec: unknown) {
@@ -485,21 +495,36 @@ function DoubleAuthentification() {
 
           <div className="compte__champ">
             <label className="compte__etiquette" htmlFor="compte-code">
-              Code affiché par l’application
+              {recuperation ? 'Code de récupération' : 'Code affiché par l’application'}
             </label>
             <input
               id="compte-code"
-              className="compte__saisie compte__saisie--code"
-              inputMode="numeric"
+              className={`compte__saisie${recuperation ? '' : ' compte__saisie--code'}`}
+              inputMode={recuperation ? 'text' : 'numeric'}
               autoComplete="one-time-code"
+              autoCapitalize="characters"
               aria-describedby="compte-code-aide"
               value={code}
               onChange={(evenement) => setCode(evenement.target.value)}
             />
             <p className="compte__aide" id="compte-code-aide">
-              Demandé pour chacun des deux gestes ci-dessous : une session ouverte ne suffit pas.
+              {recuperation
+                ? 'Le code est consommé : il ne servira plus.'
+                : 'Demandé pour chacun des deux gestes ci-dessous : une session ouverte ne suffit pas.'}
             </p>
           </div>
+
+          <button
+            className="compte__lien"
+            type="button"
+            onClick={() => {
+              setRecuperation(!recuperation)
+              setCode('')
+              setErreur(null)
+            }}
+          >
+            {recuperation ? 'Utiliser le code de l’application' : 'Téléphone perdu ? Utiliser un code de récupération'}
+          </button>
 
           <p className="compte__consequence">
             {chargement.valeur.obligatoire
@@ -510,9 +535,13 @@ function DoubleAuthentification() {
           {erreurAffichee}
 
           <div className="compte__actions">
-            <button className="compte__valider" type="button" disabled={envoi} onClick={() => void regenerer()}>
-              Régénérer les codes
-            </button>
+            {/* Sans téléphone, des codes neufs ne servent à rien : c'est le téléphone qu'il
+                faut remplacer, et l'équipement suivant en remettra dix. */}
+            {!recuperation && (
+              <button className="compte__valider" type="button" disabled={envoi} onClick={() => void regenerer()}>
+                Régénérer les codes
+              </button>
+            )}
 
             <button
               className="compte__declencheur"

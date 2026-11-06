@@ -6,6 +6,7 @@ using Klean.Api.DTOs;
 using Klean.Api.Models;
 using Klean.Api.Services;
 using Klean.Api.Tests.Infrastructure;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -548,6 +549,102 @@ public class SecondFacteurTests : IAsyncLifetime
         Assert.Equal(nameof(EtapeDefi.Equipement), (await connexion.Content.ReadFromJsonAsync<EtapeConnexionDto>())!.Etape);
     }
 
+    /// <summary>
+    /// Le téléphone perdu, de bout en bout : connecté par un code de récupération, le
+    /// compte change de téléphone avec un autre. Sur le code de l'application seul, il
+    /// n'avait aucune sortie que l'administrateur, ou le script pour le dernier d'entre eux.
+    /// </summary>
+    [Fact]
+    public async Task Un_telephone_perdu_se_remplace_avec_les_codes_de_recuperation()
+    {
+        await EquiperAdminAsync();
+        var codes = _fixture.CodesDe(FixtureApi.AdminAlpha);
+
+        var admin = _fixture.ClientAnonyme();
+        await Connexion(admin, FixtureApi.AdminAlpha);
+        var session = await Recuperation(admin, codes[0]);
+        Assert.Equal(HttpStatusCode.OK, session.StatusCode);
+        FixtureApi.ArmerCsrf(admin, session);
+
+        // Le code qui a servi à la connexion ne sert pas deux fois.
+        var deja = await admin.PostAsJsonAsync("/api/auth/second-facteur/desactiver",
+            new CodeSecondFacteurDto { CodeRecuperation = codes[0] });
+        Assert.Equal(HttpStatusCode.BadRequest, deja.StatusCode);
+        Assert.True((await Compte(FixtureApi.AdminAlpha)).TwoFactorEnabled);
+
+        var reponse = await admin.PostAsJsonAsync("/api/auth/second-facteur/desactiver",
+            new CodeSecondFacteurDto { CodeRecuperation = codes[1] });
+        Assert.Equal(HttpStatusCode.NoContent, reponse.StatusCode);
+
+        var compte = await Compte(FixtureApi.AdminAlpha);
+        Assert.False(compte.TwoFactorEnabled);
+        Assert.Empty(await JetonsAsync(compte.Id));
+
+        var connexion = await Connexion(_fixture.ClientAnonyme(), FixtureApi.AdminAlpha);
+        Assert.Equal(nameof(EtapeDefi.Equipement), (await connexion.Content.ReadFromJsonAsync<EtapeConnexionDto>())!.Etape);
+    }
+
+    /// <summary>
+    /// Le trousseau de la Data Protection perdu (DEPLOIEMENT.md §10) : la clé est
+    /// remplacée par la même, chiffrée par un autre trousseau — exactement ce que voit
+    /// l'API après la perte du volume <c>cles-api</c>.
+    ///
+    /// Deux promesses du document, éprouvées ensemble : le code de l'application rend une
+    /// erreur serveur, sans compter d'échec — « code faux » enverrait réessayer un code
+    /// juste jusqu'au verrouillage ; et les codes de récupération, gardés par empreinte,
+    /// suffisent à changer de téléphone.
+    /// </summary>
+    [Fact]
+    public async Task Un_trousseau_perdu_se_rattrape_par_les_codes_de_recuperation()
+    {
+        var cle = await EquiperAdminAsync();
+        var codes = _fixture.CodesDe(FixtureApi.AdminAlpha);
+
+        await _fixture.AvecServicesAsync(async services =>
+        {
+            var utilisateurs = services.GetRequiredService<UserManager<Utilisateur>>();
+            var compte = (await utilisateurs.FindByEmailAsync(FixtureApi.AdminAlpha))!;
+            var autreTrousseau = new EphemeralDataProtectionProvider().CreateProtector("Klean.SecondFacteur.Cle");
+
+            await utilisateurs.SetAuthenticationTokenAsync(compte, ServiceSecondFacteur.Fournisseur,
+                ServiceSecondFacteur.JetonCle, autreTrousseau.Protect(cle));
+        });
+
+        var parCode = _fixture.ClientAnonyme();
+        await Connexion(parCode, FixtureApi.AdminAlpha);
+        var refus = await Code(parCode, TotpDeTest.Code(cle, Instant.AddSeconds(30)));
+
+        Assert.Equal(HttpStatusCode.InternalServerError, refus.StatusCode);
+        Assert.Equal(0, (await Compte(FixtureApi.AdminAlpha)).AccessFailedCount);
+
+        var admin = _fixture.ClientAnonyme();
+        await Connexion(admin, FixtureApi.AdminAlpha);
+        var session = await Recuperation(admin, codes[0]);
+        Assert.Equal(HttpStatusCode.OK, session.StatusCode);
+        FixtureApi.ArmerCsrf(admin, session);
+
+        var reponse = await admin.PostAsJsonAsync("/api/auth/second-facteur/desactiver",
+            new CodeSecondFacteurDto { CodeRecuperation = codes[1] });
+
+        Assert.Equal(HttpStatusCode.NoContent, reponse.StatusCode);
+        Assert.False((await Compte(FixtureApi.AdminAlpha)).TwoFactorEnabled);
+    }
+
+    [Fact]
+    public async Task Changer_de_telephone_refuse_les_deux_saisies_ensemble_ou_aucune()
+    {
+        var admin = await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
+        var code = TotpDeTest.Code(_fixture.CleDe(FixtureApi.AdminAlpha), Instant.AddSeconds(30));
+
+        var deux = await admin.PostAsJsonAsync("/api/auth/second-facteur/desactiver",
+            new CodeSecondFacteurDto { Code = code, CodeRecuperation = _fixture.CodesDe(FixtureApi.AdminAlpha)[0] });
+        var aucune = await admin.PostAsJsonAsync("/api/auth/second-facteur/desactiver", new CodeSecondFacteurDto());
+
+        Assert.Equal(HttpStatusCode.BadRequest, deux.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, aucune.StatusCode);
+        Assert.True((await Compte(FixtureApi.AdminAlpha)).TwoFactorEnabled);
+    }
+
     // ------------------------------------------------ réinitialisation par l'admin
 
     [Fact]
@@ -621,7 +718,7 @@ public class SecondFacteurTests : IAsyncLifetime
 
         var surSoi = await admin.PostAsync($"/api/auth/comptes/{moi}/reinitialiser-second-facteur", null);
         Assert.Equal(HttpStatusCode.Conflict, surSoi.StatusCode);
-        Assert.Contains("Désactiver", await surSoi.Content.ReadAsStringAsync());
+        Assert.Contains("Changer de téléphone", await surSoi.Content.ReadAsStringAsync());
 
         Assert.Equal(HttpStatusCode.Conflict,
             (await admin.PostAsync($"/api/auth/comptes/{nonEquipe}/reinitialiser-second-facteur", null)).StatusCode);

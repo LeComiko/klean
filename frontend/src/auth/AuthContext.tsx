@@ -118,8 +118,8 @@ export function FournisseurAuth({ children }: { children: ReactNode }) {
   )
 
   const desactiverSecondFacteur = useCallback(
-    async (code: string) => {
-      const session = await api.post<Session | undefined>('/api/auth/second-facteur/desactiver', { code })
+    async (saisie: SaisieSecondFacteur) => {
+      const session = await api.post<Session | undefined>('/api/auth/second-facteur/desactiver', saisie)
 
       // 204 : un compte obligé change de téléphone, et ses sessions sont fermées,
       // celle-ci comprise. Comme pour `deconnecterPartout`, on ne purge qu'au succès.
