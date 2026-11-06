@@ -19,7 +19,7 @@ aucun serveur de l'auteur, aucune télémétrie. Cela décide des rôles :
 | Rôle RGPD | Qui |
 |---|---|
 | **Responsable de traitement** | l'entreprise de propreté qui exploite l'instance |
-| **Sous-traitants** | son hébergeur, son fournisseur SMTP s'il en configure un, et — aujourd'hui — Google (voir §9.1) |
+| **Sous-traitants** | son hébergeur, son fournisseur SMTP s'il en configure un, et le stockage de ses sauvegardes s'il appartient à un tiers (§4). Google l'a été jusqu'au 3 octobre 2026, par les polices (§9.1) |
 | **L'auteur du logiciel** | ni responsable, ni sous-traitant : il ne traite aucune donnée, n'y a aucun accès et n'en reçoit aucune |
 
 ⚠️ **Une entreprise qui héberge KLEAN pour d'autres entreprises devient leur
@@ -34,7 +34,8 @@ modifications ; elle ne transfère aucune responsabilité de traitement.
 **Personnes concernées**, trois catégories :
 
 1. **Les agents** — salariés de l'entreprise. La catégorie la plus exposée : nom,
-   adresse, **coordonnées GPS du domicile**, absences.
+   adresse, **coordonnées GPS du domicile**, absences, et depuis l'étape 25 la **distance
+   au site** relevée au début et à la fin de chaque passage (T7).
 2. **Les utilisateurs** — titulaires d'un compte de connexion. Souvent les mêmes
    personnes, dans un autre rôle : un agent peut avoir un compte, un responsable n'a
    pas de fiche agent.
@@ -46,7 +47,7 @@ modifications ; elle ne transfère aucune responsabilité de traitement.
 
 ## 2. Registre des traitements
 
-Six traitements. Chacun existe réellement dans le code, et l'endpoint ou le service
+Sept traitements. Chacun existe réellement dans le code, et l'endpoint ou le service
 qui le porte est nommé.
 
 ### T1 — Planification des interventions
@@ -85,14 +86,17 @@ soutiennent dans le code, et il faut les tenir :
 
 - la position n'est **jamais historisée** : `Agent.Latitude` et `Agent.Longitude` sont
   deux colonnes écrasables, pas une trace. Aucune table ne garde où un agent était.
+  ⚠️ Depuis l'étape 25, `Pointages` garde **à quelle distance d'un site** il était au
+  début et à la fin d'un passage — une donnée dérivée, sans coordonnées, d'un autre
+  traitement et d'une autre durée : voir T7.
 - la distance n'est calculée **qu'entre le domicile et un site**, jamais entre deux
   positions dans le temps.
 
 ⚠️ **Aucune décision individuelle automatisée au sens de l'article 22.** Le score
 sur 100 est un **classement**, pas une décision : `ProposerAsync` et `AccepterAsync`
 sont deux gestes humains distincts, et il n'existe **aucun mode de remplacement
-automatique** (`CLAUDE.md` §9 — « sans notifications ni application agent, il n'y a
-personne à contacter »). Si un tel mode était ajouté un jour, cette ligne du registre
+automatique** (`CLAUDE.md` §9 — « sans notifications, il n'y a personne à
+contacter » ; l'écran de l'agent de l'étape 25 ne lui propose rien). Si un tel mode était ajouté un jour, cette ligne du registre
 devient fausse et l'article 22 s'applique.
 
 ### T3 — Gestion des absences
@@ -197,11 +201,68 @@ pas un. `DEPLOIEMENT.md` §10 lui demande de consigner le geste de son côté.
 | **Durée** | voir §5 |
 | **Journalisé** | **non** — exemption motivée, voir §8.3 |
 
+### T7 — Certification des passages
+
+Depuis l'étape 25 de `SPEC.md`.
+
+| | |
+|---|---|
+| **Finalité** | prouver au client qu'un passage a eu lieu sur son site, et rendre compte de ce qui y a été fait et constaté |
+| **Base légale proposée** | art. 6(1)(f), intérêt légitime — justifier la prestation auprès du donneur d'ordre, finalité que la CNIL admet pour la localisation d'un salarié ; art. 6(1)(b) pour la checklist et les anomalies, qui sont le compte rendu du travail |
+| **Personnes** | agents ; et, par accident, toute personne qu'une photo d'anomalie montrerait |
+| **Données** | pour chaque vacation, deux **pointages** au plus — début et fin : l'heure du serveur, la **distance au site** et la **précision annoncée** par le téléphone, en mètres, la preuve qui en découle (`SurSite`, `HorsRayon`, `Imprecise`, `NonLocalisee`), l'auteur. La **checklist** : chaque point, coché ou non, avec son libellé du moment. Les **anomalies** : une description libre, l'état, les dates, l'auteur et qui l'a traitée, et jusqu'à trois **photos** JPEG |
+| **Tables** | `Pointages`, `ControlesEffectues`, `Anomalies`, `PhotosAnomalie` ; `PointsControle` n'est qu'un catalogue |
+| **Services** | `ServicePassage`, `MetadonneesJpeg` |
+| **Accès** | **Pointages** : l'agent seul, ceux de sa journée, par `GET /api/interventions/ma-journee`. **Aucune route ne les montre à un rôle interne** : direction et chefs ne lisent que le statut de la vacation, `Terminee` ou `NonCertifiee`. **Anomalies et photos** : les trois rôles internes, le chef d'équipe sur son équipe seulement ; l'agent, les siennes. Le syndic : rien |
+| **Destinataires** | aucun aujourd'hui. Le client concerné est la raison d'être du traitement, mais aucun portail ne lui montre encore ses passages : la preuve, si elle est demandée, se lit en base par l'exploitant. ⚠️ Une donnée gardée pour une finalité qu'aucun écran ne sert encore est un point que l'AIPD doit regarder en face |
+| **Durée** | un an pour les pointages ; voir §5 pour le reste |
+| **Journalisé** | **non** — `VacationAgentDto` ne nomme que l'appelant, comme `ProfilDto` ; les anomalies et leurs photos, voir §8.4 |
+
+⚠️ **La position n'est pas conservée, et il faut dire exactement ce qui l'est.** Le
+téléphone envoie latitude, longitude et précision au moment du geste. Le serveur calcule
+la distance au site, tranche la preuve, puis **jette les coordonnées** : aucune colonne de
+`Pointages` ne peut porter une position, et un test fige la liste de ses colonnes. Elles
+n'atteignent pas davantage le journal d'accès ni le journal technique, qui ne consigne
+aucun corps de requête (§3). Ce qui reste est pourtant une donnée **dérivée** d'une
+localisation : « à 140 m du site à 8 h 02 » situe une personne à un instant. D'où une
+durée d'un an, et non les cinq ans de la vacation, dont seul le statut subsiste.
+
+⚠️ **Ponctuelle, jamais continue.** La position n'est demandée qu'à *Démarrer* et à
+*Terminer*, au geste de l'agent : jamais à l'ouverture de l'écran, jamais en arrière-plan
+— il n'y a ni service worker ni file d'attente. Le téléphone ne doit pas servir de
+position gardée en cache (`maximumAge: 0`). L'écran dit avant chaque geste ce qui est
+relevé et ce qui ne l'est pas. Un refus, un téléphone sans capteur ou un délai dépassé
+donnent un passage **sans position**, qui compte quand même : l'agent termine toujours,
+la vacation est seulement `NonCertifiee`, et la cause est dite.
+
+⚠️ **Seul l'agent affecté pointe, et seulement une vacation du jour.** Un chef qui
+pointerait pour lui viderait la preuve de son sens. Le recours d'une équipe sans
+téléphone est la saisie manuelle de `NonCertifiee` — « fait, sans preuve » — ; aucune
+saisie ne pose `Terminee`.
+
+⚠️ **Une photo de téléphone porte souvent ses coordonnées GPS**, dans ses métadonnées
+EXIF. Elles sont retirées deux fois : par l'écran, qui réencode la photo sans en recopier
+aucune, et par le serveur, `MetadonneesJpeg`, qui ne se fie pas à l'écran. Le second est la
+garde ; un test part d'un JPEG qui porte une position et vérifie **en base** qu'elle n'y
+est plus.
+
+⚠️ **Un statut de vacation n'est pas une note de l'agent, et il ne doit pas le devenir.**
+`NonCertifiee` dit qu'une preuve manque, pas qu'un salarié a failli : un téléphone sans
+réseau dans un sous-sol en produit autant qu'une absence. Aucun écran ne calcule de taux
+de certification par agent. En ajouter un ferait de T7 une **évaluation** au sens de l'AIPD
+(§9.6), et un outil de contrôle de l'activité qu'il faudrait de nouveau présenter au CSE
+(`DEPLOIEMENT.md` §11) : cette ligne du registre deviendrait fausse.
+
+⚠️ **C'est un dispositif de contrôle de l'activité des salariés**, au sens du Code du
+travail. Il doit être porté à leur connaissance **avant** sa mise en œuvre (L1222-4), et
+soumis au CSE quand il en existe un. Ce n'est pas un réglage du logiciel :
+`DEPLOIEMENT.md` §11 le met avant l'ouverture de *Ma journée* aux agents.
+
 ---
 
 ## 3. Cartographie des données
 
-Les treize tables du modèle, plus les tables d'Identity. « DP » = donnée personnelle.
+Les tables du modèle, plus celles d'Identity. « DP » = donnée personnelle.
 
 | Table | Colonnes porteuses de DP | Catégorie | Sort par |
 |---|---|---|---|
@@ -218,24 +279,33 @@ Les treize tables du modèle, plus les tables d'Identity. « DP » = donnée per
 | `MouvementsStock` | **`AuteurId`**, `DateMouvement` | trace d'activité d'un utilisateur : qui a sorti, transféré, compté quoi, et quand | `/api/mouvements-stock` — l'identifiant seulement, jamais le nom, donc hors du journal d'accès (§7 bis de `CLAUDE.md`) |
 | `TypesPrestation` | aucune — un libellé de catalogue et une durée | — | `/api/types-prestation` |
 | `ConsommationsType` | aucune — une quantité de produit par passage d'un type | — | `/api/consommations-type` ; la prévision `/api/stocks/prevision` en dérive des besoins **par site**, sans agent ni vacation nommés |
+| `Pointages` | `InterventionId`, `Horodatage`, **`DistanceMetres`**, **`PrecisionMetres`**, `Preuve`, `AuteurId` — **aucune coordonnée** | **donnée dérivée d'une localisation** : à quelle distance d'un site un agent était, à quel instant (T7) | `/api/interventions/ma-journee`, à l'agent lui-même et pour sa journée seulement ; aux autres rôles, rien que le statut de la vacation qui en découle |
+| `PointsControle` | aucune — un libellé de checklist et son ordre, par type de prestation | — | `/api/points-controle` |
+| `ControlesEffectues` | `InterventionId`, `Libelle`, `Fait` | compte rendu du travail d'un agent, point par point | `/api/interventions/ma-journee`, à l'agent seul, qui relit ce qu'il a déclaré une fois la vacation terminée ; **aucune route ne le montre à un rôle interne** |
+| `Anomalies` | `InterventionId`, **`Description`**, `AuteurId`, `TraiteeParId`, dates | constat sur un site, et **DP par accident dans la description**, texte libre comme les consignes | `/api/anomalies`, rôles internes ; l'agent relit les siennes dans sa journée |
+| `PhotosAnomalie` | **`Contenu`**, une image JPEG en `bytea`, `DateAjout` | une image d'un lieu, qui peut **montrer une personne** ; ses métadonnées, position GPS comprise, sont retirées par le serveur | `/api/anomalies/{id}/photos/{photoId}`, rôles internes et l'agent auteur, en `Cache-Control: private, no-store` |
 | `AccesJournalises` | `UtilisateurId`, `CibleId`, `Horodatage` | trace d'activité d'un utilisateur | `/api/journal-acces` |
 | `AspNetUsers` | `Email`, `UserName`, `PhoneNumber`, `Nom`, `Prenom`, `PasswordHash`, verrouillage, `MotDePasseProvisoire`, `DateAnonymisation` | identité et **secret d'authentification** ; `MotDePasseProvisoire` dit seulement si la personne s'est déjà connectée | `/api/auth/moi` ; adresse, nom, prénom, rôle et état de chaque compte par `/api/auth/comptes` (administrateur, journalisée) ; nom et prénom des chefs d'équipe par `/api/agents/chefs-equipe` (administrateur, journalisée) |
 | `AspNetUserTokens` | sous le fournisseur `[KleanSecondFacteur]` : `Cle` (la clé de double authentification, **chiffrée**), `CodesRecuperation` (des **empreintes**), `DernierPas` (un numéro de pas de trente secondes) | **secret d'authentification** | **aucune route** — la clé ne sort qu'une fois, au QR code de l'équipement, et les codes qu'une fois, à leur création |
 | `JetonsRafraichissement` | `UtilisateurId`, **`AdresseIp`**, dates | trace de connexion | **aucune route** |
 
-⚠️ **Deux colonnes sont des données personnelles que personne ne cherche là.**
+⚠️ **Quatre colonnes sont des données personnelles que personne ne cherche là.**
 
 - **`Sites.Consignes`** est un texte libre lu par l'agent avant son passage. Rien
   n'empêche d'y écrire « sonner chez Mme Durand, deuxième étage ». La table est
   exemptée de journalisation parce qu'un site est un lieu ; le champ peut faire
   mentir cette exemption. Parade proposée au §9.5.
-- **`JetonsRafraichissement.AdresseIp`** est la seule adresse IP du produit, et elle
-  n'est jamais purgée. Voir §9.2.
+- **`JetonsRafraichissement.AdresseIp`** est la seule adresse IP du produit. Elle
+  n'était jamais purgée ; elle l'est à trente jours depuis §9.2.
+- **`Anomalies.Description`** est un texte libre, comme les consignes, et l'écran demande
+  de l'écrire « sans nommer de personne ».
+- **`PhotosAnomalie.Contenu`** est une image, et une image de couloir peut montrer
+  l'occupant qui y passe. Aucune consigne ne le dit encore à l'agent : §9.9.
 
-**Ce qui n'existe pas, et qu'il est utile de pouvoir affirmer :** aucune table de
-pointage, aucune position historisée, aucun accusé de lecture de consigne, aucun
-cookie de mesure d'audience, aucune télémétrie, aucun appel sortant hors SMTP — à une
-exception près, §9.1.
+**Ce qui n'existe pas, et qu'il est utile de pouvoir affirmer :** aucune position
+historisée — `Pointages` garde une distance, jamais des coordonnées (T7) —, aucun suivi
+en arrière-plan, aucun accusé de lecture de consigne, aucun cookie de mesure d'audience,
+aucune télémétrie, aucun appel sortant hors SMTP depuis la correction du §9.1.
 
 **Le journal technique de l'API**, depuis l'étape 18 : une ligne par requête, sur la
 sortie standard. Elle porte la méthode, le chemin, le statut, la durée et un
@@ -291,18 +361,27 @@ est la dernière : une durée sans mécanisme est une promesse que personne ne t
 | Jetons de rafraîchissement | **30 jours après révocation ou expiration** | la fenêtre de diagnostic d'un rejeu ; au-delà, seule l'adresse IP survit, sans usage | ✅ `purge-jetons-rafraichissement.sql` |
 | Journal d'accès | **12 mois** | un journal RGPD est lui-même une donnée personnelle | ✅ `purge-journal-acces.sql` |
 | Mouvements de stock et leur auteur | 5 ans, comme les interventions | l'historique qui explique une quantité ; l'auteur suit son compte, pseudonymisé à la sortie | 📋 `conservation-donnees-metier.sql` §8 — purger un mouvement ne change aucune quantité, et son `DELETE` passe **avant** celui des sites qu'il cite |
+| Pointages des passages (`Pointages`) | **1 an après le pointage** | la CNIL retient un an quand une localisation sert à prouver une prestation au client, ce qui est la finalité de T7 — par analogie avec la norme NS-051, écrite pour les véhicules. Le statut de la vacation, lui, reste cinq ans avec elle | ✅ `purge-pointages.sql`, qui supprime avec `-v confirmer=1` |
+| Checklist d'un passage (`ControlesEffectues`) | 1 an après la date de la vacation | le détail du compte rendu, comme les pointages ; au-delà, le statut suffit | 📋 `conservation-donnees-metier.sql` §9 |
+| Anomalies | 1 an après le signalement, **une fois traitées** | le temps d'une contestation du client sur l'exercice. Une anomalie encore ouverte n'est pas purgée : elle décrit un travail à faire, pas une trace | 📋 `conservation-donnees-metier.sql` §9 |
+| Photos d'anomalie | **3 mois après le traitement**, et au plus tard avec leur anomalie | elle sert à juger et à traiter ; elle peut montrer une personne, et c'est la donnée la plus lourde du passage. La description et les dates disent ensuite ce qui a été constaté | 📋 `conservation-donnees-metier.sql` §9 |
 
 **Lire la dernière colonne avec attention : 📋 n'est pas ✅.** Un script marqué 📋
 **rapporte** ce qui est hors délai et porte son `DELETE` **en commentaire**. Il ne
 supprime rien tant qu'un humain ne décommente pas, et c'est délibéré pour deux raisons :
 les durées de ce tableau sont des propositions non validées juridiquement, et une purge
-de données métier n'est pas réversible. Deux scripts seulement sont ✅ — ceux dont la
-durée est tranchée et dont les lignes n'ont aucune valeur probante.
+de données métier n'est pas réversible. Deux scripts étaient ✅ — ceux dont la
+durée est tranchée et dont les lignes n'ont aucune valeur probante. Un troisième l'est
+depuis l'étape 25, `purge-pointages.sql`, pour une autre raison : sa durée d'un an est
+retenue, et une donnée dérivée d'une localisation ne doit pas attendre qu'un humain
+décommente une ligne. Il ne supprime qu'avec `-v confirmer=1`, ce qui permet de
+l'ordonnancer sans le modifier.
 
 ⚠️ **Une purge de données métier n'est pas une purge de journal, et l'ordre est la
-moitié du travail.** La chaîne d'exploitation est en `Restrict` depuis l'étape 16 bis,
-et deux clés de plus le sont sur l'agent — `Intervention.AgentId` et
-`Remplacement.AgentRemplacantId`. Un `DELETE` dans le mauvais ordre échoue sur une
+moitié du travail.** La chaîne d'exploitation est en `Restrict` depuis l'étape 16 bis ;
+deux clés de plus le sont sur l'agent — `Intervention.AgentId` et
+`Remplacement.AgentRemplacantId` —, et trois sur la vacation depuis l'étape 25 : ses
+pointages, sa checklist et ses anomalies. Un `DELETE` dans le mauvais ordre échoue sur une
 violation de clé **à mi-parcours**, après avoir déjà supprimé ce qui précédait.
 `conservation-donnees-metier.sql` porte donc l'ordre en commentaire, et une colonne
 `supprimable_maintenant` qui distingue une ligne hors délai d'une ligne hors délai
@@ -322,13 +401,13 @@ contrat de travail.
 
 | Droit | Servi aujourd'hui par | État |
 |---|---|---|
-| Information (art. 13) | rien dans le produit | **manquant** — modèle de note au §7 |
-| Accès (art. 15) | **`GET /api/agents/{id}/dossier`**, administrateur seul | ✅ dossier consolidé en une réponse |
+| Information (art. 13) | pour T7 seulement, la notice que *Ma journée* affiche avant chaque geste qui relève la position ; rien d'autre dans le produit | **à remettre par l'exploitant** — modèle de note au §7. La notice dit l'essentiel au moment où il compte ; elle ne remplace pas la note |
+| Accès (art. 15) | **`GET /api/agents/{id}/dossier`**, administrateur seul | ✅ dossier consolidé en une réponse — ⚠️ **sans les passages** de l'étape 25, voir §9.8 |
 | Rectification (art. 16) | `PUT /api/agents/{id}` | ✅ |
 | Effacement (art. 17) | `POST /api/agents/{id}/anonymiser` et `POST /api/auth/comptes/{id}/anonymiser` | ✅ sur les deux chemins — mais c'est une **pseudonymisation**, voir §8.1 |
 | Limitation (art. 18) | `Actif = false` sur l'agent et sur le compte | approximatif : c'est une désactivation, pas un gel |
 | Portabilité (art. 20) | **`GET /api/agents/{id}/dossier`** | ✅ JSON structuré et lisible par machine |
-| Opposition (art. 21) | sans objet sur T1, T3, T4 (exécution du contrat) ; recevable sur T2 | à traiter au cas par cas, hors code |
+| Opposition (art. 21) | sans objet sur T1, T3, T4 (exécution du contrat) ; recevable sur T2 et T7, fondés sur l'intérêt légitime | à traiter au cas par cas, hors code. Sur T7, l'agent peut déjà refuser la localisation à chaque geste : son passage compte, sans être certifié |
 
 ⚠️ **Le délai d'un mois de l'article 12 court même quand l'outil n'aide pas.** C'est ce
 qui rendait les deux manques précédents — pas de dossier consolidé, pas d'export —
@@ -370,10 +449,17 @@ ferait disparaître l'export dans le bruit des consultations.
 
 ## 7. Modèle de note d'information aux agents
 
-À adapter, à remettre à chaque agent et à afficher. C'est la contrepartie de T2 :
-conserver les coordonnées du domicile d'un salarié est défendable **à condition de le
-dire**, et un outil silencieux sur ce point est indéfendable quelle que soit la qualité
-de son code.
+À adapter, à remettre à chaque agent et à afficher. C'est la contrepartie de T2 et de T7 :
+conserver les coordonnées du domicile d'un salarié, et relever sa position à chaque
+passage, est défendable **à condition de le dire**, et un outil silencieux sur ce point
+est indéfendable quelle que soit la qualité de son code.
+
+⚠️ **Pour T7, la remettre ne suffit pas : elle doit l'être avant.** Un dispositif qui
+collecte une information sur un salarié doit avoir été porté à sa connaissance **avant**
+(Code du travail, L1222-4) ; et le CSE consulté s'il existe. Voir `DEPLOIEMENT.md` §11.
+
+⚠️ **Le paragraphe sur les photos promet une consigne que l'écran ne donne pas encore** :
+§9.9. Le garder, c'est s'engager à la corriger.
 
 > **Traitement de vos données dans l'outil de planification**
 >
@@ -383,21 +469,36 @@ de son code.
 > **Ce qui est enregistré sur vous** : vos nom et prénom, vos coordonnées de contact,
 > votre adresse et **les coordonnées géographiques de votre domicile**, votre date
 > d'embauche, vos interventions planifiées et réalisées, et vos absences — type et
-> dates. **Un arrêt maladie ne porte jamais de motif** : l'outil le refuse.
+> dates. **Un arrêt maladie ne porte jamais de motif** : l'outil le refuse. Pour chaque
+> passage, l'heure et la distance au site au début et à la fin, ce que vous avez coché
+> dans la liste des contrôles, et les anomalies que vous signalez, avec leurs photos.
 >
 > **À quoi servent les coordonnées de votre domicile** : à calculer la distance entre
 > chez vous et un site, lorsqu'il faut trouver un remplaçant. C'est un des trois
 > critères de classement des candidats, avec votre connaissance du site et vos heures
-> déjà planifiées dans la semaine. **Votre position n'est jamais suivie ni
-> enregistrée dans le temps** : l'outil ne connaît que l'adresse que vous avez
-> communiquée.
+> déjà planifiées dans la semaine.
+>
+> **Ce que l'écran « Ma journée » relève de votre position** : quand vous appuyez sur
+> *Démarrer* et sur *Terminer*, et seulement à ce moment-là, votre téléphone donne votre
+> position une fois. Elle sert à calculer **à quelle distance du site** vous étiez, pour
+> prouver au client que le passage a eu lieu. **La position elle-même n'est jamais
+> enregistrée** : seules la distance, sa précision et l'heure le sont. Rien n'est relevé
+> en dehors de ces deux gestes, ni pendant le passage, ni en dehors du travail.
+>
+> **Si vous refusez la localisation**, ou si votre téléphone ne la trouve pas, le passage
+> compte quand même : il est seulement marqué « non certifié ». Ce n'est pas une faute,
+> et cela ne vous est pas reproché.
+>
+> **Les photos d'anomalie** montrent ce qui a été constaté, pas les personnes : ne
+> photographiez personne. Leur position GPS est effacée avant l'enregistrement.
 >
 > **Qui décide** : une personne, toujours. Le classement est une aide ; la proposition
 > et l'affectation sont des décisions humaines.
 >
 > **Qui y a accès** : la direction et les responsables de planning. Les accès à vos
 > données sont enregistrés — qui a consulté, quand — et cet enregistrement n'est
-> consultable que par la direction.
+> consultable que par la direction. **Les distances relevées à vos passages ne sont
+> visibles que de vous** : la direction voit seulement si un passage est certifié ou non.
 >
 > **Combien de temps** : *[reporter les durées du §5 validées]*.
 >
@@ -406,7 +507,7 @@ de son code.
 
 ---
 
-## 8. Les trois questions que les lots A et B avaient laissées ouvertes
+## 8. Les questions que les lots précédents avaient laissées ouvertes
 
 ### 8.1 — « Anonymisation » est le mauvais mot, et le registre doit être exact
 
@@ -474,6 +575,37 @@ plus.
 **`SiteDto` est le cas plus faible, et c'est `Consignes` qui l'affaiblit** — texte
 libre pouvant nommer une personne. La parade proportionnée n'est pas de journaliser
 chaque lecture de site, mais d'empêcher que la donnée y entre. Voir §9.5.
+
+### 8.4 — Les anomalies et leurs photos sont-elles à journaliser ?
+
+Posée au lot A de l'étape 25 et laissée au lot D : une photo d'anomalie peut montrer une
+personne.
+
+**Tranchée : pas de journal, et la raison est écrite pour pouvoir tomber.**
+
+- **Le journal de T5 existe pour un risque nommé** : la surveillance des salariés par
+  leur employeur, à travers leurs données. Une anomalie ne dit rien de l'agent qui la
+  signale au-delà d'un identifiant d'auteur — le raisonnement de `MouvementsStock.AuteurId`
+  — et ce qu'elle décrit est un lieu.
+- **Une personne photographiée par accident n'est pas un salarié dont on lit le
+  dossier.** La journaliser à chaque vignette affichée — trois photos par anomalie, à
+  chaque ouverture de l'écran *Anomalies* — ferait du journal un relevé de l'écran, et un
+  journal bruyant ne se lit plus.
+- **La parade proportionnée est à la source et dans le temps** : que personne n'entre
+  dans la photo (§9.9), et qu'elle parte trois mois après le traitement (§5).
+
+⚠️ **Le filet par réflexion de `JournalAccesTests` ne voit pas ces routes, et c'est à
+savoir.** `LirePhoto` rend des octets, pas un DTO : aucune propriété ne la signalerait.
+`AnomalieDto` porte une `Description` en texte libre, de même nature que le `Motif` d'une
+absence, mais le filet ne connaît que `Motif`. L'absence de journal est donc ici une
+**décision écrite**, et non un filet qui se tait — personne ne serait prévenu si elle
+cessait d'être juste.
+
+**Ce qui ferait tomber la décision** : une anomalie dont l'objet devient une personne —
+un champ pour nommer un occupant ou un collègue, une catégorie « comportement » —, ou une
+sortie des photos hors de l'entreprise, vers le syndic ou le client. Le premier cas
+ferait des anomalies un canal de signalement sur autrui ; le second, un destinataire de
+plus au registre.
 
 ---
 
@@ -671,6 +803,34 @@ Deux critères suffisent à la présomption. L'AIPD est un document de l'exploit
 du logiciel ; ce fichier lui fournit la matière des sections « description du
 traitement », « nécessité et proportionnalité » et « mesures de sécurité ».
 
+**La certification des passages (T7) ajoute deux raisons, et l'AIPD doit la couvrir.**
+
+4. **Des données de localisation**, que les lignes directrices européennes sur l'AIPD
+   (WP248) rangent parmi les données à caractère hautement personnel. Ici une distance
+   et non une position, mais dérivée d'une position.
+5. **Une surveillance systématique, à apprécier.** La localisation est ponctuelle — deux
+   points par passage —, mais elle porte sur **chaque** passage de **chaque** agent, et
+   le salarié ne peut s'y soustraire qu'en renonçant à la certification.
+
+Ce que l'AIPD peut opposer à ces deux critères, au titre de la proportionnalité, et qui
+est vérifiable dans le code :
+
+- **la minimisation** : les coordonnées sont jetées par le serveur, la photo perd sa
+  position deux fois, la checklist garde le libellé et non une mesure ;
+- **la limitation de l'accès** : aucune route ne montre une distance à la direction, qui
+  ne lit que le statut ; l'agent lit la sienne ;
+- **la durée** : un an pour les pointages, purgés par un script réel ; trois mois pour une
+  photo traitée ;
+- **l'absence de conséquence automatique** : un passage sans position compte, et aucun
+  écran ne calcule de taux par agent ;
+- **la transparence** : la notice affichée avant chaque geste, et la note du §7, remise
+  avant la mise en service.
+
+⚠️ **La doctrine invoquée est une analogie.** Les durées et la finalité viennent de la
+norme NS-051 de la CNIL, écrite pour la géolocalisation des **véhicules** et sans valeur
+juridique depuis le RGPD. Aucune page de la CNIL propre au téléphone d'un salarié n'a été
+trouvée le 6 novembre 2026. C'est le premier point à soumettre à la relecture juridique.
+
 ### 9.7 — ✅ CORRIGÉ — un site ou un client sans contrat n'avait aucune date dont partir
 
 Découvert en écrivant `conservation-donnees-metier.sql`, et c'est le genre de trou qu'on
@@ -719,6 +879,37 @@ Trois choses à savoir sur cette correction :
 date d'ouverture de la relation contractuelle, de même nature que les dates d'un
 contrat, et non une information sur l'interlocuteur.
 
+### 9.8 — Le dossier d'un agent ne contient pas ses passages
+
+Constaté en écrivant ce lot, le 6 novembre 2026. `GET /api/agents/{id}/dossier` a été
+écrit à l'étape 17, avant les passages : il ne porte ni les **pointages** de l'agent, ni
+la **checklist** qu'il a déclarée, ni les **anomalies** qu'il a signalées. Or ce sont des
+données le concernant, et l'article 15 en exige la communication. Ce sont même les seules
+dont il est l'**auteur** et non le sujet.
+
+Le défaut a la forme que §6 redoutait : une réponse d'accès qui a l'air complète.
+Proposition, à prendre : ajouter au dossier ses pointages — heure, distance, précision,
+preuve —, ses déclarations de checklist et ses anomalies, description comprise, mais
+**sans le contenu des photos**, dont il donnerait le nombre. Une photo peut montrer un
+tiers, que l'article 15(4) protège ; l'agent qui la veut la demande, et l'administrateur
+la lui remet après l'avoir regardée.
+
+⚠️ La pseudonymisation d'un agent ne touche pas ses passages, et c'est juste : ils
+tiennent à ses vacations, dont l'identifiant survit, et ne le nomment pas. Ils partent
+avec leur durée — un an —, pas avec lui.
+
+### 9.9 — Rien ne dit à l'agent de ne photographier personne
+
+Constaté en écrivant §8.4. La description d'une anomalie porte la consigne « Sans nommer
+de personne », dans son texte d'aide. Le bouton *Ajouter une photo* ne porte aucune
+consigne équivalente, alors que c'est la photo qui peut montrer quelqu'un — l'occupant
+d'un couloir, un collègue, l'agent lui-même dans un miroir.
+
+C'est la même mesure que §9.5 sur les consignes d'un site, à la source et presque sans
+coût : une phrase sous le bouton — « Photographier le lieu, jamais une personne » —, et un
+test nommé qui la garde, parce qu'une phrase d'aide retirée ne casse rien de visible.
+Elle est la condition de la décision de §8.4, et la note du §7 la promet déjà.
+
 ---
 
 ## 10. Mesures de sécurité, pour l'article 32
@@ -726,8 +917,9 @@ contrat, et non une information sur l'interlocuteur.
 Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail est dans
 `CLAUDE.md` §6, §6 bis et §7.
 
-- **Cloisonnement** : douze filtres de requête globaux sur `EntrepriseId`, forçage
-  inconditionnel à l'écriture, et trois axes d'isolation — entreprise, client, agent.
+- **Cloisonnement** : vingt et un filtres de requête globaux, forçage inconditionnel
+  d'`EntrepriseId` à l'écriture, et quatre axes d'isolation — entreprise, client, agent,
+  et l'équipe d'un chef.
   `EntrepriseId` n'apparaît dans aucun DTO de création : sa seule source est le jeton.
 - **Authentification** : mots de passe de dix caractères minimum avec empreinte
   Identity, verrouillage après cinq échecs, limitation de débit par adresse **et** par
@@ -748,11 +940,17 @@ Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail es
 - **Journalisation des accès** : dix-sept actions — douze lectures, dont les trois que
   personne n'aurait cherchées, les deux routes de candidats et le planning, et cinq
   gestes d'administrateur sur le compte ou la fiche d'autrui.
+- **Certification des passages** (étape 25) : coordonnées jetées par le serveur, qui
+  n'en garde que la distance au site ; position demandée au seul geste ; métadonnées des
+  photos retirées par le serveur, sans s'en remettre à l'écran ; photos relues en
+  `Cache-Control: private, no-store` ; seul l'agent affecté pointe ; une vacation pointée
+  est figée.
 - **Mots de passe des comptes créés** (étape 24) : tirés par le serveur, montrés une seule
   fois, et remplacés obligatoirement à la première connexion — un administrateur ne garde
   la connaissance du mot de passe d'un collègue que jusque-là.
-- **Traçabilité du code** : 329 tests côté serveur, 499 côté interface, et la
-  discipline de validation par sabotage décrite dans `CLAUDE.md`.
+- **Traçabilité du code** : 687 tests côté serveur, 320 cas côté interface — dont 106
+  rejoués dans cinq fuseaux —, et la discipline de validation par sabotage décrite dans
+  `CLAUDE.md`.
 - ⚠️ **Les valeurs de paramètres SQL ne sont pas journalisées** :
   `EnableSensitiveDataLogging` n'est activé nulle part, et ne doit jamais l'être en
   production — les requêtes d'EF Core sont tracées au niveau `Information`, et leurs
@@ -763,11 +961,13 @@ Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail es
 ## 11. Ce qui reste à faire, et par qui
 
 **Par l'exploitant**, hors logiciel : valider les durées du §5, faire relire ce
-fichier, remettre la note du §7, conclure les contrats de l'article 28 avec l'hébergeur,
+fichier, remettre la note du §7 — **avant** d'ouvrir *Ma journée* aux agents, et après
+avoir consulté le CSE s'il existe (`DEPLOIEMENT.md` §11) —, ordonnancer
+`purge-pointages.sql`, conclure les contrats de l'article 28 avec l'hébergeur,
 le fournisseur SMTP et le stockage des sauvegardes, fixer la durée de conservation de
 ces sauvegardes, tenir l'AIPD du §9.6, désigner un point de contact.
 
-**Par le logiciel** — état au 4 novembre 2026, dans l'ordre de gravité où les écarts ont
+**Par le logiciel** — état au 6 novembre 2026, dans l'ordre de gravité où les écarts ont
 été relevés :
 
 | Écart | État |
@@ -781,11 +981,18 @@ ces sauvegardes, tenir l'AIPD du §9.6, désigner un point de contact.
 | §9.4 — aucun export ni portabilité | ✅ `GET /api/agents/{id}/dossier` |
 | §9.7 — sites et clients sans contrat ni date | ✅ `DateCreation`, migration `DateCreationSurSitesEtClients` |
 | §5 — les mouvements de stock et leur auteur, écrits à l'étape 22 sans conservation | 📋 `conservation-donnees-metier.sql` §8, rapport avec `DELETE` commenté |
+| §5 — les pointages des passages, étape 25 | ✅ `purge-pointages.sql`, qui supprime sur `-v confirmer=1` |
+| §5 — checklist, anomalies et photos, étape 25 | 📋 `conservation-donnees-metier.sql` §9, rapport avec `DELETE` commenté |
+| §9.8 — le dossier d'un agent sans ses passages | **ouvert** |
+| §9.9 — aucune consigne de ne photographier personne | **ouvert** |
 
-**Aucun écart ne reste ouvert côté logiciel.** Ce qui reste est à l'exploitant :
-valider les durées, dont celle des prospects (§9.7), et décommenter les purges.
+**Deux écarts restent ouverts côté logiciel**, tous deux relevés en écrivant ce lot, et
+tous deux petits : §9.8 complète une réponse d'accès, §9.9 est une phrase sous un bouton.
+Le reste est à l'exploitant : valider les durées, dont celle des prospects (§9.7) et
+celles des anomalies, et décommenter les purges.
 
-⚠️ **Trois des neuf corrections sont des rapports, pas des purges**, et il ne faut pas lire
-le tableau trop vite : `conservation-donnees-metier.sql` et
-`degradation-absences-maladie.sql` portent leurs `DELETE` et `UPDATE` en commentaire. Ils
+⚠️ **Quatre des onze corrections sont des rapports, pas des purges**, et il ne faut pas lire
+le tableau trop vite : `conservation-donnees-metier.sql` — pour trois lignes du
+tableau — et `degradation-absences-maladie.sql` portent leurs `DELETE` et `UPDATE` en
+commentaire. Ils
 attendent la validation juridique des durées du §5, qui appartient à l'exploitant.

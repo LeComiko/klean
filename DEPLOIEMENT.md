@@ -109,6 +109,10 @@ remplace à sa première connexion. Transmettez-le par un autre canal que son ad
 électronique — de vive voix, par SMS —, ce qui n'en laisse aucune copie dans une boîte
 aux lettres.
 
+⚠️ **Avant de créer le premier compte d'agent, lisez la section 11.** Un compte d'agent
+ouvre *Ma journée*, qui relève sa position à chaque passage : les salariés doivent en
+avoir été informés avant, et le CSE consulté s'il existe.
+
 ---
 
 ## 3. Mettre à jour
@@ -308,9 +312,9 @@ Pour un seul compte, l'écran **Compte** porte *Déconnexion de tous les apparei
 ## 7. Conservation des données
 
 Les durées de conservation sont dans `RGPD.md` §5, et les scripts dans
-`backend/Scripts/`. **Aucun ne tourne seul**, et aucun ne supprime tel quel : chacun
-commence par un rapport, et ses `DELETE` sont en commentaire jusqu'à ce que vous ayez
-validé les durées.
+`backend/Scripts/`. **Aucun ne tourne seul**, et chacun commence par un rapport. Les
+quatre premiers ne suppriment rien tel quel : leurs `DELETE` sont en commentaire jusqu'à
+ce que vous ayez validé les durées.
 
 ```bash
 docker compose exec -T postgres psql -U klean -d klean < backend/Scripts/purge-journal-acces.sql
@@ -318,6 +322,26 @@ docker compose exec -T postgres psql -U klean -d klean < backend/Scripts/purge-j
 docker compose exec -T postgres psql -U klean -d klean < backend/Scripts/conservation-donnees-metier.sql
 docker compose exec -T postgres psql -U klean -d klean < backend/Scripts/degradation-absences-maladie.sql
 ```
+
+**Les pointages se purgent pour de bon**, à un an, et ne demandent aucune modification du
+script : sans option il rapporte, avec `-v confirmer=1` il rapporte puis supprime. Il se
+rejoue à l'identique — la seconde exécution ne trouve plus rien —, ce qui permet de
+l'ordonnancer, une fois par semaine par exemple :
+
+```bash
+docker compose exec -T postgres psql -U klean -d klean < backend/Scripts/purge-pointages.sql
+docker compose exec -T postgres psql -U klean -d klean -v confirmer=1 < backend/Scripts/purge-pointages.sql
+```
+
+⚠️ Ces deux lignes sont les seules de ce fichier qui n'ont pas été jouées sur l'instance
+d'essai Docker : le script a été éprouvé sous cette forme, lu sur l'entrée standard, contre
+la base de test locale, le 6 novembre 2026.
+
+⚠️ **L'ordre compte entre deux scripts.** Une vacation de plus de cinq ans n'est purgée
+par `conservation-donnees-metier.sql` qu'une fois partis ses pointages, sa checklist et
+ses anomalies : le rapport le montre dans sa colonne `supprimable_maintenant`. Une
+vacation retenue attend `purge-pointages.sql`, ou le traitement d'une anomalie restée
+ouverte — c'est un script à rejouer, pas à forcer.
 
 ---
 
@@ -437,3 +461,55 @@ administrateur, le script se rejoue compte par compte, à partir de cette liste 
 ```bash
 docker compose exec -T postgres psql -U klean -d klean -Atc 'SELECT "Email" FROM "AspNetUsers" WHERE "TwoFactorEnabled" ORDER BY 1'
 ```
+
+---
+
+## 11. Avant d'ouvrir *Ma journée* aux agents
+
+*Ma journée* est l'écran du rôle **Agent** : ses vacations du jour, les consignes,
+*Démarrer*, la checklist, les anomalies et leurs photos, *Terminer*. *Démarrer* et
+*Terminer* relèvent la position du téléphone une fois chacun. Le serveur en garde la
+distance au site et jette les coordonnées (`RGPD.md`, T7). C'est néanmoins un dispositif
+qui collecte une information sur chaque salarié à chaque passage, et deux obligations du
+Code du travail s'appliquent **avant** la mise en service — pas après, ni « au fil de
+l'eau ».
+
+⚠️ **Ce qui suit n'est pas un avis juridique.** Ces deux points sont à faire confirmer par
+votre conseil, comme les durées de `RGPD.md` §5.
+
+1. **Informer chaque salarié concerné, par écrit, avant.** Aucune information le
+   concernant personnellement ne peut être collectée par un dispositif qui n'a pas été
+   porté préalablement à sa connaissance (article L1222-4). Le modèle de note est en
+   `RGPD.md` §7 ; complétez-le, remettez-le contre émargement ou par un moyen qui laisse
+   une date, et affichez-le. Un salarié embauché plus tard la reçoit **avant** son
+   premier compte.
+2. **Consulter le CSE, s'il en existe un.** Dans une entreprise d'au moins cinquante
+   salariés, il est informé et consulté, préalablement à la décision, sur les moyens
+   permettant un contrôle de l'activité des salariés (article L2312-38). Présentez-lui la
+   note, le traitement T7 de `RGPD.md` et ses durées. Sous ce seuil, informez-le s'il
+   existe.
+
+**Ensuite seulement, créez les comptes d'agent** (section 2.4), chacun rattaché à sa fiche.
+Un compte d'agent sans information préalable est exactement ce que l'article L1222-4
+interdit, quelle que soit la qualité du dispositif.
+
+Trois choses à vérifier pendant le pilote :
+
+- **Le rayon de 200 m et la précision de 100 m** sont des constantes du code
+  (`ServicePassage`), posées sans mesure de terrain. Un site dont tous les passages
+  ressortent « position imprécise » est souvent un bâtiment où le téléphone ne voit pas le
+  ciel : notez-le avant de conclure que les agents ne sont pas venus.
+- **Un site saisi à `0, 0`** passe les bornes de saisie, et tous ses passages seront « hors
+  du rayon ». Vérifiez les coordonnées de chaque site avant le premier passage.
+- **Une équipe sans téléphone** : un responsable ou son chef d'équipe peut enregistrer
+  une vacation « non certifiée » à la main, ce qui veut dire « faite, sans preuve ». ⚠️
+  Aujourd'hui par l'API seulement (`PUT /api/interventions/{id}`) : aucun écran ne propose
+  encore ce geste. Aucune saisie ne peut dire une vacation certifiée.
+
+⚠️ **Un passage non certifié n'est pas une faute de l'agent.** Le refus de la
+localisation, un téléphone sans réseau dans un sous-sol, une batterie vide le produisent
+tous. Ne faites pas du statut un indicateur individuel sans l'avoir présenté comme tel au
+CSE et aux salariés : `RGPD.md`, T7, explique pourquoi cela changerait le traitement.
+
+**Ordonnancez `purge-pointages.sql`** dès la mise en service (section 7) : un an de
+pointages, c'est la durée retenue, pas un plafond qui s'applique seul.

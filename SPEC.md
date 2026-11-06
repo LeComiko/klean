@@ -3214,6 +3214,81 @@ validation d'un passage par le chef, et toute notification.
   `depuis` sur l'écran quitté. Le compte suivant y est ramené à sa connexion, même si son
   rôle ne l'ouvre pas : l'agent arrive sur « Accès refusé » au lieu de sa journée.
 
+**Lot D — fait le 6 novembre 2026**
+
+- **`RGPD.md`** :
+  - **T7**, la certification des passages. Personne d'autre que l'agent ne lit une distance :
+    direction et chefs ne voient que le statut de la vacation. Le registre dit aussi
+    qu'aucun portail ne sert encore la finalité, la preuve au client.
+  - Les cinq tables dans la cartographie.
+  - Les durées :
+    - **un an pour les pointages**, par une purge réelle ;
+    - un an pour la checklist, et pour les anomalies une fois traitées. Une anomalie
+      ouverte n'est jamais purgée ;
+    - **trois mois après le traitement pour les photos.**
+
+    Ces trois dernières sont proposées, à valider.
+  - La note aux agents réécrite :
+    - ce que *Démarrer* et *Terminer* relèvent, et que la position n'est pas gardée ;
+    - un refus de la localisation compte quand même ;
+    - personne ne doit être photographié.
+  - L'AIPD gagne deux critères, la localisation et une surveillance systématique à
+    apprécier, avec ce que la proportionnalité peut leur opposer.
+- **La question du journal pour les photos est tranchée : pas de journal** (§8.4), avec la
+  condition qui ferait tomber la décision. ⚠️ Le filet de `JournalAccesTests` ne voit
+  ni une photo, qui est rendue en octets, ni la `Description` d'une anomalie. C'est donc une
+  décision écrite, et non un silence du filet.
+- **Deux écarts ouverts, relevés en écrivant ce lot** :
+  - **§9.8** : le dossier d'un agent, l'accès de l'article 15, ne contient pas ses passages ;
+  - **§9.9** : rien ne dit à l'agent de ne photographier personne, alors que la description
+    porte déjà sa consigne.
+
+  Tous deux sont petits. Aucun n'est corrigé : ce lot est de la documentation.
+- **`backend/Scripts/purge-pointages.sql`** :
+  - un rapport par fenêtre et par preuve ;
+  - le `DELETE` ne part qu'avec `-v confirmer=1`, ce qui permet d'ordonnancer le script
+    sans le modifier ;
+  - éprouvé sur `klean_test` dans des transactions annulées : 366 et 400 jours partent,
+    364 restent, et le rejeu donne `DELETE 0`.
+- ⚠️ **Un piège de PostgreSQL, rencontré en l'éprouvant.** `now() - date > interval '1 year'`
+  compte un an pour 360 jours. Ma requête de contrôle, écrite sous cette forme, a jugé
+  vieux un pointage de 364 jours ; le script, écrit `date < now() - interval`, était
+  juste. Le piège est inscrit dans le script et dans `CLAUDE.md` §7 bis.
+- **`conservation-donnees-metier.sql`, hors de l'annonce d'avant le lot, ajouté en
+  l'annonçant.** Les trois tables du passage tiennent à la vacation par `Restrict`. Le
+  `DELETE` des vacations à cinq ans, commenté, aurait donc échoué sur une seule ligne
+  restante. Le script gagne :
+  - la section 9 du rapport ;
+  - la colonne `supprimable_maintenant` des vacations ;
+  - trois `DELETE` commentés, photos, anomalies traitées et checklist ;
+  - trois `NOT EXISTS` sur celui des vacations.
+
+  Éprouvé sur quatre vacations dans une transaction annulée. Une vacation purgée entière ;
+  trois retenues :
+  - l'une par une anomalie ouverte ;
+  - l'une par un pointage ;
+  - l'une encore dans son délai, dont seule la photo traitée part.
+- **`CLAUDE.md`** :
+  - les vingt et un filtres et les quatorze dénormalisations ;
+  - l'exemption de `VacationAgentDto` ;
+  - les cinq scripts ;
+  - `blob:` dans `img-src` ;
+  - les sections `MJ` et `AN`, qui retirent à l'agent son arrivée sur un refus ;
+  - `getBlob` et `postBrut` ;
+  - l'extraction de `passage.ts` ;
+  - le jeton `--info-mobile-taille` ;
+  - un **§9 ter** sur le passage.
+- **`DEPLOIEMENT.md` §11**, avant d'ouvrir *Ma journée* :
+  - l'information écrite de chaque salarié, avant (L1222-4) ;
+  - la consultation du CSE, au-delà de cinquante salariés (L2312-38) ;
+  - trois vérifications de pilote ;
+  - l'ordonnancement de la purge.
+
+  ⚠️ À faire relire. Les deux lignes Docker de la purge n'ont pas été jouées sur l'instance
+  d'essai, et le fichier le dit.
+- Aucun code applicatif touché. Séries frontend vertes ; serveur non relancé, rien n'y
+  ayant changé.
+
 ---
 
 # Suite — non planifié

@@ -94,7 +94,7 @@ KLEAN/
 ├── .env.example         le seul endroit où un exploitant écrit un secret
 ├── backend/
 │   ├── Dockerfile       l'API ET son bundle de migration, une seule image
-│   ├── Models/          15 entités métier + AccesJournalise + Utilisateur
+│   ├── Models/          20 entités métier + AccesJournalise + Utilisateur
 │   │                    + RolesKlean
 │   ├── Data/            KleanDbContext (filtres multi-tenant)
 │   ├── DTOs/            un fichier par entité, XxxDto + XxxCreateDto
@@ -102,6 +102,7 @@ KLEAN/
 │   ├── Services/        AffectationService, RemplacementService,
 │   │                    PlanningService, ServiceGeneration, JoursFeries,
 │   │                    ServiceStock, ServicePrevisionStock,
+│   │                    ServicePassage, MetadonneesJpeg,
 │   │                    JwtService, ServiceSession, ServiceSecondFacteur, Totp,
 │   │                    AmorcageService, TenantContext, LimiteurDebit,
 │   │                    ServiceCourrielSmtp, DescripteurErreursFrancais,
@@ -111,10 +112,11 @@ KLEAN/
 │   ├── Filtres/         JournaliserAcces — filtre d'action MVC, pas un middleware
 │   ├── Migrations/
 │   └── Scripts/         jeu de démonstration, contrat-ecrans-reference.py,
-│                        et les quatre SQL de conservation — purge-journal-acces,
-│                        purge-jetons-rafraichissement, conservation-donnees-metier,
-│                        degradation-absences-maladie (RGPD.md §5) ; et
-│                        reinitialiser-second-facteur, pour le dernier administrateur
+│                        et les cinq SQL de conservation — purge-journal-acces,
+│                        purge-jetons-rafraichissement, purge-pointages,
+│                        conservation-donnees-metier, degradation-absences-maladie
+│                        (RGPD.md §5) ; et reinitialiser-second-facteur, pour le
+│                        dernier administrateur
 └── frontend/
     ├── Dockerfile       construit dist/, puis l'image Caddy qui le sert
     ├── Caddyfile        HTTPS, document, relais /api — sans journal d'accès
@@ -130,7 +132,9 @@ KLEAN/
         ├── composants/  un .tsx + un .css par composant
         ├── layout/      Navigation, Disposition, sections.ts
         ├── pages/       un fichier par écran, plus Reference.tsx, Compte.tsx — le sien —
-        │                et Comptes.tsx — ceux de l'entreprise
+        │                et Comptes.tsx — ceux de l'entreprise ; MaJournee.tsx pour
+        │                l'agent, Anomalies.tsx pour les rôles internes
+        ├── passage/     passage.ts — gestes, preuves, checklist —, photo.ts — la réduction
         ├── reference/   descriptions.ts, valeurs.ts — le motif liste-et-formulaire
         ├── stock/       mouvements.ts, prevision.ts — la saisie et la lecture du stock
         ├── styles/      tokens.css
@@ -150,15 +154,16 @@ répond 403, un jeton mal orthographié qu'aucun navigateur ne signale.
 
 ## 5. Modèle de données
 
-Quinze entités métier, toutes avec un `Id` de type `Guid` généré côté
+Vingt entités métier, toutes avec un `Id` de type `Guid` généré côté
 application et une colonne `EntrepriseId` (dénormalisée, voir §7). `TypePrestation` est
 le catalogue de l'étape 21 ; `Emplacement`, `MouvementStock` et `ConsommationType` sont
-le stock de l'étape 22.
+le stock de l'étape 22 ; `Pointage`, `PointControle`, `ControleEffectue`, `Anomalie` et
+`PhotoAnomalie` sont le passage de l'agent de l'étape 25 (§9 ter).
 
 Une seizième entité existe et n'est **pas** métier : `AccesJournalise`, le journal
 d'accès aux données personnelles de §7 bis. Elle suit les mêmes règles — `Guid`
 applicatif, `EntrepriseId` dénormalisé, filtre global — mais elle ne décrit rien du
-nettoyage de bureaux : elle rend compte de l'usage des quinze autres.
+nettoyage de bureaux : elle rend compte de l'usage des vingt autres.
 
 ```
 Entreprise ─┬─ Client ─── Site ─── Contrat ─── Prestation ─── Intervention
@@ -167,6 +172,11 @@ Entreprise ─┬─ Client ─── Site ─── Contrat ─── Prestatio
             ├─ Agent ─── Absence          │                         │
             ├─ Emplacement ─┐             │         Remplacement ───┘
             └─ Produit ─────┴─────────────┴─ Stock, MouvementStock — lieu : emplacement ou site
+
+Intervention ─┬─ Pointage              début et fin, sans position
+              ├─ ControleEffectue ···· PointControle ─── TypePrestation
+              │                        (SetNull : le libellé est copié)
+              └─ Anomalie ─── PhotoAnomalie
 ```
 
 | Entité | Champs notables |
@@ -186,6 +196,11 @@ Entreprise ─┬─ Client ─── Site ─── Contrat ─── Prestatio
 | Stock | EmplacementId **ou** SiteId, deux clés `Restrict`, l'une exactement ; Quantite, jamais saisie, jamais négative |
 | MouvementStock | Nature (enum), origine et destination (emplacement ou site), Quantite, Ecart (inventaire), DateMouvement, AuteurId — ni modifiable ni supprimable |
 | ConsommationType | TypePrestationId, ProduitId (deux clés `Restrict`, un couple unique), QuantiteParPassage — sert la prévision, jamais une déduction |
+| Pointage | InterventionId (`Restrict`), Moment (enum), Horodatage du serveur, Preuve (enum), DistanceMetres et PrecisionMetres (nullables), AuteurId — **aucune colonne de position** ; un début et une fin au plus par vacation, par index unique |
+| PointControle | TypePrestationId (`Restrict`), Libelle, Ordre, Actif — la checklist d'un type |
+| ControleEffectue | InterventionId (`Restrict`), PointControleId (nullable, `SetNull`), Libelle **copié**, Ordre, Fait — écrit à *Terminer*, jamais modifié |
+| Anomalie | InterventionId (`Restrict`), Description (texte libre, 1 000), Statut (enum), DateSignalement, AuteurId, DateTraitement et TraiteeParId (nullables) |
+| PhotoAnomalie | AnomalieId (`Cascade`), Contenu (`bytea`, JPEG sans métadonnées), Taille, DateAjout — trois au plus par anomalie |
 
 Enums :
 - `TypeClient` : EntrepriseCliente, Syndic, GestionnaireImmobilier,
@@ -199,6 +214,9 @@ Enums :
 - `Territoire` : Metropole, AlsaceMoselle, Guadeloupe, Martinique, Guyane, Reunion,
   Mayotte — lu par ses noms exacts, et sans défaut à l'écriture
 - `JoursSemaine`, **à drapeaux** : Aucun, Lundi … Dimanche
+- `MomentPointage` : Debut, Fin
+- `PreuvePointage` : SurSite, HorsRayon, Imprecise, NonLocalisee
+- `StatutAnomalie` : Ouverte, Traitee
 
 Tous les enums sont stockés **en texte** via `HasConversion<string>()`.
 Les DTOs les exposent en `string` et utilisent `Enum.TryParse` avec un
@@ -451,10 +469,10 @@ l'une sur l'autre.**
 | | Où | Contenu |
 |---|---|---|
 | API | `Middleware/EnTetesSecurite.cs` | `default-src 'none'` et rien d'autre |
-| Document | `frontend/csp.ts` | `'self'` sur `script-src`, `style-src`, `font-src`, `connect-src` |
+| Document | `frontend/csp.ts` | `'self'` sur `script-src`, `style-src`, `font-src`, `connect-src` ; `img-src 'self' data: blob:` |
 
-L'API ne rend que du JSON : rien ne doit jamais être chargé depuis une de ses
-réponses. Le document, lui, charge une feuille de style, un script et quatre
+L'API ne rend que du JSON — et les photos d'anomalie, en `image/jpeg` : rien ne doit
+jamais être chargé depuis une de ses réponses. Le document, lui, charge une feuille de style, un script et quatre
 polices — tous servis par lui-même. Appliquer la politique de l'API au document
 bloquerait les trois, et le défaut **ne se voit pas au développement**, où le cache
 du navigateur garde les polices et où la politique servie est plus permissive.
@@ -468,6 +486,14 @@ instance de KLEAN à un tiers, sans que l'exploitant l'ait choisi, et contredisa
 `frontend/public/polices/` (RGPD.md §9.1), et `npm run verifier` échoue sur toute
 origine externe réapparue dans `csp.ts` ou `index.html` : **le rappel est mécanique,
 pas verbal.**
+
+**`blob:` dans `img-src` n'est pas une origine externe**, et le vérificateur l'accepte :
+c'est une URL que le navigateur fabrique pour un objet déjà en mémoire. Elle sert depuis
+l'étape 25 à l'aperçu d'une photo avant son envoi, et à l'affichage de chaque photo
+d'anomalie. ⚠️ Une photo ne se pose **jamais** par son URL d'API dans un `<img>` : le
+navigateur enverrait bien les cookies, mais un jeton d'accès expiré y donnerait une image
+cassée, sans rafraîchissement, `api/client.ts` étant le seul à savoir rafraîchir. Elle
+passe par `api.getBlob`, puis par `URL.createObjectURL`, révoquée au démontage.
 
 `frontend/csp.ts` porte les deux variantes, et elles ne diffèrent désormais plus que
 par `'unsafe-inline'` et `ws:`, qu'exige le serveur de Vite — le préambule de
@@ -520,7 +546,7 @@ Mécanisme en trois parties, toutes nécessaires :
    utilisé par l'amorçage qui doit créer la première entreprise avant
    qu'aucun tenant n'existe.
 
-2. **Filtres globaux EF Core**, **seize** au total :
+2. **Filtres globaux EF Core**, **vingt et un** au total :
    ```csharp
    modelBuilder.Entity<X>().HasQueryFilter(e =>
        !TenantFiltrageActif || TenantEntrepriseId == null
@@ -529,7 +555,7 @@ Mécanisme en trois parties, toutes nécessaires :
    où `TenantFiltrageActif` et `TenantEntrepriseId` sont des **propriétés
    privées d'instance du DbContext**. Voir le piège §10.
 
-   Quatorze filtres sur les entités métier portant `EntrepriseId`, un quinzième sur
+   Dix-neuf filtres sur les entités métier portant `EntrepriseId`, un vingtième sur
    `AccesJournalise` (§7 bis), **plus un sur `Entreprise` elle-même**, sur son
    propre `Id`. Depuis l'étape 21, `IsolationTests` refuse toute entité portant
    `EntrepriseId` sans filtre : une entité oubliée ne casse rien de visible, elle se lit
@@ -579,15 +605,17 @@ Mécanisme en trois parties, toutes nécessaires :
    relire ; l'écriture inter-tenant passait. Ne jamais conditionner cette
    affectation.
 
-`EntrepriseId` est **dénormalisé** sur les neuf entités qui ne l'ont pas
+`EntrepriseId` est **dénormalisé** sur les quatorze entités qui ne l'ont pas
 naturellement (Site, Contrat, Prestation, Intervention, Absence,
-Remplacement, Stock, MouvementStock, ConsommationType). Choix assumé : évite trois jointures par ligne sur la
+Remplacement, Stock, MouvementStock, ConsommationType, Pointage, PointControle,
+ControleEffectue, Anomalie, PhotoAnomalie). Choix assumé : évite trois jointures par ligne sur la
 vue planning. La cohérence est garantie applicativement, sans clé étrangère.
 
 ### L'équipe d'un chef — quatrième axe
 
 Depuis l'étape 19, `ITenantContext.ChefEquipeId` vaut l'identifiant du compte quand il
-porte le rôle `ChefEquipe`. Quatre filtres globaux s'en servent, et c'est une
+porte le rôle `ChefEquipe`. Quatre filtres globaux s'en servent, et quatre autres depuis
+l'étape 25 par leurs sous-requêtes, et c'est une
 **frontière**, du même ordre que celle du syndic : avec plusieurs chefs, une fuite
 montrerait à chacun les équipes des autres.
 
@@ -597,6 +625,13 @@ montrerait à chacun les équipes des autres.
 | `Absence` | celles de ces agents |
 | `Intervention` | celles de ces agents ; et, **sans agent**, celles dont le titulaire de la prestation est l'un d'eux |
 | `Remplacement` | ceux des interventions qu'il voit — la règle n'est pas recopiée, le filtre des interventions s'applique à la sous-requête |
+| `Pointage`, `ControleEffectue`, `Anomalie` | ceux des interventions qu'il voit, de la même façon (étape 25) |
+| `PhotoAnomalie` | celles des anomalies qu'il voit — deux sous-requêtes en chaîne |
+
+⚠️ **Les quatre filtres du passage excluent aussi le syndic**, par `TenantClientId == null` :
+le filtre des interventions ne restreint pas le client, et le syndic n'a aucune route du
+passage avant un portail. Aucune requête ne pouvant l'atteindre, la clause est éprouvée
+par un test qui lit le `DbContext` avec un tenant de syndic.
 
 Clients, sites, contrats et prestations restent ceux de l'entreprise : aucune personne
 n'y est nommée, seulement l'identifiant d'un titulaire, que l'écran affiche « Hors de
@@ -725,7 +760,7 @@ d'autrui — une recherche par POST, un export — échapperait au filet.
 
 ⚠️ La règle est **structurelle et à défaut fermé** : un DTO créé demain avec un `Nom`
 tombe dans le filet sans que personne y pense, et s'en dispenser demande de l'inscrire
-dans une liste d'exemptions motivées. Cinq y figurent aujourd'hui, et leurs raisons
+dans une liste d'exemptions motivées. Six y figurent aujourd'hui, et leurs raisons
 diffèrent :
 
 | Exempté | Raison |
@@ -734,6 +769,13 @@ diffèrent :
 | `ProfilDto` | l'identité de **l'appelant lui-même** ; un journal de « qui a lu son propre nom » est du bruit |
 | `ProduitDto` | le `Nom` d'un produit est « Détergent sols » |
 | `EmplacementDto` | le `Nom` d'un dépôt ou d'un véhicule ; nommer par la plaque, jamais par le conducteur, est à dire à l'écran |
+| `VacationAgentDto` | la journée de **l'appelant lui-même**, comme `ProfilDto` ; l'`Adresse` qu'elle porte est celle d'un site |
+
+⚠️ **Les anomalies et leurs photos ne sont pas journalisées, et le filet ne le sait pas.**
+`AnomalieDto` porte une `Description` en texte libre, que le filet ne cherche pas — il ne
+connaît que `Motif` — ; `LirePhoto` rend des octets, sans DTO à inspecter. L'absence de
+journal est donc une décision écrite, en `RGPD.md` §8.4, avec la condition qui la ferait
+tomber : relire cette page avant d'ajouter à une anomalie un champ qui nomme quelqu'un.
 
 ⚠️ `ClientDto` reste discutable : le contact d'une petite copropriété est souvent une
 personne physique. La question appartient au lot de la cartographie des données ; elle
@@ -787,25 +829,33 @@ toucher :
   validations qui le rendraient incréable par l'API — même raison qu'au lot B de
   l'étape 17.
 
-### Les quatre scripts de conservation
+### Les cinq scripts de conservation
 
-`RGPD.md` §5 porte les durées ; `backend/Scripts/` porte les gestes. **Deux seulement
+`RGPD.md` §5 porte les durées ; `backend/Scripts/` porte les gestes. **Trois seulement
 suppriment**, et la distinction est dans le script lui-même :
 
 | Script | Durée | Opération |
 |---|---|---|
 | `purge-journal-acces.sql` | 12 mois | `DELETE` décommentable |
 | `purge-jetons-rafraichissement.sql` | 30 jours après mort du jeton | `DELETE` décommentable |
-| `conservation-donnees-metier.sql` | 1 à 5 ans selon la table | **rapport seul**, `DELETE` commenté |
+| `purge-pointages.sql` | 1 an | rapport, puis `DELETE` sur `-v confirmer=1` — ordonnançable sans modification |
+| `conservation-donnees-metier.sql` | 3 mois à 5 ans selon la table | **rapport seul**, `DELETE` commenté |
 | `degradation-absences-maladie.sql` | 3 mois | **rapport seul**, `UPDATE` commenté |
+
+⚠️ **Dans un script SQL de conservation, une borne s'écrit `date < now() - interval`, jamais
+`now() - date > interval`.** Les deux ont l'air équivalentes. La seconde compare deux
+intervalles, et PostgreSQL y compte un mois pour trente jours : « plus d'un an » y commence
+à 360 jours. Rencontré en éprouvant `purge-pointages.sql`, sur la requête de contrôle.
 
 ⚠️ Les deux derniers ne suppriment rien tant qu'un humain ne décommente pas, et ce n'est
 pas de la timidité : les durées de `RGPD.md` §5 sont des propositions non validées
 juridiquement, et une purge de données métier est irréversible.
 
 ⚠️ **L'ordre des `DELETE` est une contrainte, pas une préférence de présentation.** Six
-clés de la chaîne d'exploitation sont en `Restrict`, et deux de plus sur l'agent —
-`Intervention.AgentId` et `Remplacement.AgentRemplacantId`. Un `DELETE` dans le mauvais
+clés de la chaîne d'exploitation sont en `Restrict`, deux de plus sur l'agent —
+`Intervention.AgentId` et `Remplacement.AgentRemplacantId` —, et trois sur la vacation
+depuis l'étape 25 : pointages, checklist, anomalies. Le `DELETE` des vacations à cinq ans
+porte donc trois `NOT EXISTS`, et une anomalie encore ouverte retient la sienne. Un `DELETE` dans le mauvais
 ordre échoue **à mi-parcours**, après avoir supprimé ce qui précédait. D'où la colonne
 `supprimable_maintenant` du rapport, qui distingue une ligne hors délai d'une ligne hors
 délai mais bloquée par un enfant encore dans le sien : le script est à **rejouer**, pas
@@ -1134,8 +1184,9 @@ garantie n'est plus « un seul chemin écrit l'agent », elle est **« aucun che
 n'affecte un agent inéligible »**, ce qui est à la fois plus vrai et plus utile.
 Voir §8, *les filtres durs gardent aussi les écritures*.
 
-Pas de mode « remplacement automatique » : sans notifications ni application
-agent, il n'y a personne à contacter.
+Pas de mode « remplacement automatique » : sans notifications, il n'y a personne à
+contacter. *Ma journée* (étape 25) ne change rien à cela : elle montre à l'agent ses
+vacations du jour, elle ne lui propose rien et ne lui demande aucune réponse.
 
 ---
 
@@ -1168,7 +1219,8 @@ de plus, en général un inventaire. Quatre choses à savoir avant d'y toucher :
 **La prévision lit, elle ne déduit rien.** `GET /api/stocks/prevision?semaines=4` compte
 les vacations `Planifiee` et `EnCours` d'aujourd'hui à quatre semaines, les multiplie par
 la consommation de leur type (`ConsommationType`), et compare au stock. Aucune quantité ne
-baisse au passage d'un agent : rien ne certifie encore qu'il a eu lieu. Quatre choses à
+baisse au passage d'un agent. La certification existe depuis l'étape 25 (§9 ter), mais la
+déduction en est **restée dehors**, délibérément : elle se cadrera à part. Quatre choses à
 savoir avant d'y toucher :
 
 - ⚠️ **Le stock d'un site ne couvre que ce site.** Chaque site puise d'abord dans le sien ;
@@ -1183,6 +1235,49 @@ savoir avant d'y toucher :
 - **Un produit désactivé sort de la prévision.** Il ne se réapprovisionne plus ;
   l'annoncer en couverture courte pousserait à racheter ce qu'on a décidé d'arrêter. Pour
   la même raison, on ne lui attache plus de consommation.
+
+## 9 ter. Passage de l'agent
+
+Numérotée « ter » pour la même raison que §6 bis. Les arbitrages et leurs motifs sont dans
+`SPEC.md`, étape 25 ; le traitement, dans `RGPD.md`, T7.
+
+**Le passage prouve une présence, et ne garde aucune position.** `ServicePassage` porte
+`GET /api/interventions/ma-journee`, `POST …/demarrer` et `POST …/terminer`, rôle `Agent`
+seul. Chaque geste reçoit la position du téléphone, ou son absence ; le serveur en déduit la
+distance au site, tranche la preuve, l'écrit dans `Pointages`, puis **jette les
+coordonnées**. Deux pointages `SurSite` donnent `Terminee`, tout autre couple
+`NonCertifiee`. Cinq choses à savoir avant d'y toucher :
+
+- ⚠️ **Aucune colonne de `Pointages` ne peut porter une position**, et un test fige la liste
+  de ses colonnes. Ajouter une latitude « pour le diagnostic » changerait le traitement, sa
+  durée et l'AIPD : c'est une décision de registre, pas de code.
+- ⚠️ **La preuve se tranche dans cet ordre** : hors du rayon même en accordant la marge
+  d'erreur, sinon imprécise au-delà de 100 m, sinon sur site dans 200 m. Inverser les deux
+  premiers ferait dire « imprécise » d'un point à dix kilomètres. Rayon et précision sont
+  des constantes, à éprouver sur le terrain avant d'en faire un réglage.
+- ⚠️ **Seul l'agent affecté pointe, et le cadrage est écrit deux fois** : par le filtre
+  global des vacations, et à la main dans le service. Retirer l'un laisse la série verte,
+  retirer les deux la fait rougir ; les tests ont donc été séparés pour que chacun soit
+  éprouvé seul — même leçon qu'au §7 bis sur les gardes qui se couvrent.
+- **`Terminee` et `EnCours` ne naissent que du pointage.** `POST` et `PUT` ne posent que
+  `Planifiee`, `Annulee` et `NonCertifiee` — « fait, sans preuve ». Une vacation pointée est
+  **figée** : `PUT` et `DELETE` la refusent en 409, et la base en `Restrict` sous eux.
+- **La checklist est un compte rendu, jamais une condition.** *Terminer* reçoit
+  `pointsFaits` ; chaque point actif du type est enregistré, fait ou non, avec **son libellé
+  du moment**, et un point étranger fait refuser toute la fin avant la moindre écriture.
+
+**Les anomalies et leurs photos.** Signalées par l'agent affecté pendant le passage, listées
+pour les rôles internes, « Traitée » une seule fois. Trois photos au plus, en corps brut
+`image/jpeg`, sous le plafond d'un mégaoctet.
+
+⚠️ **`MetadonneesJpeg` est la garde, et l'écran n'en est qu'une minimisation.** Le
+réencodage par le canevas ne recopie aucune métadonnée, mais une requête forgée n'y passe
+pas : le serveur retire APP1 à APP15 et les commentaires, en lisant aussi les données de
+l'image, parce qu'un EXIF peut se glisser entre deux balayages d'un JPEG progressif. Ce qui
+n'est pas un JPEG lisible est refusé. Le test part d'une photo qui porte une position et la
+cherche **en base**.
+
+---
 
 ## 10. Pièges connus
 
@@ -1613,7 +1708,11 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
 - `import type` pour les types (projet en `verbatimModuleSyntax`).
 - Aucune couleur en dur : uniquement les variables de `tokens.css`.
 - Trois états explicites sur tout appel réseau : chargement, erreur, données.
-- Le wrapper `src/api/client.ts` ajoute le token et purge la session sur 401.
+- Le wrapper `src/api/client.ts` ajoute le token et purge la session sur 401. Depuis
+  l'étape 25, `api.postBrut` envoie un corps tel quel sous son type — une photo en
+  `image/jpeg`, avec le CSRF de toute écriture —, et `api.getBlob` lit une réponse
+  binaire en rafraîchissant la session sur 401, ce qu'un `<img src>` ne sait pas faire
+  (§6 bis).
 - Les composants de présentation reçoivent leurs données en props ; c'est la
   page qui orchestre les appels API.
 - **Un écran de données de référence ne s'écrit pas à la main.** Six listes et six
@@ -1685,6 +1784,14 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   serveur, un code mal formé **compte dans les cinq échecs du verrouillage**. Le refus
   local épargne un essai qui n'en était pas un.
 
+  Et pour `src/passage/passage.ts` (étape 25) : la preuve et son bilan — « le début sans
+  position, la fin hors du rayon » —, les points non cochés qui font confirmer *Terminer*,
+  les refus d'une description ou d'une photo, et la demande de position elle-même, avec
+  `maximumAge: 0` et un refus qui rend `null` au lieu d'échouer. La réduction d'une photo
+  est à part, dans `passage/photo.ts`, parce qu'elle exige un canevas que `node --test`
+  n'a pas ; ce qui s'y décide sans canevas — les côtés et les qualités essayés — reste
+  dans `passage.ts`, éprouvé.
+
   Et pour `src/comptes/comptes.ts` (étape 24) : l'état d'une ligne, les gestes qu'elle
   propose — aucun sur sa propre ligne, que le serveur refuserait tous —, la question de
   confirmation, et le corps de la création. ⚠️ Le masquage y a ses deux moitiés, comme le
@@ -1699,9 +1806,14 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   l'absence. Une section est une fonction du produit, ouverte par rôle, et
   `premiereSectionOuverte` en fait une **destination d'arrivée** : le compte, ouvert à
   tout rôle, deviendrait l'arrivée de tous. Il vit au pied de la barre latérale,
-  auprès de la déconnexion. Conséquence heureuse : il est atteignable pour le rôle
-  `Agent`, qui n'a aucune section et tombe sur un refus en arrivant — la barre étant
-  rendue, son mot de passe lui reste accessible.
+  auprès de la déconnexion, et reste atteignable pour tout rôle.
+
+  ⚠️ **Le rôle `Agent` a une section depuis l'étape 25**, *Ma journée* (`MJ`), qui est sa
+  destination d'arrivée ; avant, il arrivait sur un refus, et le compte était le seul
+  écran qu'il atteignait. *Ma journée* est **dernière** dans `Sections` : un compte qui
+  porterait aussi un rôle interne arrive sur le planning. *Anomalies* (`AN`), juste après
+  le planning, est aux trois rôles internes. Les deux sont des écrans propres, montés par
+  `Ecrans` dans `App.tsx`, sans ressource de référence.
 
   Ne pas confondre avec l'écran **Comptes**, au pluriel : celui-là gère les comptes de
   l'entreprise, est réservé à l'administrateur, et vit donc dans une section, *Entreprise*.
@@ -1786,7 +1898,9 @@ desktop · 13/18/500 ligne de tableau · 12/16/500 bloc de planning ·
 11/14/600 étiquette.
 
 Plancher mobile : 16 px pour le corps, 22 px pour l'information principale.
-Jamais 11–12 px sur mobile.
+Jamais 11–12 px sur mobile. L'information principale a son jeton depuis l'étape 25,
+`--info-mobile-taille` et `--info-mobile-interligne` (22/28) : le nom du site et l'heure
+d'une vacation, sur *Ma journée*, la première page du produit écrite pour un téléphone.
 
 **Formes.** Espacement base 4 (4, 8, 12, 16, 24, 32, 48). Rayons : 4 badge,
 6 bloc et champ, 10 carte, 999 pilule. Lignes desktop : 34 px compacte,

@@ -14,6 +14,12 @@
 --   Agents ........................ 5 ans après la fin du contrat de travail,
 --                                   et par PSEUDONYMISATION, pas par suppression
 --   Mouvements de stock ........... 5 ans après la date du mouvement
+--   Checklist d'un passage ........ 1 an après la date prévue de la vacation
+--   Anomalies ..................... 1 an après le signalement, une fois traitées
+--   Photos d'anomalie ............. 3 mois après le traitement de leur anomalie
+--
+-- Les POINTAGES n'y sont pas : leur durée d'un an est retenue (RGPD.md §5, T7), et ils
+-- ont leur propre script, qui purge réellement — `purge-pointages.sql`.
 --
 --     psql -d klean -f backend/Scripts/conservation-donnees-metier.sql
 --
@@ -22,11 +28,20 @@
 
 \echo '=== 1. Interventions au-delà de 5 ans ==='
 
+-- Depuis l'étape 25, trois tables tiennent à la vacation par `Restrict` : ses
+-- pointages, sa checklist, ses anomalies. Elles se purgent à un an, donc bien avant ;
+-- une vacation que l'une d'elles retient encore signale un script qui n'a pas tourné,
+-- ou une anomalie jamais traitée (section 9).
 SELECT
     count(*)              AS interventions_a_purger,
+    count(*) FILTER (
+        WHERE NOT EXISTS (SELECT 1 FROM "Pointages" po WHERE po."InterventionId" = i."Id")
+          AND NOT EXISTS (SELECT 1 FROM "ControlesEffectues" ce WHERE ce."InterventionId" = i."Id")
+          AND NOT EXISTS (SELECT 1 FROM "Anomalies" an WHERE an."InterventionId" = i."Id")
+    )                     AS supprimable_maintenant,
     min("DatePrevue")     AS plus_ancienne,
     max("DatePrevue")     AS plus_recente
-FROM "Interventions"
+FROM "Interventions" i
 WHERE "DatePrevue" < now() - interval '5 years';
 
 \echo ''
@@ -254,20 +269,70 @@ WHERE m."DateMouvement" < now() - interval '5 years'
 GROUP BY 1
 ORDER BY 1;
 
+\echo ''
+\echo '=== 9. Le compte rendu des passages : checklist, anomalies, photos ==='
+
+-- Le détail d'un passage vit un an ; son statut, `Terminee` ou `NonCertifiee`, reste
+-- cinq ans sur la vacation. Ce qui a été coché et ce qui a été signalé n'a plus d'usage
+-- au-delà d'une contestation du client sur l'exercice.
+--
+-- ⚠️ Une anomalie encore OUVERTE n'est jamais purgée : elle décrit un dégât ou une fuite
+-- que personne n'a traité, et la supprimer effacerait le travail à faire, pas une
+-- trace. La colonne `ouvertes_hors_delai` est donc une liste à traiter à l'écran
+-- *Anomalies*, pas une échéance — et une vacation que l'une d'elles retient ne se
+-- purgera pas à cinq ans (section 1).
+--
+-- ⚠️ Les photos partent bien avant leur anomalie, trois mois après son traitement. Une
+-- photo peut montrer une personne — un occupant, l'agent lui-même —, c'est la donnée la
+-- plus lourde du passage, et elle a servi une fois l'anomalie traitée. La description
+-- et les dates suffisent ensuite à dire ce qui a été constaté.
+SELECT
+    'checklist (points enregistrés)'                                       AS donnee,
+    count(*) FILTER (WHERE i."DatePrevue" < now() - interval '1 year')     AS hors_delai,
+    count(*) FILTER (WHERE i."DatePrevue" < now() - interval '1 year')     AS supprimable_maintenant
+FROM "ControlesEffectues" ce
+JOIN "Interventions" i ON i."Id" = ce."InterventionId"
+
+UNION ALL
+
+SELECT
+    'anomalies',
+    count(*) FILTER (WHERE "DateSignalement" < now() - interval '1 year'),
+    count(*) FILTER (WHERE "DateSignalement" < now() - interval '1 year' AND "Statut" = 'Traitee')
+FROM "Anomalies"
+
+UNION ALL
+
+SELECT
+    'photos d''anomalie',
+    count(*) FILTER (WHERE a."Statut" = 'Traitee' AND a."DateTraitement" < now() - interval '3 months'),
+    count(*) FILTER (WHERE a."Statut" = 'Traitee' AND a."DateTraitement" < now() - interval '3 months')
+FROM "PhotosAnomalie" ph
+JOIN "Anomalies" a ON a."Id" = ph."AnomalieId";
+
+SELECT
+    count(*) FILTER (WHERE "Statut" = 'Ouverte' AND "DateSignalement" < now() - interval '1 year')
+                                                    AS ouvertes_hors_delai,
+    min("DateSignalement") FILTER (WHERE "Statut" = 'Ouverte')
+                                                    AS plus_ancienne_ouverte
+FROM "Anomalies";
+
 -- ---------------------------------------------------------------------------
 -- La purge, commentée. L'ORDRE EST LA MOITIÉ DU TRAVAIL.
 -- ---------------------------------------------------------------------------
 --
 -- Six clés étrangères de la chaîne d'exploitation sont en `Restrict` depuis la
 -- migration `SuppressionRestreinteSurLaChaineExploitation`, et deux de plus le sont
--- sur l'agent — `Intervention.AgentId` et `Remplacement.AgentRemplacantId`. Un DELETE
--- dans le mauvais ordre échoue sur une violation de clé, à mi-parcours, après avoir
--- déjà supprimé ce qui précédait. Lire l'ordre ci-dessous comme une contrainte, pas
--- comme une préférence de présentation.
+-- sur l'agent — `Intervention.AgentId` et `Remplacement.AgentRemplacantId` —, et trois
+-- sur la vacation depuis l'étape 25 : ses pointages, sa checklist, ses anomalies. Un
+-- DELETE dans le mauvais ordre échoue sur une violation de clé, à mi-parcours, après
+-- avoir déjà supprimé ce qui précédait. Lire l'ordre ci-dessous comme une contrainte,
+-- pas comme une préférence de présentation.
 --
--- `Remplacement` est la seule exception en `Cascade` : supprimer une intervention ou
--- une absence emporte ses remplacements. Le DELETE 1 ne sert donc qu'à purger les
--- remplacements dont le parent est encore dans son délai.
+-- Deux exceptions en `Cascade`. `Remplacement` : supprimer une intervention ou une
+-- absence emporte ses remplacements, et le DELETE 1 ne sert donc qu'à purger ceux dont
+-- le parent est encore dans son délai. Et `PhotoAnomalie` : une anomalie emporte ses
+-- photos, qui n'existent que pour elle.
 --
 -- Chaque DELETE est atomique de lui-même. Aucune transaction englobante : elle
 -- donnerait l'illusion qu'on peut défaire l'ensemble après coup, alors que le choix
@@ -276,8 +341,32 @@ ORDER BY 1;
 -- -- 1. Remplacements (état dérivé)
 -- DELETE FROM "Remplacements" WHERE "DateCreation" < now() - interval '1 year';
 --
+-- -- 1 bis. Photos d'anomalie, trois mois après le traitement (section 9)
+-- DELETE FROM "PhotosAnomalie" ph
+-- USING "Anomalies" a
+-- WHERE a."Id" = ph."AnomalieId"
+--   AND a."Statut" = 'Traitee' AND a."DateTraitement" < now() - interval '3 months';
+--
+-- -- 1 ter. Anomalies traitées, un an après le signalement (cascade sur leurs photos)
+-- --    ⚠️ Jamais une anomalie ouverte : voir la section 9.
+-- DELETE FROM "Anomalies"
+-- WHERE "Statut" = 'Traitee' AND "DateSignalement" < now() - interval '1 year';
+--
+-- -- 1 quater. Checklist des vacations d'il y a plus d'un an
+-- DELETE FROM "ControlesEffectues" ce
+-- USING "Interventions" i
+-- WHERE i."Id" = ce."InterventionId" AND i."DatePrevue" < now() - interval '1 year';
+--
 -- -- 2. Interventions (cascade sur leurs remplacements)
--- DELETE FROM "Interventions" WHERE "DatePrevue" < now() - interval '5 years';
+-- --    ⚠️ Les trois `NOT EXISTS` ne sont pas décoratifs : pointages, checklist et
+-- --    anomalies tiennent à la vacation par `Restrict`, et un seul suffirait à faire
+-- --    échouer tout le DELETE. Une vacation retenue attend `purge-pointages.sql` ou le
+-- --    traitement de son anomalie — à rejouer, pas à forcer.
+-- DELETE FROM "Interventions" i
+-- WHERE i."DatePrevue" < now() - interval '5 years'
+--   AND NOT EXISTS (SELECT 1 FROM "Pointages" po WHERE po."InterventionId" = i."Id")
+--   AND NOT EXISTS (SELECT 1 FROM "ControlesEffectues" ce WHERE ce."InterventionId" = i."Id")
+--   AND NOT EXISTS (SELECT 1 FROM "Anomalies" an WHERE an."InterventionId" = i."Id");
 --
 -- -- 3. Absences (cascade sur leurs remplacements)
 -- --    ⚠️ Vérifier d'abord que `degradation-absences-maladie.sql` a tourné : une
