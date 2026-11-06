@@ -96,7 +96,9 @@ KLEAN/
 │   ├── Dockerfile       l'API ET son bundle de migration, une seule image
 │   ├── Models/          20 entités métier + AccesJournalise + Utilisateur
 │   │                    + RolesKlean
-│   ├── Data/            KleanDbContext (filtres multi-tenant)
+│   ├── Data/            KleanDbContext (filtres multi-tenant), BasculeRoleApplicatif
+│   │                    (la connexion sous la RLS), FabriqueDeConception (les
+│   │                    migrations, sans Program.cs)
 │   ├── DTOs/            un fichier par entité, XxxDto + XxxCreateDto
 │   ├── Controllers/     un par entité + Auth + SecondFacteur + Planning
 │   ├── Services/        AffectationService, RemplacementService,
@@ -539,7 +541,8 @@ pas sa taille. Voir le piège correspondant en §10.
 
 ## 7. Multi-tenant
 
-Mécanisme en trois parties, toutes nécessaires :
+Mécanisme en quatre parties. Les trois premières sont du code, et toutes nécessaires ;
+la quatrième est la base, qui refuse quand l'une d'elles manque :
 
 1. **`ITenantContext` / `TenantContext`** lit la revendication `entrepriseId`
    du token via `IHttpContextAccessor`. Expose aussi `DesactiverFiltrage()`,
@@ -584,7 +587,10 @@ Mécanisme en trois parties, toutes nécessaires :
 
    L'échappatoire `TenantEntrepriseId == null` n'est sûre **que parce que** les
    contrôleurs métier portent tous `[Authorize]`. Retirer cet attribut sur un
-   seul d'entre eux ouvrirait l'accès anonyme à toutes les entreprises.
+   seul d'entre eux ouvrait, jusqu'à l'étape 26, l'accès anonyme à toutes les
+   entreprises. **La base ferme désormais ce trou** (point 4) : sans entreprise dans
+   le jeton, elle ne rend aucune ligne. L'attribut reste obligatoire — il porte les
+   rôles, et `AspNetUsers` n'est pas sous la RLS.
 
 3. **`SaveChangesAsync` surchargé** : **force** `EntrepriseId` à la valeur du
    jeton sur toute entité à l'état `Added`, **sans condition**. Et
@@ -604,6 +610,40 @@ Mécanisme en trois parties, toutes nécessaires :
    dans le tenant de cette entreprise. Les filtres de lecture empêchaient de la
    relire ; l'écriture inter-tenant passait. Ne jamais conditionner cette
    affectation.
+
+4. **La sécurité au niveau des lignes de PostgreSQL** (étape 26). La migration
+   `SecuriteAuNiveauDesLignes` pose une politique sur les vingt tables qui portent
+   `EntrepriseId`, `AspNetUsers` exceptée, et sur `Entreprises` par son `Id` :
+   ```sql
+   "EntrepriseId" = nullif(current_setting('klean.entreprise', true), '')::uuid
+   ```
+   en lecture comme en écriture (`USING` et `WITH CHECK`). `Data/BasculeRoleApplicatif.cs`,
+   un intercepteur de connexion, pose à chaque ouverture l'entreprise du jeton dans
+   `klean.entreprise` — vide sans elle, jamais omise, sinon une connexion du pool
+   garderait celle de la requête précédente —, puis `SET ROLE klean_app` : un rôle
+   sans connexion, sans droits de structure, sans `BYPASSRLS`. Les filtres d'EF
+   restent la garde **principale** ; la base est le filet du jour où l'un manque.
+
+   ⚠️ **Le contournement veut dire « rester propriétaire », et rien d'autre.** Sous
+   `DesactiverFiltrage` — l'amorçage, la fixture de test —, et pour un contexte
+   construit hors injection — les migrations —, la connexion revient au rôle de
+   connexion, propriétaire des tables. Pas de `FORCE ROW LEVEL SECURITY`, donc le
+   propriétaire n'est pas soumis. **Aucune valeur du réglage n'ouvre tout** : un code
+   fautif n'a rien à poser pour sortir de la RLS en restant `klean_app`.
+
+   ⚠️ **Un filet contre un filtre oublié, pas un moindre privilège** : une injection
+   SQL pourrait jouer `RESET ROLE`. Et **l'entreprise seule** : les axes client, agent
+   et équipe restent aux filtres d'EF.
+
+   ⚠️ **Une table qui porte `EntrepriseId` reçoit sa politique dans la migration qui
+   la crée.** Les privilèges par défaut lui donnent les droits de `klean_app` sans
+   qu'on y pense, pas la politique : `SecuriteDesLignesTests` compare le catalogue de
+   la base aux tables qui portent la colonne, et rougit sur l'oubli — comme
+   `IsolationTests` sur le modèle.
+
+   Hors de la RLS, et c'est écrit dans la migration : `AspNetUsers`,
+   `JetonsRafraichissement`, les autres tables d'Identity, et `__EFMigrationsHistory`,
+   où `klean_app` n'a aucun droit.
 
 `EntrepriseId` est **dénormalisé** sur les quatorze entités qui ne l'ont pas
 naturellement (Site, Contrat, Prestation, Intervention, Absence,
@@ -1557,7 +1597,29 @@ La parade est de **provoquer** la course plutôt que de l'espérer :
    par `wait_event_type = 'Lock'` ;
 3. il valide sa transaction.
 
-Voir `TypesPrestationTests`.
+Voir `TypesPrestationTests`. ⚠️ L'attente de l'étape 2 se lit depuis une
+`PorteeAuProprietaire` : sous `klean_app`, `pg_stat_activity` ne montre ni la requête
+ni l'attente des autres sessions, et le test attend un blocage qu'il ne verra jamais.
+
+**Un superutilisateur ignore la RLS, même forcée.** Jusqu'à l'étape 26, l'API se
+connectait en superutilisateur dans les trois environnements — le compte du système en
+développement et en test, `klean`, le `POSTGRES_USER` de l'image, en production : une
+politique posée alors n'aurait rien gardé, nulle part, sans aucun symptôme. D'où le
+`SET ROLE` de §7, et le test qui lit `current_user` sous une requête authentifiée : un
+intercepteur retiré rendrait la RLS inerte en silence. Pour la même raison, un `psql`
+ouvert à la main voit **tout** — il est propriétaire. Pour voir ce que voit l'API :
+`SET ROLE klean_app; SELECT set_config('klean.entreprise', '<id>', false);`.
+
+**Une portée de test qui touche la base sous l'API passe par `PorteeAuProprietaire()`.**
+Une portée ouverte par `Fabrique.Services.CreateScope()` n'a pas de requête, donc pas
+d'entreprise, et le filtrage y reste actif : sa connexion passe sous `klean_app` avec un
+réglage vide. Elle ne lit **aucune ligne** et toute écriture y est refusée en `42501`.
+Onze portées ouvertes ainsi dans quatre classes sont restées invisibles tant que la base
+ne gardait rien, puis ont fait vingt-deux échecs à la première série sous la RLS.
+
+**Une borne de conservation s'écrit `date < now() - interval`, jamais
+`now() - date > interval`.** La seconde compare deux intervalles, et PostgreSQL y compte
+un mois pour trente jours : « plus d'un an » commence à 360 jours. Détail en §7 bis.
 
 **EF ne retire pas d'un filtre global la branche d'un paramètre nul.** Un filtre écrit
 `Axe == null || EXISTS (…)` ne devient pas `TRUE` quand l'axe est nul : EF émet
@@ -1652,6 +1714,11 @@ Détail et procédures dans `DEPLOIEMENT.md`.
 - **Le retour arrière d'une migration se joue avec la nouvelle image**, puis on revient
   à l'ancienne : le code `Down` n'existe que dans la version qui a introduit la
   migration.
+
+Et un quatrième, trouvé à l'étape 26 sur un conteneur jetable : **`pg_dump` ne
+sauvegarde pas les rôles**, qui vivent dans la grappe. Une sauvegarde restaurée sur une
+machine neuve s'arrête sur `role "klean_app" does not exist`, après les tables et avant
+les droits. Le rôle se crée d'abord ; la commande est dans `DEPLOIEMENT.md` §4.
 
 Et un faux signal : sans `Gss Encryption Mode=Disable` dans la chaîne de connexion,
 Npgsql cherche `libgssapi_krb5`, absente de l'image .NET, et écrit « Error: … cannot
@@ -1964,13 +2031,19 @@ docker compose run --rm migrer        # jamais au démarrage de l'API
 docker compose up -d
 ```
 
-⚠️ **Le bundle de migration exécute `Program.cs` jusqu'à `Build()`**, à la
-construction comme à l'exécution : il lui faut une chaîne de connexion et une clé
-JWT, faute de quoi il échoue sur « Chaîne de connexion absente » avant de regarder
-une seule migration. Le `Dockerfile` lui passe des valeurs factices à la
-construction ; `docker-compose.yml` lui passe les vraies à l'exécution, par
-l'environnement et non par `--connection`, qui exposerait le mot de passe dans la
-liste des processus. Et `dotnet ef … -c` veut dire `--context`, pas
+⚠️ **Les migrations construisent leur contexte par `Data/FabriqueDeConception.cs`,
+sans `Program.cs`** (étape 26). `dotnet ef` et le bundle préfèrent une fabrique de
+conception à l'hôte de l'application : le contexte est construit hors injection, donc
+sans l'intercepteur qui met l'API sous `klean_app` — un rôle sous lequel aucune
+migration ne passe, et qui n'existe pas avant la migration qui le crée. La fabrique lit
+la chaîne dans l'environnement, ou dans les secrets utilisateur en développement.
+
+Le bundle ne demande donc rien à la construction, et seulement la chaîne de connexion à
+l'exécution — ni clé JWT, ni le reste de la configuration. `docker-compose.yml` la lui
+passe par l'environnement et non par `--connection`, qui exposerait le mot de passe dans
+la liste des processus. ⚠️ Jusqu'à l'étape 26, il exécutait `Program.cs` jusqu'à
+`Build()` et échouait sur « Chaîne de connexion absente » : le `Dockerfile` lui passait
+des valeurs factices, retirées depuis. Et `dotnet ef … -c` veut dire `--context`, pas
 `--configuration`.
 
 Le proxy Vite redirige `/api` vers `http://localhost:5137`. Le frontend

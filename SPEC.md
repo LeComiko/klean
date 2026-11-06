@@ -3482,6 +3482,54 @@ rôle de connexion contre l'injection ; la RLS sur les tables d'Identity.
     L'écart n'est pas attribué.
 - Série serveur complète : 698 tests verts.
 
+Après le lot A, la migration a été appliquée à la base de développement, avec accord.
+L'API de développement y a démarré, et ses refus anonymes rendent 401 sans exception.
+
+**Lot B — fait le 6 novembre 2026**
+
+- **`CLAUDE.md`** :
+  - §7 : la RLS est la quatrième partie du mécanisme. Le paragraphe sur `[Authorize]` dit que
+    la base ferme désormais le trou de son retrait.
+  - §10 : quatre pièges :
+    - un superutilisateur ignore la RLS ;
+    - une portée de test passe par `PorteeAuProprietaire` ;
+    - `pg_stat_activity` ne montre rien des autres sessions sous `klean_app` ;
+    - une borne de conservation compte un an pour 360 jours.
+
+    Les pièges d'exploitation, trois jusqu'ici, en gagnent un quatrième, découvert pendant
+    ce lot (plus bas).
+  - §13 : la note sur le bundle est récrite. §4 nomme les deux nouveaux fichiers de `Data/`.
+- **`backend/Dockerfile`** : les deux valeurs factices sont retirées. L'image construite sous
+  une étiquette d'essai, retirée ensuite, montre un bundle construit sans aucune valeur, et
+  sans le message « An error occurred while accessing the Microsoft.Extensions.Hosting
+  services » que l'outil écrivait quand il passait par `Program.cs`. Le commentaire de
+  `docker-compose.yml` disait la même chose fausse : corrigé aussi, hors de la liste
+  annoncée au lot.
+- **`DEPLOIEMENT.md`** :
+  - §3 : une instance existante prend la RLS par la marche habituelle ;
+  - §9 : une base hébergée sans superutilisateur demande un seul compte pour les
+    migrations et l'API, et le droit `CREATEROLE`. **Non éprouvé.**
+- ⚠️ **La restauration d'une sauvegarde sur une machine neuve était cassée.** `pg_dump` ne
+  sauvegarde pas les rôles : `pg_restore --exit-on-error` s'arrêtait sur
+  `role "klean_app" does not exist`, après les tables et avant les droits. L'essai s'est
+  fait sur un conteneur `postgres:16-alpine` jetable :
+  1. le vrai bundle pose une base dont `klean` est le propriétaire ;
+  2. la base est sauvegardée ;
+  3. elle est restaurée dans une grappe neuve.
+
+  Sans le rôle, l'arrêt. Avec le rôle créé d'abord, la restauration est complète :
+  - vingt et une politiques ;
+  - des droits sur 29 tables, aucun sur l'historique des migrations ;
+  - sous `klean_app`, aucune ligne sans entreprise, et la seule entreprise du réglage avec.
+
+  La commande est en `DEPLOIEMENT.md` §4, et le piège en `CLAUDE.md` §10.
+- **`RGPD.md` §10** : la RLS rejoint les mesures de l'article 32, avec ses limites :
+  - l'entreprise seule ;
+  - les comptes hors de la base gardée ;
+  - un filet, pas une protection contre l'injection.
+- Séries : serveur, 698 tests verts ; interface, 330 cas, inchangés. `RGPD.md` §10 disait
+  encore 689 : corrigé.
+
 ---
 
 # Suite — non planifié

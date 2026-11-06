@@ -136,6 +136,14 @@ jamais se jouer sans sauvegarde ni lecture des notes de version. Si vous oubliez
 l'étape, la nouvelle API tourne sur l'ancien schéma, et échoue au démarrage ou à la
 première requête qui touche une colonne nouvelle.
 
+**Une instance d'avant l'étape 26 prend la sécurité au niveau des lignes par cette même
+marche**, sans geste de plus. La migration `SecuriteAuNiveauDesLignes` crée le rôle
+`klean_app`, sous lequel l'API lit et écrit désormais, et pose une politique par table ;
+elle ne change ni une table ni une donnée. ⚠️ L'oubli de `migrer` y est plus brutal
+qu'ailleurs : le rôle n'existant pas encore, **toute** requête de la nouvelle API échoue.
+`psql` et les scripts de la section 7, ouverts sous `klean`, propriétaire des tables,
+voient toujours toutes les lignes, comme avant.
+
 ---
 
 ## 4. Sauvegarder et restaurer
@@ -191,6 +199,23 @@ docker compose stop api
 docker compose exec -T postgres pg_restore -U klean -d klean --clean --if-exists --no-owner --exit-on-error < klean-AAAA-MM-JJ.dump
 docker compose start api
 ```
+
+⚠️ **Sur une machine neuve, créez d'abord le rôle `klean_app`.** Un rôle vit dans la
+grappe PostgreSQL, pas dans la base : la sauvegarde porte les droits et les politiques
+qui le nomment, pas le rôle lui-même. Sans lui, `pg_restore` s'arrête sur
+`role "klean_app" does not exist`, après les tables mais avant les droits, et l'API ne
+lit plus rien. Sur l'instance d'origine, le rôle existe déjà : rien à faire.
+
+```bash
+docker compose exec -T postgres psql -U klean -d klean -v ON_ERROR_STOP=1 \
+    -c 'CREATE ROLE klean_app NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT' \
+    -c 'GRANT klean_app TO CURRENT_USER'
+```
+
+Éprouvé le 6 novembre 2026 sur un conteneur `postgres:16-alpine` jetable, pas sur
+l'instance d'essai : une base posée par le bundle, sauvegardée, puis restaurée dans une
+grappe neuve. Sans le rôle, l'arrêt ; avec lui, une restauration complète, ses vingt et
+une politiques et ses droits.
 
 L'API est arrêtée pendant la restauration : elle écrirait sinon dans des tables en
 train d'être remplacées. Tout ce qui a été saisi après la sauvegarde est **perdu**,
@@ -384,6 +409,22 @@ reportez-vous au `README.md`, section *Déploiement* : `Proxy:Reseaux` est
 **obligatoire** derrière tout proxy, et la politique de sécurité du contenu de
 l'interface se lit avec `node frontend/scripts/entetes-caddy.mjs`, au lieu d'être
 recopiée.
+
+**Une base PostgreSQL hébergée, dont le compte principal n'est pas superutilisateur.**
+C'est le cas ordinaire des offres gérées. `SET ROLE klean_app`, que l'API joue à chaque
+connexion, y exige d'être membre de ce rôle : la migration `SecuriteAuNiveauDesLignes`
+y ajoute donc le compte qui la joue, par `GRANT klean_app TO CURRENT_USER`. Deux
+conditions en découlent :
+
+- **Un seul compte pour les migrations et pour l'API**, propriétaire des tables. Les
+  droits que reçoivent les tables des migrations futures sont ceux du propriétaire qui
+  les crée ; sous un autre compte, une table nouvelle resterait fermée à l'API.
+- **Ce compte doit pouvoir créer un rôle** (`CREATEROLE`), sans quoi la migration échoue
+  dès sa première instruction. Si `klean_app` existe déjà dans la grappe, créé par un
+  autre compte, le `GRANT` peut être refusé.
+
+⚠️ **Non éprouvé**, faute d'une telle base : c'est ce que dit la documentation de
+PostgreSQL, pas ce qu'une instance a montré.
 
 ---
 

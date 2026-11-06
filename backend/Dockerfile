@@ -25,18 +25,15 @@ RUN dotnet publish Klean.Api.csproj -c Release -o /publication --no-restore
 # dans Klean.Api.csproj : un outil d'une autre version génère un bundle qui
 # refuse le modèle, ou pire, l'interprète.
 #
-# ⚠️ Construire le bundle exécute Program.cs jusqu'à Build(), qui exige une chaîne
-# de connexion et une clé JWT. Les deux valeurs ci-dessous sont factices, limitées
-# à cette commande, et ne servent à rien d'autre : aucune connexion n'est ouverte
-# ici, et l'étape de construction ne fait pas partie de l'image finale. Le bundle
-# reçoit la vraie chaîne à l'exécution, par --connection.
+# Le bundle construit son contexte par Data/FabriqueDeConception.cs, sans
+# Program.cs (SPEC.md étape 26) : il ne lui faut ni chaîne de connexion ni clé JWT
+# à la construction, et aucune connexion n'est ouverte ici. Il reçoit la vraie
+# chaîne à l'exécution, par l'environnement que lui passe docker-compose.yml.
 #
 # ⚠️ `--configuration` en toutes lettres : pour `dotnet ef`, `-c` est --context.
 RUN dotnet tool install --global dotnet-ef --version 10.0.12
 ENV PATH="${PATH}:/root/.dotnet/tools"
-RUN ConnectionStrings__Klean="Host=construction-sans-base" \
-    Jwt__Cle="valeur-factice-de-construction-jamais-utilisee" \
-    dotnet ef migrations bundle --configuration Release -o /publication/efbundle --force
+RUN dotnet ef migrations bundle --configuration Release -o /publication/efbundle --force
 
 # ---------------------------------------------------------------------------
 # Exécution

@@ -934,6 +934,13 @@ Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail es
   d'`EntrepriseId` à l'écriture, et quatre axes d'isolation — entreprise, client, agent,
   et l'équipe d'un chef.
   `EntrepriseId` n'apparaît dans aucun DTO de création : sa seule source est le jeton.
+- **Sécurité au niveau des lignes de PostgreSQL** (étape 26), en défense en profondeur
+  sur l'axe de l'entreprise : l'API travaille sous un rôle sans droits de structure, et
+  la base elle-même ne rend ni n'accepte une ligne d'une autre entreprise que celle du
+  jeton — aucune sans jeton. Un filtre oublié dans le code ne fait donc plus lire une
+  entreprise par une autre. Les axes client, agent et équipe restent au code, et les
+  comptes (`AspNetUsers`) hors de la base gardée ; c'est un filet contre un oubli, pas une
+  protection contre une injection SQL.
 - **Authentification** : mots de passe de dix caractères minimum avec empreinte
   Identity, verrouillage après cinq échecs, limitation de débit par adresse **et** par
   compte, jeton d'accès de quinze minutes en cookie `HttpOnly Secure SameSite=Strict`,
@@ -961,7 +968,7 @@ Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail es
 - **Mots de passe des comptes créés** (étape 24) : tirés par le serveur, montrés une seule
   fois, et remplacés obligatoirement à la première connexion — un administrateur ne garde
   la connaissance du mot de passe d'un collègue que jusque-là.
-- **Traçabilité du code** : 689 tests côté serveur, 330 cas côté interface — dont 106
+- **Traçabilité du code** : 698 tests côté serveur, 330 cas côté interface — dont 106
   rejoués dans cinq fuseaux —, et la discipline de validation par sabotage décrite dans
   `CLAUDE.md`.
 - ⚠️ **Les valeurs de paramètres SQL ne sont pas journalisées** :

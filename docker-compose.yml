@@ -27,8 +27,9 @@ x-journaux: &journaux
     max-file: "5"
 
 # Configuration lue par Program.cs. Partagée par l'API et par le bundle de
-# migration, qui exécute Program.cs jusqu'à Build() et a donc besoin des mêmes
-# valeurs. Aucun secret n'est écrit ici : ils viennent de .env.
+# migration, qui n'en lit que la chaîne de connexion : il construit son contexte
+# sans Program.cs (backend/Data/FabriqueDeConception.cs). Aucun secret n'est écrit
+# ici : ils viennent de .env.
 #
 # `Gss Encryption Mode=Disable` : par défaut Npgsql tente le chiffrement Kerberos,
 # cherche libgssapi_krb5, que l'image .NET n'a pas, et écrit « Error: … cannot
