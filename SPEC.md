@@ -3099,6 +3099,60 @@ validation d'un passage par le chef, et toute notification.
   interface. Le planning ne fait que les lire.
 - Série serveur complète : 652 tests verts.
 
+**Lot B — fait le 6 novembre 2026**
+
+- **La migration `CompteRenduDuPassage`**, relue avant d'être jouée : quatre tables neuves,
+  leurs clés et leurs index, rien d'existant touché. Appliquée à `klean_test` seulement.
+  - `PointsControle` et `ControlesEffectues` portent la checklist ;
+  - `Anomalies` et `PhotosAnomalie`, les anomalies et leurs photos.
+- **La checklist**, `/api/points-controle`, par type de prestation : lue par les rôles
+  internes, écrite par l'administrateur, comme le catalogue qu'elle prolonge.
+  - La journée de l'agent propose les points actifs, dans leur ordre.
+  - `terminer` reçoit `pointsFaits`. Chaque point actif du type est enregistré, fait ou
+    non, avec **le libellé du moment**. Un point renommé ou supprimé ensuite ne réécrit rien :
+    le lien passe à nul, la ligne reste.
+  - Un point qui n'est pas de la checklist de la vacation est refusé **avant toute
+    écriture**.
+  - Un point non coché ne retient pas l'agent, et ne touche pas la certification.
+  - Supprimer un type qui porte une checklist est refusé : le refus compte ses points comme
+    ses consommations.
+- **Les anomalies**, `/api/anomalies` :
+  - **Le signalement** se fait par l'agent affecté, pendant le passage (`EnCours`), avec une
+    description refusée en français si elle est vide ou trop longue.
+  - **La liste** est réservée aux rôles internes, la plus récente d'abord, filtrable par
+    statut lu par ses noms exacts. Les filtres globaux suivent ceux des vacations : le chef
+    ne voit que son équipe, l'agent les siennes, le syndic rien.
+  - **« Traitée »** ne se donne qu'une fois, et pose la date et l'auteur.
+  - Pas de journal : l'auteur n'y est qu'un identifiant. À relire au lot D, une photo pouvant
+    montrer une personne.
+- **Les photos** :
+  - Envoyées en corps brut `image/jpeg`, sous le plafond d'un mégaoctet de l'API, trois au
+    plus par anomalie, pendant le passage seulement.
+  - Relues avec `Cache-Control: private, no-store`.
+  - ⚠️ **`MetadonneesJpeg` retire les métadonnées sur le serveur**, sans dépendance : APP1 à
+    APP15 et les commentaires. Il lit aussi les données de l'image, et pas seulement
+    l'en-tête : un EXIF glissé entre deux balayages, à la façon d'un JPEG progressif,
+    disparaît aussi. Tout le reste est recopié octet pour octet.
+  - Ce qui n'est pas un JPEG lisible est refusé. Le test part d'un JPEG qui porte une
+    position, et vérifie **en base** qu'elle n'y est pas.
+- **Le syndic sous l'API.** Aucune route ne s'ouvre à lui, donc la clause qui l'exclut des
+  quatre filtres n'était atteignable par aucun test. Un test la lit directement, avec un
+  tenant de syndic.
+- **`CompteRenduTests`, 23 tests, et `MetadonneesJpegTests`, 12 cas.**
+- **Vingt-huit sabotages, vingt-trois rouges d'emblée.** Aucun des cinq autres ne cachait un
+  défaut du code. Trois révélaient des tests trop faibles :
+  - un segment qui débordait était une métadonnée, que le code saute sans la lire ;
+  - le type de contenu était vérifié sur des octets PNG, que le nettoyage refusait de toute
+    façon ;
+  - le sabotage du refus d'un type ne changeait rien au message.
+
+  Tests et sabotage refaits, les trois sont rouges. Les deux derniers retiraient le cadrage
+  explicite sur l'agent, au signalement et à la photo, que le filtre global double. Ils ont
+  été séparés comme au lot A : chacun tient sans le filtre, et rougit avec lui. Il a fallu
+  isoler l'envoi d'une photo par un collègue dans un test à part, la lecture d'une photo ne
+  reposant, elle, que sur le filtre.
+- Série serveur complète : 687 tests verts.
+
 ---
 
 # Suite — non planifié

@@ -111,21 +111,26 @@ public class ServicePassage
             .OrderBy(v => v.DatePrevue).ThenBy(v => v.HeurePrevue)
             .ToListAsync(annulation);
 
-        await AjouterPointagesAsync(vacations, annulation);
+        await AjouterDetailsAsync(vacations, annulation);
         return vacations;
     }
 
     public Task<ResultatPassage> DemarrerAsync(
         Guid interventionId, PositionDto? position, Guid auteurId, CancellationToken annulation) =>
-        PointerAsync(interventionId, MomentPointage.Debut, position, auteurId, annulation);
+        PointerAsync(interventionId, MomentPointage.Debut, position, pointsFaits: [], auteurId, annulation);
 
+    /// <summary>
+    /// La fin du passage, et son compte rendu : chaque point actif du type est enregistré, fait
+    /// s'il figure dans <paramref name="pointsFaits"/>, non fait sinon.
+    /// </summary>
     public Task<ResultatPassage> TerminerAsync(
-        Guid interventionId, PositionDto? position, Guid auteurId, CancellationToken annulation) =>
-        PointerAsync(interventionId, MomentPointage.Fin, position, auteurId, annulation);
+        Guid interventionId, PositionDto? position, IReadOnlyCollection<Guid> pointsFaits, Guid auteurId,
+        CancellationToken annulation) =>
+        PointerAsync(interventionId, MomentPointage.Fin, position, pointsFaits, auteurId, annulation);
 
     private async Task<ResultatPassage> PointerAsync(
-        Guid interventionId, MomentPointage moment, PositionDto? position, Guid auteurId,
-        CancellationToken annulation)
+        Guid interventionId, MomentPointage moment, PositionDto? position, IReadOnlyCollection<Guid> pointsFaits,
+        Guid auteurId, CancellationToken annulation)
     {
         var refusPosition = RefusDePosition(position);
         if (refusPosition is not null) return ResultatPassage.Refusee(refusPosition);
@@ -138,7 +143,8 @@ public class ServicePassage
             {
                 Intervention = i,
                 i.Prestation!.Contrat!.Site!.Latitude,
-                i.Prestation.Contrat.Site.Longitude
+                i.Prestation.Contrat.Site.Longitude,
+                i.Prestation.TypePrestationId
             })
             .FirstOrDefaultAsync(annulation);
 
@@ -171,6 +177,21 @@ public class ServicePassage
                 + $"{StatutIntervention.EnCours} se termine. La démarrer d'abord.");
         }
 
+        var points = moment == MomentPointage.Fin
+            ? await PointsActifsAsync(cible.TypePrestationId, annulation)
+            : [];
+
+        // ⚠️ Un point coché qui n'est pas de la checklist de cette vacation est refusé, avant
+        // toute écriture : l'enregistrer en silence ferait déclarer fait ce qui n'a pas été
+        // demandé, et l'ignorer cacherait un écran désaccordé.
+        var inconnu = pointsFaits.Where(id => points.All(p => p.Id != id)).Cast<Guid?>().FirstOrDefault();
+
+        if (inconnu is not null)
+        {
+            return ResultatPassage.Refusee(
+                $"Le point de contrôle {inconnu} n'est pas dans la checklist de cette vacation. Recharger la journée.");
+        }
+
         var (preuve, distance, precision) = Evaluer(position, cible.Latitude, cible.Longitude);
 
         _db.Pointages.Add(new Pointage
@@ -200,6 +221,16 @@ public class ServicePassage
             intervention.Statut = preuveDuDebut == PreuvePointage.SurSite && preuve == PreuvePointage.SurSite
                 ? StatutIntervention.Terminee
                 : StatutIntervention.NonCertifiee;
+
+            // Le libellé du moment, copié : un point renommé demain ne réécrit pas ce compte rendu.
+            _db.ControlesEffectues.AddRange(points.Select(p => new ControleEffectue
+            {
+                InterventionId = intervention.Id,
+                PointControleId = p.Id,
+                Libelle = p.Libelle,
+                Ordre = p.Ordre,
+                Fait = pointsFaits.Contains(p.Id)
+            }));
         }
 
         try
@@ -219,7 +250,7 @@ public class ServicePassage
         var vacation = await Projeter(_db.Interventions.AsNoTracking().Where(i => i.Id == intervention.Id))
             .ToListAsync(annulation);
 
-        await AjouterPointagesAsync(vacation, annulation);
+        await AjouterDetailsAsync(vacation, annulation);
         return ResultatPassage.Ok(vacation.Single());
     }
 
@@ -275,7 +306,20 @@ public class ServicePassage
             Consignes = i.Prestation.Contrat.Site.Consignes
         });
 
-    private async Task AjouterPointagesAsync(List<VacationAgentDto> vacations, CancellationToken annulation)
+    /// <summary>Les points actifs d'un type, dans l'ordre du parcours. Aucun sans type.</summary>
+    private async Task<List<PointControle>> PointsActifsAsync(Guid? typePrestationId, CancellationToken annulation) =>
+        typePrestationId is null
+            ? []
+            : await _db.PointsControle.AsNoTracking()
+                .Where(p => p.TypePrestationId == typePrestationId && p.Actif)
+                .OrderBy(p => p.Ordre).ThenBy(p => p.Libelle)
+                .ToListAsync(annulation);
+
+    /// <summary>
+    /// Les pointages, la checklist et les anomalies de chaque vacation : avant la fin, les points
+    /// à cocher ; après, ce qui a été déclaré.
+    /// </summary>
+    private async Task AjouterDetailsAsync(List<VacationAgentDto> vacations, CancellationToken annulation)
     {
         var ids = vacations.Select(v => v.Id).ToList();
 
@@ -283,10 +327,48 @@ public class ServicePassage
             .Where(p => ids.Contains(p.InterventionId))
             .ToListAsync(annulation);
 
+        var types = await _db.Interventions.AsNoTracking()
+            .Where(i => ids.Contains(i.Id))
+            .Select(i => new { i.Id, i.Prestation!.TypePrestationId })
+            .ToDictionaryAsync(i => i.Id, i => i.TypePrestationId, annulation);
+
+        var typesUtiles = types.Values.Where(t => t is not null).Distinct().ToList();
+
+        var points = await _db.PointsControle.AsNoTracking()
+            .Where(p => typesUtiles.Contains(p.TypePrestationId) && p.Actif)
+            .OrderBy(p => p.Ordre).ThenBy(p => p.Libelle)
+            .ToListAsync(annulation);
+
+        var declares = await _db.ControlesEffectues.AsNoTracking()
+            .Where(c => ids.Contains(c.InterventionId))
+            .OrderBy(c => c.Ordre).ThenBy(c => c.Libelle)
+            .ToListAsync(annulation);
+
+        var anomalies = await _db.Anomalies.AsNoTracking()
+            .Where(a => ids.Contains(a.InterventionId))
+            .OrderBy(a => a.DateSignalement)
+            .Select(a => new { a.InterventionId, Dto = new AnomalieAgentDto
+            {
+                Id = a.Id, Description = a.Description, Photos = a.Photos.Count
+            } })
+            .ToListAsync(annulation);
+
         foreach (var vacation in vacations)
         {
+            var fin = pointages.FirstOrDefault(p => p.InterventionId == vacation.Id && p.Moment == MomentPointage.Fin);
+
             vacation.Debut = VersDto(pointages.FirstOrDefault(p => p.InterventionId == vacation.Id && p.Moment == MomentPointage.Debut));
-            vacation.Fin = VersDto(pointages.FirstOrDefault(p => p.InterventionId == vacation.Id && p.Moment == MomentPointage.Fin));
+            vacation.Fin = VersDto(fin);
+
+            vacation.Checklist = fin is not null
+                ? declares.Where(c => c.InterventionId == vacation.Id)
+                    .Select(c => new PointChecklistDto { PointControleId = c.PointControleId, Libelle = c.Libelle, Fait = c.Fait })
+                    .ToList()
+                : points.Where(p => p.TypePrestationId == types.GetValueOrDefault(vacation.Id))
+                    .Select(p => new PointChecklistDto { PointControleId = p.Id, Libelle = p.Libelle })
+                    .ToList();
+
+            vacation.Anomalies = anomalies.Where(a => a.InterventionId == vacation.Id).Select(a => a.Dto).ToList();
         }
     }
 

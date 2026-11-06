@@ -146,13 +146,15 @@ public class TypesPrestationController : ControllerBase
 
             // Restrict aussi depuis la consommation par type (étape 22, lot B). Un type qu'aucune
             // prestation ne porte n'a rien d'historique : ses consommations se retirent.
+            // Et depuis sa checklist (étape 25, lot B) : le refus compte les deux.
             if (prestations == 0)
             {
                 var consommations = await _db.ConsommationsType.CountAsync(c => c.TypePrestationId == id);
+                var points = await _db.PointsControle.CountAsync(p => p.TypePrestationId == id);
 
                 return Conflict(
-                    $"Ce type porte {consommations} consommation(s) de produit : les retirer d'abord, "
-                    + "ou le désactiver.");
+                    $"Ce type porte {consommations} consommation(s) de produit et {points} point(s) "
+                    + "de contrôle : les retirer d'abord, ou le désactiver.");
             }
 
             return Conflict(

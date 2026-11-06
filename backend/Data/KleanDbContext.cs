@@ -68,6 +68,15 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
     /// <summary>Le début et la fin d'un passage, pointés par l'agent (SPEC.md, étape 25).</summary>
     public DbSet<Pointage> Pointages => Set<Pointage>();
 
+    /// <summary>La checklist de chaque type de prestation (SPEC.md, étape 25, lot B).</summary>
+    public DbSet<PointControle> PointsControle => Set<PointControle>();
+
+    /// <summary>Ce qui a été coché, ou non, en terminant une vacation.</summary>
+    public DbSet<ControleEffectue> ControlesEffectues => Set<ControleEffectue>();
+
+    public DbSet<Anomalie> Anomalies => Set<Anomalie>();
+    public DbSet<PhotoAnomalie> PhotosAnomalie => Set<PhotoAnomalie>();
+
     /// <summary>
     /// Journal d'accès aux données personnelles (SPEC.md étape 17). La seule
     /// entité qui n'existe pas pour le métier : elle existe pour rendre compte de
@@ -113,6 +122,7 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<MouvementStock>().Property(e => e.Nature).HasConversion<string>();
         modelBuilder.Entity<Pointage>().Property(e => e.Moment).HasConversion<string>();
         modelBuilder.Entity<Pointage>().Property(e => e.Preuve).HasConversion<string>();
+        modelBuilder.Entity<Anomalie>().Property(e => e.Statut).HasConversion<string>();
         modelBuilder.Entity<AccesJournalise>().Property(e => e.Ressource).HasConversion<string>();
         modelBuilder.Entity<AccesJournalise>().Property(e => e.Nature).HasConversion<string>();
 
@@ -320,6 +330,36 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Pointage>()
             .HasIndex(e => new { e.InterventionId, e.Moment }).IsUnique();
 
+        // La checklist et les anomalies (SPEC.md, étape 25, lot B).
+        //
+        // Un point de contrôle tient à son type par **Restrict**, comme la consommation : un
+        // type qui part n'emporte pas en silence la checklist qu'on a saisie pour lui.
+        modelBuilder.Entity<PointControle>()
+            .HasOne(e => e.TypePrestation).WithMany()
+            .HasForeignKey(e => e.TypePrestationId).OnDelete(DeleteBehavior.Restrict);
+
+        // Ce qui a été coché tient à sa vacation par **Restrict** — c'est son compte rendu —,
+        // et à son point par **SetNull** : le libellé est copié, la ligne se lit sans le point,
+        // et supprimer un point de la checklist ne doit pas être bloqué par l'historique.
+        // Même raisonnement que le titulaire d'une prestation.
+        modelBuilder.Entity<ControleEffectue>()
+            .HasOne(e => e.Intervention).WithMany()
+            .HasForeignKey(e => e.InterventionId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ControleEffectue>()
+            .HasOne(e => e.PointControle).WithMany()
+            .HasForeignKey(e => e.PointControleId).OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<Anomalie>()
+            .HasOne(e => e.Intervention).WithMany()
+            .HasForeignKey(e => e.InterventionId).OnDelete(DeleteBehavior.Restrict);
+
+        // Une photo n'existe que pour son anomalie : **Cascade**. Aucune route ne supprime une
+        // anomalie ; c'est la purge de conservation qui le fera, et elle doit emporter les
+        // photos plutôt que de buter dessus.
+        modelBuilder.Entity<PhotoAnomalie>()
+            .HasOne(e => e.Anomalie).WithMany(e => e.Photos)
+            .HasForeignKey(e => e.AnomalieId).OnDelete(DeleteBehavior.Cascade);
+
         // Une absence porte des dates à valeur légale, et l'étape 16 bis lot B lui
         // donne son écran. Elle ne part donc pas avec son agent sans qu'on le
         // demande — d'autant qu'un agent déjà planifié est de toute façon
@@ -481,6 +521,34 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
                 && ((TenantAgentId == null && TenantChefEquipeId == null)
                     || Interventions.Any(i => i.Id == e.InterventionId))));
 
+        // La checklist est un catalogue : celle de l'entreprise, comme les types.
+        modelBuilder.Entity<PointControle>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null || e.EntrepriseId == TenantEntrepriseId);
+
+        // Ce qui a été coché et ce qui a été signalé suivent la vacation, exactement comme les
+        // pointages : l'agent les siens, le chef ceux de son équipe, rien pour le syndic.
+        modelBuilder.Entity<ControleEffectue>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null
+            || (e.EntrepriseId == TenantEntrepriseId
+                && TenantClientId == null
+                && ((TenantAgentId == null && TenantChefEquipeId == null)
+                    || Interventions.Any(i => i.Id == e.InterventionId))));
+        modelBuilder.Entity<Anomalie>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null
+            || (e.EntrepriseId == TenantEntrepriseId
+                && TenantClientId == null
+                && ((TenantAgentId == null && TenantChefEquipeId == null)
+                    || Interventions.Any(i => i.Id == e.InterventionId))));
+
+        // Les photos des anomalies que l'appelant voit : le filtre des anomalies s'applique à
+        // la sous-requête, qui porte à son tour celui des vacations.
+        modelBuilder.Entity<PhotoAnomalie>().HasQueryFilter(e =>
+            !TenantFiltrageActif || TenantEntrepriseId == null
+            || (e.EntrepriseId == TenantEntrepriseId
+                && TenantClientId == null
+                && ((TenantAgentId == null && TenantChefEquipeId == null)
+                    || Anomalies.Any(a => a.Id == e.AnomalieId))));
+
         // ⚠️ Le journal d'accès est filtré comme le reste, et l'oublier serait pire
         // qu'ailleurs : GET /api/journal-acces est réservé à l'administrateur, donc un
         // administrateur non filtré lirait les habitudes de consultation des autres
@@ -527,6 +595,15 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
         modelBuilder.Entity<Pointage>()
             .HasIndex(e => new { e.EntrepriseId, e.Horodatage })
             .IsDescending(false, true);
+
+        // La liste des anomalies se lit des plus récentes aux plus anciennes, et se purgera
+        // par date ; la checklist par type, dans son ordre.
+        modelBuilder.Entity<Anomalie>()
+            .HasIndex(e => new { e.EntrepriseId, e.DateSignalement })
+            .IsDescending(false, true);
+        modelBuilder.Entity<PointControle>().HasIndex(e => e.EntrepriseId);
+        modelBuilder.Entity<ControleEffectue>().HasIndex(e => e.EntrepriseId);
+        modelBuilder.Entity<PhotoAnomalie>().HasIndex(e => e.EntrepriseId);
 
         // ⚠️ Le journal se lit toujours du plus récent au plus ancien, et se purge
         // par date : l'index est composite et l'horodatage descendant. Un index sur

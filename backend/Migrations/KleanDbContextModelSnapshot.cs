@@ -149,6 +149,48 @@ namespace Klean.Api.Migrations
                     b.ToTable("Agents");
                 });
 
+            modelBuilder.Entity("Klean.Api.Models.Anomalie", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AuteurId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("DateSignalement")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DateTraitement")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("EntrepriseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("InterventionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Statut")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("TraiteeParId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InterventionId");
+
+                    b.HasIndex("EntrepriseId", "DateSignalement")
+                        .IsDescending(false, true);
+
+                    b.ToTable("Anomalies");
+                });
+
             modelBuilder.Entity("Klean.Api.Models.Client", b =>
                 {
                     b.Property<Guid>("Id")
@@ -266,6 +308,42 @@ namespace Klean.Api.Migrations
                     b.HasIndex("SiteId");
 
                     b.ToTable("Contrats");
+                });
+
+            modelBuilder.Entity("Klean.Api.Models.ControleEffectue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EntrepriseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Fait")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("InterventionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Libelle")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Ordre")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("PointControleId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntrepriseId");
+
+                    b.HasIndex("InterventionId");
+
+                    b.HasIndex("PointControleId");
+
+                    b.ToTable("ControlesEffectues");
                 });
 
             modelBuilder.Entity("Klean.Api.Models.Emplacement", b =>
@@ -467,6 +545,67 @@ namespace Klean.Api.Migrations
 
                             t.HasCheckConstraint("CK_MouvementsStock_UneOrigine", "\"OrigineEmplacementId\" IS NULL OR \"OrigineSiteId\" IS NULL");
                         });
+                });
+
+            modelBuilder.Entity("Klean.Api.Models.PhotoAnomalie", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AnomalieId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("Contenu")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTime>("DateAjout")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EntrepriseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Taille")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnomalieId");
+
+                    b.HasIndex("EntrepriseId");
+
+                    b.ToTable("PhotosAnomalie");
+                });
+
+            modelBuilder.Entity("Klean.Api.Models.PointControle", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Actif")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("EntrepriseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Libelle")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Ordre")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TypePrestationId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntrepriseId");
+
+                    b.HasIndex("TypePrestationId");
+
+                    b.ToTable("PointsControle");
                 });
 
             modelBuilder.Entity("Klean.Api.Models.Pointage", b =>
@@ -1014,6 +1153,17 @@ namespace Klean.Api.Migrations
                     b.Navigation("Entreprise");
                 });
 
+            modelBuilder.Entity("Klean.Api.Models.Anomalie", b =>
+                {
+                    b.HasOne("Klean.Api.Models.Intervention", "Intervention")
+                        .WithMany()
+                        .HasForeignKey("InterventionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Intervention");
+                });
+
             modelBuilder.Entity("Klean.Api.Models.Client", b =>
                 {
                     b.HasOne("Klean.Api.Models.Entreprise", "Entreprise")
@@ -1053,6 +1203,24 @@ namespace Klean.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Site");
+                });
+
+            modelBuilder.Entity("Klean.Api.Models.ControleEffectue", b =>
+                {
+                    b.HasOne("Klean.Api.Models.Intervention", "Intervention")
+                        .WithMany()
+                        .HasForeignKey("InterventionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Klean.Api.Models.PointControle", "PointControle")
+                        .WithMany()
+                        .HasForeignKey("PointControleId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Intervention");
+
+                    b.Navigation("PointControle");
                 });
 
             modelBuilder.Entity("Klean.Api.Models.Emplacement", b =>
@@ -1132,6 +1300,28 @@ namespace Klean.Api.Migrations
                     b.Navigation("OrigineSite");
 
                     b.Navigation("Produit");
+                });
+
+            modelBuilder.Entity("Klean.Api.Models.PhotoAnomalie", b =>
+                {
+                    b.HasOne("Klean.Api.Models.Anomalie", "Anomalie")
+                        .WithMany("Photos")
+                        .HasForeignKey("AnomalieId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Anomalie");
+                });
+
+            modelBuilder.Entity("Klean.Api.Models.PointControle", b =>
+                {
+                    b.HasOne("Klean.Api.Models.TypePrestation", "TypePrestation")
+                        .WithMany()
+                        .HasForeignKey("TypePrestationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("TypePrestation");
                 });
 
             modelBuilder.Entity("Klean.Api.Models.Pointage", b =>
@@ -1314,6 +1504,11 @@ namespace Klean.Api.Migrations
                     b.Navigation("Absences");
 
                     b.Navigation("Interventions");
+                });
+
+            modelBuilder.Entity("Klean.Api.Models.Anomalie", b =>
+                {
+                    b.Navigation("Photos");
                 });
 
             modelBuilder.Entity("Klean.Api.Models.Client", b =>

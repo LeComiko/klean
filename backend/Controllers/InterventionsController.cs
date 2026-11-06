@@ -59,12 +59,15 @@ public class InterventionsController : ControllerBase
         Guid id, PointageCreateDto dto, CancellationToken annulation) =>
         Repondre(await _passages.DemarrerAsync(id, dto.Position, Appelant(), annulation));
 
-    /// <summary>Le second pointage, qui tranche entre <c>Terminee</c> et <c>NonCertifiee</c>.</summary>
+    /// <summary>
+    /// Le second pointage, qui tranche entre <c>Terminee</c> et <c>NonCertifiee</c>, et le
+    /// compte rendu de la checklist. Un point non coché ne retient pas l'agent.
+    /// </summary>
     [Authorize(Roles = RolesKlean.Agent)]
     [HttpPost("{id:guid}/terminer")]
     public async Task<ActionResult<VacationAgentDto>> Terminer(
-        Guid id, PointageCreateDto dto, CancellationToken annulation) =>
-        Repondre(await _passages.TerminerAsync(id, dto.Position, Appelant(), annulation));
+        Guid id, TerminaisonDto dto, CancellationToken annulation) =>
+        Repondre(await _passages.TerminerAsync(id, dto.Position, dto.PointsFaits, Appelant(), annulation));
 
     [Authorize(Roles = RolesKlean.InterneEtAgent)]
     [HttpGet]

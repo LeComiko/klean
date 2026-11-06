@@ -26,6 +26,43 @@ public class VacationAgentDto
 
     public PointageDto? Debut { get; set; }
     public PointageDto? Fin { get; set; }
+
+    /// <summary>
+    /// Avant la fin, les points actifs du type, <c>Fait</c> à nul ; après, ce qui a été
+    /// déclaré, avec le libellé du moment. Vide pour une vacation sans type.
+    /// </summary>
+    public List<PointChecklistDto> Checklist { get; set; } = [];
+
+    /// <summary>Les anomalies que l'agent a signalées sur cette vacation.</summary>
+    public List<AnomalieAgentDto> Anomalies { get; set; } = [];
+}
+
+public class PointChecklistDto
+{
+    /// <summary>Nul si le point a été supprimé depuis : la ligne déclarée, elle, reste.</summary>
+    public Guid? PointControleId { get; set; }
+
+    public string Libelle { get; set; } = string.Empty;
+
+    /// <summary>Nul tant que la vacation n'est pas terminée.</summary>
+    public bool? Fait { get; set; }
+}
+
+/// <summary>L'anomalie telle que la relit son auteur, sur place : de quoi y ajouter une photo.</summary>
+public class AnomalieAgentDto
+{
+    public Guid Id { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public int Photos { get; set; }
+}
+
+/// <summary>
+/// Le corps de <c>terminer</c> : la position, et les points cochés. Un point actif du type
+/// absent de la liste est enregistré non fait.
+/// </summary>
+public class TerminaisonDto : PointageCreateDto
+{
+    public List<Guid> PointsFaits { get; set; } = [];
 }
 
 /// <summary>Un pointage, sans coordonnées : il n'en existe pas à rendre.</summary>
