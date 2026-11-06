@@ -82,7 +82,12 @@ répond, `docker compose logs caddy` dit en général pourquoi le certificat n'a
 
 ### 2.4 Première connexion
 
-1. Ouvrez `https://VOTRE-DOMAINE` et connectez-vous avec le compte de `.env`.
+1. Ouvrez `https://VOTRE-DOMAINE` et connectez-vous avec le compte de `.env`. Le rôle
+   administrateur impose la **double authentification** : ayez sous la main un téléphone
+   portant une application d'authentification (Aegis, FreeOTP, Google ou Microsoft
+   Authenticator…). La connexion affiche un QR code, puis remet **dix codes de
+   récupération** : rangez-les hors de cette machine, ils sont la seule sortie si le
+   téléphone se perd (section 10).
 2. Écran **Compte** : changez le mot de passe.
 3. **Videz** dans `.env` les quatre lignes `KLEAN_ADMIN_*`, `KLEAN_RAISON_SOCIALE`
    et `KLEAN_SIRET`.
@@ -143,6 +148,26 @@ les traces d'arrêts maladie. Trois conséquences :
   (`RGPD.md` §5). Une sauvegarde gardée cinq ans conserve cinq ans ce que les scripts
   de purge ont supprimé de la base.
 
+**Le trousseau de l'API se sauvegarde aussi**, avec la même régularité que la base :
+
+```bash
+docker compose exec -T api tar czf - -C /home/app/.aspnet DataProtection-Keys > cles-api-$(date +%F).tgz
+```
+
+⚠️ **Cette commande et celles de la restauration ci-dessous n'ont pas encore été jouées**
+sur l'instance d'essai, contrairement au reste de ce fichier. Après une première
+sauvegarde, vérifiez que l'archive n'est pas vide : `tar tzf cles-api-AAAA-MM-JJ.tgz`
+doit lister au moins un fichier `key-….xml`.
+
+La clé de double authentification de chaque compte est chiffrée par ce trousseau, qui
+vit dans le volume `cles-api` et **pas** dans la base. Une base restaurée sans lui garde
+des clés que plus rien ne déchiffre : tous les comptes équipés sont à rééquiper
+(section 10).
+
+⚠️ **Jamais dans la même archive que la base, ni au même endroit en clair.** La séparation
+est toute la protection : une copie de la base seule ne livre aucune clé, une copie des
+deux les livre toutes. Deux destinations, ou deux chiffrements distincts.
+
 ### Restaurer
 
 ```bash
@@ -154,6 +179,18 @@ docker compose start api
 L'API est arrêtée pendant la restauration : elle écrirait sinon dans des tables en
 train d'être remplacées. Tout ce qui a été saisi après la sauvegarde est **perdu**,
 sessions comprises : qui s'est connecté depuis devra se reconnecter.
+
+Le trousseau, s'il a été perdu avec la machine, se restaure **avant** de redémarrer
+l'API — l'archive la plus récente, puisqu'elle contient aussi les clés plus anciennes :
+
+```bash
+docker compose up -d api
+docker compose exec -T api tar xzf - -C /home/app/.aspnet < cles-api-AAAA-MM-JJ.tgz
+docker compose restart api
+```
+
+L'archive s'extrait en tant qu'utilisateur `app` de l'image, propriétaire du dossier :
+aucun droit à reprendre.
 
 ⚠️ **Restaurer ressuscite ce qui avait été purgé depuis la sauvegarde.** Après une
 restauration, rejouez les scripts de conservation de la section 7.
@@ -249,7 +286,7 @@ Pour un seul compte, l'écran **Compte** porte *Déconnexion de tous les apparei
 | Volume | Contenu | Si on le perd |
 |---|---|---|
 | `postgres` | la base | tout — d'où la section 4 |
-| `cles-api` | clés de Data Protection, renouvelées seules tous les 90 jours | les liens de réinitialisation de mot de passe en cours deviennent invalides, rien d'autre |
+| `cles-api` | clés de Data Protection, renouvelées seules tous les 90 jours | **toutes les doubles authentifications** : plus aucune clé ne se déchiffre, et chaque compte équipé est à rééquiper (section 10). Les liens de réinitialisation de mot de passe en cours deviennent aussi invalides |
 | `caddy-donnees` | le certificat HTTPS | Caddy en redemande un ; Let's Encrypt plafonne les émissions par domaine |
 
 `docker compose down` les conserve. **`docker compose down -v` les détruit tous.**
@@ -311,3 +348,80 @@ reportez-vous au `README.md`, section *Déploiement* : `Proxy:Reseaux` est
 **obligatoire** derrière tout proxy, et la politique de sécurité du contenu de
 l'interface se lit avec `node frontend/scripts/entetes-caddy.mjs`, au lieu d'être
 recopiée.
+
+---
+
+## 10. Double authentification
+
+Imposée aux rôles **Administrateur** et **Responsable**, facultative pour les autres.
+Le code à six chiffres change toutes les trente secondes ; chaque compte équipé a reçu
+dix codes de récupération à usage unique.
+
+### L'horloge du serveur
+
+⚠️ **Elle doit être synchronisée.** Le serveur calcule le code attendu à partir de sa
+propre heure, avec une tolérance d'un pas de trente secondes de part et d'autre. Au-delà
+d'une minute d'écart environ, **plus aucun code n'est accepté** — et chaque refus compte
+dans les cinq échecs du verrouillage, avec ceux du mot de passe. Les conteneurs lisent
+l'horloge de la machine :
+
+```bash
+timedatectl | grep -i synchroni     # attendu : « System clock synchronized: yes »
+```
+
+Sinon, activez la synchronisation (`sudo timedatectl set-ntp true` sur une distribution
+avec systemd). Le symptôme d'une horloge dérivée ne l'accuse jamais : tout le monde
+« se trompe de code », puis tout le monde est verrouillé.
+
+### Un téléphone perdu
+
+**Avec ses codes de récupération**, la personne s'en sort seule : à la connexion,
+*Téléphone perdu ? Utiliser un code de récupération* ; puis écran **Compte**, *Changer de
+téléphone*, avec la même bascule et **un autre** code — chacun ne sert qu'une fois. Toutes
+ses sessions se ferment, et la connexion suivante équipe le nouveau téléphone.
+
+**Sans code de récupération** : un administrateur de l'entreprise réinitialise la double
+authentification du compte, par `POST /api/auth/comptes/{id}/reinitialiser-second-facteur`.
+Le geste est journalisé, et coupe les sessions du compte. ⚠️ Il n'a pas encore d'écran :
+il viendra avec la liste des comptes.
+
+**Le dernier administrateur, sans téléphone ni codes** : personne ne peut le faire pour
+lui dans l'application, et c'est voulu — une route qui retire le second facteur sans code
+est ce qu'un voleur de mot de passe chercherait. Le geste passe par la base, donc par
+vous. **Vérifiez d'abord, hors de KLEAN, que la personne qui le demande est bien
+titulaire du compte** : le script ne peut pas le faire.
+
+```bash
+# 1. Le rapport : qui est visé, rien n'est modifié
+docker compose exec -T postgres psql -U klean -d klean -v email=nom@exemple.fr < backend/Scripts/reinitialiser-second-facteur.sql
+
+# 2. Le retrait, après avoir relu le nom, l'entreprise et le rôle
+docker compose exec -T postgres psql -U klean -d klean -v email=nom@exemple.fr -v confirmer=1 < backend/Scripts/reinitialiser-second-facteur.sql
+```
+
+Le second appel retire la double authentification, efface la clé et les codes, et coupe
+toutes les sessions du compte. ⚠️ `-v confirmer` agit **quelle que soit sa valeur** :
+`confirmer=0` confirme aussi. À sa connexion suivante, la personne équipe un nouveau
+téléphone et reçoit dix codes neufs. Ce geste ne laisse **aucune ligne** au journal
+d'accès de KLEAN : consignez-le de votre côté — qui l'a demandé, quand, et comment
+l'identité a été vérifiée.
+
+### Le trousseau perdu
+
+Si le volume `cles-api` a été perdu sans sauvegarde, plus aucune clé ne se déchiffre. Une
+connexion par le code de l'application échoue alors en **erreur serveur**, pas en « code faux », et le
+journal de l'API dit pourquoi :
+
+```bash
+docker compose logs api | grep 'ne se déchiffre plus'
+```
+
+Chaque compte équipé est à rééquiper, et **les codes de récupération y suffisent** : ils
+sont gardés par empreinte, sans le trousseau. Chacun se connecte par un code, puis *Changer
+de téléphone* avec un autre, comme ci-dessus ; un administrateur ainsi reconnecté peut
+réinitialiser ses collègues qui n'ont plus de codes. Pour qui n'a plus ni codes ni
+administrateur, le script se rejoue compte par compte, à partir de cette liste :
+
+```bash
+docker compose exec -T postgres psql -U klean -d klean -Atc 'SELECT "Email" FROM "AspNetUsers" WHERE "TwoFactorEnabled" ORDER BY 1'
+```

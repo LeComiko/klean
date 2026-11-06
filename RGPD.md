@@ -124,15 +124,24 @@ d'interface qu'un appel direct contournerait.
 | **Finalité** | authentifier, autoriser, et pouvoir révoquer |
 | **Base légale proposée** | art. 6(1)(b) et art. 6(1)(c) combiné à l'art. 32 — obligation de sécurité |
 | **Personnes** | utilisateurs |
-| **Données** | adresse de courriel, nom, prénom, téléphone, **empreinte du mot de passe**, rôle, compteur d'échecs et fin de verrouillage, **empreinte** du jeton de rafraîchissement, **adresse IP** de l'ouverture de session |
-| **Tables** | `AspNetUsers`, `AspNetUserRoles`, `JetonsRafraichissement` |
+| **Données** | adresse de courriel, nom, prénom, téléphone, **empreinte du mot de passe**, rôle, compteur d'échecs et fin de verrouillage, **empreinte** du jeton de rafraîchissement, **adresse IP** de l'ouverture de session ; depuis l'étape 23, la **clé de double authentification chiffrée**, les **empreintes** des codes de récupération et le dernier pas de code accepté |
+| **Tables** | `AspNetUsers`, `AspNetUserRoles`, `AspNetUserTokens`, `JetonsRafraichissement` |
 | **Accès** | aucune route ne **liste** les comptes. `GET /api/auth/moi` rend le sien ; `POST /api/auth/comptes` en crée un, administrateur seul |
 | **Durée** | voir §5 — et §9.2 pour l'adresse IP |
-| **Journalisé** | non, et délibérément : `ProfilDto` est l'identité de l'appelant lui-même, un journal de « qui a lu son propre nom » est du bruit |
+| **Journalisé** | non, et délibérément : `ProfilDto` est l'identité de l'appelant lui-même, un journal de « qui a lu son propre nom » est du bruit. **Une exception** : la réinitialisation du second facteur d'un collègue par un administrateur, nature `ReinitialisationSecondFacteur` (T5) |
 
 ⚠️ **Ni le mot de passe ni le jeton de rafraîchissement ne sont stockés** : seules
 leurs empreintes le sont, SHA-256 pour le second. Une fuite de `JetonsRafraichissement`
 ne permet pas de rejouer les sessions.
+
+⚠️ **Il en va de même du second facteur, et la clé est le cas délicat.** Un code de
+récupération n'est gardé que par empreinte SHA-256. La clé de l'application, elle, doit
+pouvoir être relue pour vérifier un code : elle est donc **chiffrée**, par la Data
+Protection d'ASP.NET, dont le trousseau vit dans le volume `cles-api` et non dans la
+base. Une copie de la base seule ne livre aucune clé ; une copie de la base **et** du
+trousseau les livre toutes, d'où la consigne de `DEPLOIEMENT.md` §4 de ne jamais les
+sauvegarder ensemble. Aucun code de six chiffres n'est conservé, seulement le numéro du
+dernier pas de trente secondes accepté, qui empêche de rejouer un code.
 
 ### T5 — Journal d'accès aux données personnelles
 
@@ -155,6 +164,15 @@ où chaque compte est nominatif.
 
 ⚠️ **Il est fermé au `Responsable` et au `ChefEquipe`.** Ouvert à eux, il deviendrait
 un outil de surveillance des collègues — ce qu'un journal RGPD n'est pas censé être.
+
+**Deux natures n'y consignent pas une lecture**, mais un geste d'administrateur sur le
+compte d'autrui : `Anonymisation`, irréversible, et depuis l'étape 23
+`ReinitialisationSecondFacteur`, qui abaisse la protection d'un collègue jusqu'à son
+prochain équipement. Rien n'y est lu ; c'est l'exception écrite à la règle « seules les
+divulgations sont consignées » de `CLAUDE.md` §7 bis. ⚠️ Le même geste joué par
+l'exploitant, en base, par `backend/Scripts/reinitialiser-second-facteur.sql`, **ne laisse
+aucune ligne** : le journal attribue chaque ligne à un compte, et l'exploitant n'en est
+pas un. `DEPLOIEMENT.md` §10 lui demande de consigner le geste de son côté.
 
 ### T6 — Relation client
 
@@ -192,6 +210,7 @@ Les treize tables du modèle, plus les tables d'Identity. « DP » = donnée per
 | `ConsommationsType` | aucune — une quantité de produit par passage d'un type | — | `/api/consommations-type` ; la prévision `/api/stocks/prevision` en dérive des besoins **par site**, sans agent ni vacation nommés |
 | `AccesJournalises` | `UtilisateurId`, `CibleId`, `Horodatage` | trace d'activité d'un utilisateur | `/api/journal-acces` |
 | `AspNetUsers` | `Email`, `UserName`, `PhoneNumber`, `Nom`, `Prenom`, `PasswordHash`, verrouillage, `DateAnonymisation` | identité et **secret d'authentification** | `/api/auth/moi`, et nom et prénom des chefs d'équipe par `/api/agents/chefs-equipe` (administrateur, journalisée) |
+| `AspNetUserTokens` | sous le fournisseur `[KleanSecondFacteur]` : `Cle` (la clé de double authentification, **chiffrée**), `CodesRecuperation` (des **empreintes**), `DernierPas` (un numéro de pas de trente secondes) | **secret d'authentification** | **aucune route** — la clé ne sort qu'une fois, au QR code de l'équipement, et les codes qu'une fois, à leur création |
 | `JetonsRafraichissement` | `UtilisateurId`, **`AdresseIp`**, dates | trace de connexion | **aucune route** |
 
 ⚠️ **Deux colonnes sont des données personnelles que personne ne cherche là.**
@@ -258,6 +277,7 @@ est la dernière : une durée sans mécanisme est une promesse que personne ne t
 | Remplacements et scores | 1 an | état dérivé, sans valeur probante au-delà de l'exercice | 📋 `conservation-donnees-metier.sql` §3 |
 | Clients et sites | durée du contrat, puis 5 ans ; sans contrat, 5 ans après la création | relation commerciale ; pour un prospect jamais signé, la CNIL retient plutôt 3 ans (§9.7) | 📋 `conservation-donnees-metier.sql` §4 et §5 |
 | Comptes (`AspNetUsers`) | désactivation à la sortie, effacement à 5 ans | un compte désactivé reste nécessaire pour attribuer les lignes du journal | 📋 geste manuel par `POST /api/auth/comptes/{id}/anonymiser` (§9.3) |
+| Second facteur (`AspNetUserTokens`) | tant qu'il est actif ; effacé au retrait, à la réinitialisation et à la pseudonymisation du compte | un secret qui n'authentifie plus rien n'a aucun usage | ✅ par construction : chaque retrait efface les trois jetons, et `ServiceAnonymisation` les efface sur ses deux chemins |
 | Jetons de rafraîchissement | **30 jours après révocation ou expiration** | la fenêtre de diagnostic d'un rejeu ; au-delà, seule l'adresse IP survit, sans usage | ✅ `purge-jetons-rafraichissement.sql` |
 | Journal d'accès | **12 mois** | un journal RGPD est lui-même une donnée personnelle | ✅ `purge-journal-acces.sql` |
 | Mouvements de stock et leur auteur | 5 ans, comme les interventions | l'historique qui explique une quantité ; l'auteur suit son compte, pseudonymisé à la sortie | 📋 `conservation-donnees-metier.sql` §8 — purger un mouvement ne change aucune quantité, et son `DELETE` passe **avant** celui des sites qu'il cite |
@@ -703,6 +723,11 @@ Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail es
   compte, jeton d'accès de quinze minutes en cookie `HttpOnly Secure SameSite=Strict`,
   jeton de rafraîchissement opaque de 256 bits stocké par empreinte, rotation avec
   détection de rejeu, session absolue de quatorze jours.
+- **Double authentification** (étape 23) : codes TOTP à six chiffres, **imposée** aux
+  rôles `Administrateur` et `Responsable` — ceux qui lisent les domiciles et les arrêts
+  maladie —, facultative pour les autres. Clé chiffrée hors de la base, codes de
+  récupération gardés par empreinte, un code ne sert qu'une fois, et un code faux compte
+  dans le même verrouillage que le mot de passe.
 - **Révocation immédiate** : `Actif` et `SecurityStamp` vérifiés à chaque requête ;
   une désactivation ou un changement de mot de passe périme les jetons en circulation
   sans attendre leur échéance.

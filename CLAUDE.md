@@ -113,7 +113,8 @@ KLEAN/
 │   └── Scripts/         jeu de démonstration, contrat-ecrans-reference.py,
 │                        et les quatre SQL de conservation — purge-journal-acces,
 │                        purge-jetons-rafraichissement, conservation-donnees-metier,
-│                        degradation-absences-maladie (RGPD.md §5)
+│                        degradation-absences-maladie (RGPD.md §5) ; et
+│                        reinitialiser-second-facteur, pour le dernier administrateur
 └── frontend/
     ├── Dockerfile       construit dist/, puis l'image Caddy qui le sert
     ├── Caddyfile        HTTPS, document, relais /api — sans journal d'accès
@@ -335,8 +336,22 @@ les écrans de référence (§11), et ce que lit un humain. Ce que la générati
   - ⚠️ **Un code faux compte dans le verrouillage, avec ceux du mot de passe** : cinq en
     tout. Sans ce partage, le million de codes s'essaierait à côté du verrou.
   - ⚠️ **Perdre le trousseau de la Data Protection, c'est perdre toutes les clés** : le
-    volume `cles-api` se sauvegarde avec la base. Une clé indéchiffrable lève une erreur
-    qui nomme la cause, plutôt que de répondre « code faux » jusqu'au verrouillage.
+    volume `cles-api` se sauvegarde aussi souvent que la base, mais **jamais avec elle** —
+    les deux ensemble livrent toutes les clés. Une clé indéchiffrable lève une erreur
+    qui nomme la cause, plutôt que de répondre « code faux » jusqu'au verrouillage, et
+    sans compter d'échec.
+  - **« Changer de téléphone » accepte un code de récupération**, et c'est son cas
+    principal : qui change de téléphone a souvent perdu l'ancien. Sur le code de
+    l'application seul, il se connectait par ses codes sans jamais pouvoir rééquiper.
+    Les codes, gardés par empreinte, survivent aussi à la perte du trousseau.
+  - **Le dernier administrateur sans téléphone ni codes n'a aucune sortie par l'API**,
+    délibérément : une route qui retire le second facteur sans code est ce que chercherait
+    un voleur de mot de passe. `Scripts/reinitialiser-second-facteur.sql` fait en base les
+    gestes de la route d'administration, rapport d'abord, `-v confirmer=1` ensuite, en un
+    seul bloc `DO` pour qu'aucun état intermédiaire ne subsiste. Il ne laisse aucune ligne
+    au journal d'accès. Procédure : `DEPLOIEMENT.md` §10.
+  - ⚠️ **L'horloge du serveur doit être synchronisée** : au-delà d'une minute d'écart
+    environ, aucun code ne passe, et chaque refus avance le verrouillage.
   - En test, la fixture équipe les comptes obligés à leur première connexion et produit
     les codes avec `TotpDeTest`, écrit sans rien reprendre de `Totp`.
 - **Messages d'Identity en français** via `DescripteurErreursFrancais` : les

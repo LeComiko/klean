@@ -2653,6 +2653,43 @@ Corrigé :
   - la forme non contrôlée ;
   - la clé indéchiffrable lue comme absente.
 
+**Lot C — fait le 6 novembre 2026**
+
+- **`backend/Scripts/reinitialiser-second-facteur.sql`**, pour le dernier administrateur
+  sans téléphone ni codes, le seul cas sans sortie par l'API.
+  - Il fait les gestes de la route d'administration : second facteur à faux, les trois
+    jetons `[KleanSecondFacteur]` effacés, `SecurityStamp` et `ConcurrencyStamp`
+    régénérés, sessions révoquées.
+  - En deux temps : un rapport qui nomme la personne, l'entreprise et le rôle, puis
+    `-v confirmer=1`.
+  - ⚠️ Un seul bloc `DO`, donc une seule instruction : un second facteur retiré aux
+    sessions encore ouvertes serait le pire des états intermédiaires. Et aucun `BEGIN`,
+    pour que le script s'éprouve dans une transaction annulée.
+  - **Éprouvé sur `klean_test`**, dans une transaction annulée :
+    - les quatre gestes, sur une adresse en casse mélangée ;
+    - le compte témoin d'une autre entreprise et un jeton d'un autre fournisseur, épargnés ;
+    - une adresse inconnue refusée sans rien modifier ;
+    - l'annulation, qui rend tout intact.
+
+    Il fonctionne aussi par l'entrée standard, comme le lance `docker compose exec`.
+  - Il ne laisse **aucune ligne** au journal d'accès : le journal attribue chaque ligne à
+    un compte, et l'exploitant n'en est pas un. `DEPLOIEMENT.md` lui demande de consigner
+    le geste, et de vérifier l'identité du demandeur avant, hors de KLEAN.
+- **`DEPLOIEMENT.md`** :
+  - la première connexion impose d'équiper un téléphone (§2.4) ;
+  - le trousseau `cles-api` se sauvegarde et se restaure, **jamais avec la base** (§4) ;
+  - le tableau des volumes dit ce que sa perte coûte (§6) ;
+  - une §10 : l'horloge, le téléphone perdu, le dernier administrateur, le trousseau perdu.
+
+  ⚠️ Les commandes `tar` du trousseau **n'ont été jouées sur aucune instance Docker**, et
+  le document le dit, contrairement à sa promesse d'en-tête.
+- **`RGPD.md`** :
+  - `AspNetUserTokens` entre dans T4, dans la cartographie et dans les durées ;
+  - la nature `ReinitialisationSecondFacteur` est inscrite au journal, en T5 ;
+  - la double authentification rejoint les mesures de l'article 32.
+- **`docker-compose.yml`** : le commentaire du volume `cles-api` ne parlait que des liens
+  de réinitialisation de mot de passe.
+
 ---
 
 # Suite — non planifié

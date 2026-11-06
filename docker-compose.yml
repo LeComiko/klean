@@ -93,8 +93,11 @@ services:
       # l'adresse sous laquelle il est compté (CLAUDE.md §6 bis).
       Proxy__Reseaux__0: 172.28.0.10/32
     volumes:
-      # Clés qui signent les jetons de réinitialisation de mot de passe. Sans
-      # volume, perdues à chaque recréation du conteneur.
+      # Le trousseau de la Data Protection : il chiffre la clé de double
+      # authentification de chaque compte, et signe les jetons de réinitialisation de
+      # mot de passe. Sans volume, perdu à chaque recréation du conteneur, et avec lui
+      # toutes les doubles authentifications. À sauvegarder, jamais avec la base
+      # (DEPLOIEMENT.md §4).
       - cles-api:/home/app/.aspnet/DataProtection-Keys
     networks: [klean]
     logging: *journaux
