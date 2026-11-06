@@ -82,20 +82,32 @@ répond, `docker compose logs caddy` dit en général pourquoi le certificat n'a
 
 ### 2.4 Première connexion
 
-1. Ouvrez `https://VOTRE-DOMAINE` et connectez-vous avec le compte de `.env`. Le rôle
-   administrateur impose la **double authentification** : ayez sous la main un téléphone
-   portant une application d'authentification (Aegis, FreeOTP, Google ou Microsoft
-   Authenticator…). La connexion affiche un QR code, puis remet **dix codes de
-   récupération** : rangez-les hors de cette machine, ils sont la seule sortie si le
-   téléphone se perd (section 10).
-2. Écran **Compte** : changez le mot de passe.
-3. **Videz** dans `.env` les quatre lignes `KLEAN_ADMIN_*`, `KLEAN_RAISON_SOCIALE`
+1. Ouvrez `https://VOTRE-DOMAINE` et connectez-vous avec le compte de `.env`. Ayez sous la
+   main un téléphone portant une application d'authentification (Aegis, FreeOTP, Google
+   ou Microsoft Authenticator…). La connexion enchaîne deux étapes :
+   - **Choisir votre mot de passe.** Celui de `.env` est provisoire : la connexion
+     impose de le remplacer, et refuse de le reprendre tel quel.
+   - **La double authentification**, que le rôle administrateur impose. La connexion
+     affiche un QR code, puis remet **dix codes de récupération** : rangez-les hors de
+     cette machine, ils sont la seule sortie si le téléphone se perd (section 10).
+2. **Videz** dans `.env` les quatre lignes `KLEAN_ADMIN_*`, `KLEAN_RAISON_SOCIALE`
    et `KLEAN_SIRET`.
 
-Le troisième geste n'est pas cosmétique. Ces valeurs ne servent que si la base n'a
+Le second geste n'est pas cosmétique. Ces valeurs ne servent que si la base n'a
 **aucun** compte ; ensuite elles ne servent plus à rien, et le mot de passe initial
-resterait écrit en clair sur le disque. Il n'est plus valable une fois changé, mais
-un mot de passe initial est souvent réemployé ailleurs.
+resterait écrit en clair sur le disque. Il n'est plus valable après la première
+connexion, mais un mot de passe initial est souvent réemployé ailleurs.
+
+⚠️ **Le remplacement imposé du mot de passe initial n'a pas encore été vu sur une instance
+neuve** : la série de tests ne peut pas offrir une base sans aucun compte. Si la première
+connexion passe directement au QR code sans demander de mot de passe, changez-le à la main
+à l'écran **Compte**, et signalez-le.
+
+Les comptes suivants se créent à l'écran **Comptes**, section *Entreprise*. Aucun mot de
+passe n'y est saisi : KLEAN en tire un, l'affiche **une seule fois**, et la personne le
+remplace à sa première connexion. Transmettez-le par un autre canal que son adresse
+électronique — de vive voix, par SMS —, ce qui n'en laisse aucune copie dans une boîte
+aux lettres.
 
 ---
 

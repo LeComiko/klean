@@ -126,9 +126,11 @@ KLEAN/
     └── src/
         ├── api/         wrappers fetch typés, client.ts, ressources.ts, + leurs séries
         ├── auth/        AuthContext, RouteProtegee, motDePasse.ts
+        ├── comptes/     comptes.ts — l'état, les gestes et la création d'un compte
         ├── composants/  un .tsx + un .css par composant
         ├── layout/      Navigation, Disposition, sections.ts
-        ├── pages/       un fichier par écran, plus Reference.tsx et Compte.tsx
+        ├── pages/       un fichier par écran, plus Reference.tsx, Compte.tsx — le sien —
+        │                et Comptes.tsx — ceux de l'entreprise
         ├── reference/   descriptions.ts, valeurs.ts — le motif liste-et-formulaire
         ├── stock/       mouvements.ts, prevision.ts — la saisie et la lecture du stock
         ├── styles/      tokens.css
@@ -253,7 +255,10 @@ les écrans de référence (§11), et ce que lit un humain. Ce que la générati
 - Amorçage au démarrage : crée les rôles, puis une entreprise et un compte
   administrateur si aucun utilisateur n'existe. Lit
   `Amorcage:EmailAdmin`, `Amorcage:MotDePasseAdmin`,
-  `Amorcage:RaisonSocialeEntreprise`.
+  `Amorcage:RaisonSocialeEntreprise`. Ce compte est marqué **provisoire**, comme tout
+  compte créé : son mot de passe a été écrit dans un fichier, et la première connexion
+  le fait remplacer (voir *Comptes de l'entreprise* plus bas). ⚠️ Non éprouvé par un
+  test — la série ne peut pas offrir une base sans aucun compte.
 - Règles de mot de passe : 10 caractères minimum, majuscule, minuscule,
   chiffre. Pas de caractère spécial exigé. Verrouillage après 5 échecs
   pendant 15 minutes.
@@ -354,6 +359,37 @@ les écrans de référence (§11), et ce que lit un humain. Ce que la générati
     environ, aucun code ne passe, et chaque refus avance le verrouillage.
   - En test, la fixture équipe les comptes obligés à leur première connexion et produit
     les codes avec `TotpDeTest`, écrit sans rien reprendre de `Totp`.
+- **Comptes de l'entreprise** (étape 24) : `GET /api/auth/comptes` les liste, et
+  l'écran *Comptes* de la section Entreprise les gère. Tout est réservé à
+  l'administrateur et cadré à la main sur `EntrepriseId` (§7).
+  - **Personne ne choisit le mot de passe d'un autre.** `POST /api/auth/comptes` ne reçoit
+    aucun mot de passe : le serveur en tire un de seize caractères, sans caractères
+    ambigus, le rend **une seule fois** dans `CompteCreeDto`, et marque le compte
+    `MotDePasseProvisoire`. L'administrateur le transmet ; il ne le connaît que jusqu'à la
+    première connexion.
+  - **La première connexion le fait remplacer.** Un bon mot de passe sur un compte
+    provisoire rend 202 `{ etape: "ChangementMotDePasse" }`, sur le même défi que le second
+    facteur, puis `POST /api/auth/connexion/mot-de-passe` enchaîne sur l'équipement, le
+    code ou la session. Le provisoire lui-même y est refusé. Le mot de passe oublié lève
+    aussi le drapeau : la personne l'a choisi.
+  - ⚠️ **Cette étape passe avant le second facteur**, et l'ordre n'est pas libre : changer
+    le mot de passe régénère l'empreinte de sécurité, que le défi porte. Dans l'autre sens,
+    le défi du code serait périmé par le geste qui le précède.
+  - ⚠️ **La route refuse le défi d'une autre étape.** Sans cette garde, qui tient le mot de
+    passe d'un compte équipé le remplacerait sans jamais saisir de code.
+  - ⚠️ **Le drapeau est levé avant `ResetPasswordAsync`**, qui enregistre l'utilisateur
+    entier : les deux changements partent dans la même écriture, et aucun état « mot de
+    passe choisi, toujours provisoire » ne subsiste.
+  - **Fermer et rouvrir** : `POST /api/auth/comptes/{id}/desactiver` et `/reactiver`,
+    journalisés (§7 bis). Fermer pose `Actif = false`, régénère l'empreinte **et** révoque
+    les sessions — les trois, pour la raison du §10 sur les jetons de rafraîchissement.
+    Jamais sur soi-même, et un compte pseudonymisé ne se rouvre pas : 409, qui nomme la
+    sortie, créer un compte neuf. Une garde « dernier administrateur » serait inatteignable
+    — l'appelant en est un, actif — et n'est donc pas écrite (voir §7 bis, la
+    pseudonymisation d'un compte).
+  - ⚠️ **Les deux rendent le compte, et non 204** : le journal ne consigne qu'une réponse
+    porteuse d'un corps. Un 204 n'aurait laissé aucune ligne, sans aucune erreur.
+  - Le rôle ne se change pas : aucune route ne le permet, et l'écran ne le propose pas.
 - **Messages d'Identity en français** via `DescripteurErreursFrancais` : les
   descriptions traversent l'API telles quelles, `AuthController` les recopie dans
   ses `BadRequest`, et l'écran n'a aucun moyen de traduire un texte libre.
@@ -609,7 +645,7 @@ d'écrire du code ici :
 - **Un seul mécanisme de conservation existe** — la purge du journal. Les neuf autres
   durées sont déclaratives, et c'est inscrit noir sur blanc plutôt que supposé.
 
-**Onze lectures sont journalisées, et deux ne s'en doutaient pas.** C'est le fait
+**Douze lectures sont journalisées, et deux ne s'en doutaient pas.** C'est le fait
 central de ce mécanisme : chercher « les routes `/api/agents` et `/api/absences` »
 donne un journal qui a l'air complet et qui a deux trous.
 
@@ -622,8 +658,9 @@ donne un journal qui a l'air complet et qui a deux trous.
 | `GET /api/planning` | `Planning` | nom de **tous** les agents, et la cause « Agent absent » |
 | `GET /api/journal-acces` | `JournalAcces` | le journal lui-même |
 | `GET /api/agents/{id}/dossier` | `Agent` | **tout**, en une réponse — nature `Export` |
-| `GET /api/agents/chefs-equipe` | `Compte` | nom et prénom des chefs d'équipe — la seule liste de comptes |
+| `GET /api/agents/chefs-equipe` | `Compte` | nom et prénom des chefs d'équipe, pour le rattachement |
 | `GET /api/agents/choix` | `ChoixAgents` | nom et prénom des agents, pour les listes déroulantes |
+| `GET /api/auth/comptes` | `Compte` | adresse, nom, prénom, rôle et état de **tous** les comptes de l'entreprise |
 
 ⚠️ **`ChoixAgents` est une ressource à part, et ni une exemption ni une ligne `Agent`.**
 Les écrans des prestations et des absences la chargent à chaque ouverture : journalisée
@@ -662,9 +699,11 @@ divulgue une absence** sans qu'on lise la liste des absences.
 5. **Seules les divulgations sont consignées.** Un 403, un 404, une écriture ne
    laissent rien : rien n'est sorti. Journaliser les tentatives serait un journal de
    sécurité, légitime mais différent — mêlé à celui-ci, le sondage d'un compte mal
-   cadré noierait les divulgations réelles. **Deux exceptions écrites**, des gestes
-   d'administrateur sur le compte d'autrui : l'anonymisation, et la réinitialisation du
-   second facteur (étape 23), qui en abaisse la protection jusqu'au prochain équipement.
+   cadré noierait les divulgations réelles. **Quatre exceptions écrites**, des gestes
+   d'administrateur sur le compte d'autrui : l'anonymisation ; la réinitialisation du
+   second facteur (étape 23), qui en abaisse la protection jusqu'au prochain équipement ;
+   et la fermeture et la réouverture d'un compte (étape 24), natures `Desactivation` et
+   `Reactivation`, qui retirent puis rendent un accès.
 6. **Lecture seule, administrateur seul, purge hors de l'application.**
    `JournalAccesController` n'expose que `GET` : un journal que l'API permet d'élaguer
    ne prouve rien, il suffirait d'un compte administrateur compromis. La conservation
@@ -704,7 +743,7 @@ est consignée dans le test, pas tranchée. Et `ProduitDto` montre le prix de la
 `ClientDto`. Une règle grossière dont chaque exception est écrite vaut mieux qu'une
 règle fine qui laisse passer en silence.
 
-Un second test garde l'excès symétrique — les quatorze actions journalisées sont
+Un second test garde l'excès symétrique — les dix-sept actions journalisées sont
 exactement celles attendues, parce qu'un journal bruyant ne se lit plus.
 
 **`Divulgation` et `Compter` sont `public`, pour être éprouvées directement.** Même
@@ -715,12 +754,13 @@ qu'aucune action ne produit aujourd'hui — notamment qu'une `string`, étant un
 `IEnumerable<char>`, vaut **une** ligne et non cent trente-quatre. Trois sabotages y
 sont restés verts avant que ces tests existent.
 
-**Coût assumé** : une insertion synchrone par lecture sur ces onze endpoints.
+**Coût assumé** : une insertion synchrone par lecture sur ces douze endpoints.
 
-⚠️ **Quatorze attributs pour onze lectures** : deux sont les `Anonymiser`, de l'agent et
+⚠️ **Dix-sept attributs pour douze lectures** : deux sont les `Anonymiser`, de l'agent et
 du compte, qui ne sont pas des lectures mais des **écritures irréversibles** — nature
 `Anonymisation` ; le troisième est la réinitialisation du second facteur d'un autre
-compte — nature `ReinitialisationSecondFacteur`. Et
+compte — nature `ReinitialisationSecondFacteur` ; les deux derniers sont la fermeture et
+la réouverture d'un compte — natures `Desactivation` et `Reactivation`. Et
 `Dossier` porte la nature `Export` plutôt que `Lecture`, parce que sortir le dossier
 complet d'un salarié n'est pas le même geste que consulter sa fiche : les confondre
 ferait disparaître l'export dans le bruit des consultations.
@@ -863,7 +903,8 @@ rattrapage par l'API.
 en `RessourceAccedee.Compte` / `NatureAcces.Anonymisation`. C'est le dernier chemin
 d'effacement du produit : un compte `Responsable`, `Administrateur` ou `ClientSyndic`
 porte `AgentId = null`, donc la pseudonymisation d'agent ne le touchait pas, et aucune
-route ne permettait d'effacer ses données — ni même de le désactiver.
+route ne permettait d'effacer ses données — ni même de le désactiver, ce que
+`/desactiver` fait depuis l'étape 24 (§6).
 
 Mêmes gestes que sur le compte d'un agent — identité remplacée, adresse substituée sur
 `anonymise.invalid`, `Actif = false`, empreinte régénérée, sessions révoquées — plus
@@ -1583,8 +1624,10 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   description et une clé dans `sections.ts` — jamais un fichier de page.
 
   **Ce qui n'est pas une liste à formulaire a sa page**, déclarée dans `ecrans` de sa
-  section : le stock et la prévision de l'étape 22. Une quantité ne se saisit pas, elle
-  résulte d'un mouvement ; une prévision ne s'enregistre pas. Un écran propre porte
+  section : le stock et la prévision de l'étape 22, les comptes de l'étape 24. Une
+  quantité ne se saisit pas, elle résulte d'un mouvement ; une prévision ne s'enregistre
+  pas ; un compte ne se modifie pas, il se ferme, se rouvre ou se pseudonymise, et sa
+  création rend un mot de passe à afficher une fois. Un écran propre porte
   **ses** rôles — la prévision est fermée au chef d'équipe, à qui la section reste
   ouverte —, et la sous-navigation le range après les ressources (`ongletsDe`).
   `sections.test.ts` exige que les rôles d'une section couvrent ceux de ses écrans, et
@@ -1641,6 +1684,12 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   Et pour `src/auth/secondFacteur.ts` (étape 23), avec une raison de plus : côté
   serveur, un code mal formé **compte dans les cinq échecs du verrouillage**. Le refus
   local épargne un essai qui n'en était pas un.
+
+  Et pour `src/comptes/comptes.ts` (étape 24) : l'état d'une ligne, les gestes qu'elle
+  propose — aucun sur sa propre ligne, que le serveur refuserait tous —, la question de
+  confirmation, et le corps de la création. ⚠️ Le masquage y a ses deux moitiés, comme le
+  motif d'une absence (§10) : une fiche agent choisie avant de passer au rôle « Client
+  syndic » part à `null`, sinon elle suivrait un compte qui ne doit pas en porter.
 - **Un QR code se dessine noir sur blanc dans les deux thèmes.** `--qr-fond` et
   `--qr-module` ne sont pas redéfinis par le bloc sombre, et c'est délibéré : un QR
   inversé n'est pas lu par toutes les applications. C'est le seul dessin du produit
@@ -1653,6 +1702,9 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   auprès de la déconnexion. Conséquence heureuse : il est atteignable pour le rôle
   `Agent`, qui n'a aucune section et tombe sur un refus en arrivant — la barre étant
   rendue, son mot de passe lui reste accessible.
+
+  Ne pas confondre avec l'écran **Comptes**, au pluriel : celui-là gère les comptes de
+  l'entreprise, est réservé à l'administrateur, et vit donc dans une section, *Entreprise*.
 
 ---
 

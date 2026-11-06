@@ -2871,6 +2871,33 @@ contraire.
   faux pour ce cas, mais l'effet est le bon ; c'est le comportement de
   `ServiceSession.RafraichirAsync` depuis l'étape 12.
 
+**Lot C — fait le 6 novembre 2026**
+
+- **`RGPD.md`** :
+  - T4 ne dit plus qu'aucune route ne liste les comptes. Elle nomme la liste, la fermeture
+    et la réouverture, ce qui en est journalisé, et le mot de passe tiré par le serveur.
+  - T5 passe à quatre natures de gestes : `Desactivation` et `Reactivation` rejoignent
+    `Anonymisation` et `ReinitialisationSecondFacteur`.
+  - La cartographie gagne `MotDePasseProvisoire` et la route `/api/auth/comptes`.
+  - La durée des comptes nomme les deux gestes de l'écran, fermer puis pseudonymiser.
+  - Le §10 compte dix-sept actions journalisées au lieu de dix, un décompte déjà périmé
+    avant cette étape.
+- **`CLAUDE.md`** :
+  - §4 : l'arborescence porte `comptes/` et `Comptes.tsx`.
+  - §6 : l'amorçage marque le compte provisoire, et un paragraphe *Comptes de
+    l'entreprise* explique le mot de passe tiré, l'étape de première connexion et
+    pourquoi elle passe avant le second facteur, ainsi que la fermeture et la réouverture.
+  - §7 bis : douze lectures, dix-sept attributs, quatre exceptions écrites à la règle 5 ;
+    `chefs-equipe` n'est plus « la seule liste de comptes ».
+  - §11 : l'écran *Comptes* et son module extrait.
+- **`DEPLOIEMENT.md` §2.4** : la première connexion impose de remplacer le mot de passe de
+  `.env`, ce qui retire le geste « changez le mot de passe » de la marche à suivre. Le
+  paragraphe dit que ce comportement n'a pas encore été vu sur une instance neuve, et ce
+  qu'il faut faire s'il manque. Il dit aussi où se créent les comptes suivants.
+- Non repris, et signalé : le §10 de `RGPD.md` cite encore « douze filtres » et « 329 tests
+  côté serveur, 499 côté interface », deux chiffres périmés depuis plusieurs étapes, sans
+  rapport avec celle-ci.
+
 ---
 
 # Suite — non planifié

@@ -126,9 +126,17 @@ d'interface qu'un appel direct contournerait.
 | **Personnes** | utilisateurs |
 | **Données** | adresse de courriel, nom, prénom, téléphone, **empreinte du mot de passe**, rôle, compteur d'échecs et fin de verrouillage, **empreinte** du jeton de rafraîchissement, **adresse IP** de l'ouverture de session ; depuis l'étape 23, la **clé de double authentification chiffrée**, les **empreintes** des codes de récupération et le dernier pas de code accepté |
 | **Tables** | `AspNetUsers`, `AspNetUserRoles`, `AspNetUserTokens`, `JetonsRafraichissement` |
-| **Accès** | aucune route ne **liste** les comptes. `GET /api/auth/moi` rend le sien ; `POST /api/auth/comptes` en crée un, administrateur seul |
+| **Accès** | `GET /api/auth/moi` rend le sien. Depuis l'étape 24, `GET /api/auth/comptes` **liste** ceux de l'entreprise, administrateur seul ; `POST /api/auth/comptes` en crée un, et `/desactiver` et `/reactiver` le ferment et le rouvrent, administrateur seul aussi |
 | **Durée** | voir §5 — et §9.2 pour l'adresse IP |
-| **Journalisé** | non, et délibérément : `ProfilDto` est l'identité de l'appelant lui-même, un journal de « qui a lu son propre nom » est du bruit. **Une exception** : la réinitialisation du second facteur d'un collègue par un administrateur, nature `ReinitialisationSecondFacteur` (T5) |
+| **Journalisé** | pas son propre profil, et délibérément : `ProfilDto` est l'identité de l'appelant lui-même, un journal de « qui a lu son propre nom » est du bruit. **Oui** pour la liste des comptes de l'entreprise, qui nomme des collègues (`Compte` / `Liste`), et pour trois gestes d'administrateur sur le compte d'autrui : la réinitialisation du second facteur, la fermeture et la réouverture (T5) |
+
+⚠️ **Aucun mot de passe n'est choisi par un autre que son titulaire.** Depuis l'étape 24,
+la création ne reçoit plus de mot de passe : le serveur en tire un, l'affiche **une seule
+fois** à l'administrateur, et ne le garde que par empreinte, comme tout autre. La colonne
+`MotDePasseProvisoire` marque le compte jusqu'à la première connexion, qui impose de le
+remplacer. L'administrateur ne connaît donc le mot de passe d'un collègue que jusqu'à ce que
+celui-ci se connecte. Le premier administrateur, dont le mot de passe a été écrit dans
+`.env`, suit la même règle.
 
 ⚠️ **Ni le mot de passe ni le jeton de rafraîchissement ne sont stockés** : seules
 leurs empreintes le sont, SHA-256 pour le second. Une fuite de `JetonsRafraichissement`
@@ -165,11 +173,13 @@ où chaque compte est nominatif.
 ⚠️ **Il est fermé au `Responsable` et au `ChefEquipe`.** Ouvert à eux, il deviendrait
 un outil de surveillance des collègues — ce qu'un journal RGPD n'est pas censé être.
 
-**Deux natures n'y consignent pas une lecture**, mais un geste d'administrateur sur le
-compte d'autrui : `Anonymisation`, irréversible, et depuis l'étape 23
+**Quatre natures n'y consignent pas une lecture**, mais un geste d'administrateur sur le
+compte d'autrui : `Anonymisation`, irréversible ; depuis l'étape 23
 `ReinitialisationSecondFacteur`, qui abaisse la protection d'un collègue jusqu'à son
-prochain équipement. Rien n'y est lu ; c'est l'exception écrite à la règle « seules les
-divulgations sont consignées » de `CLAUDE.md` §7 bis. ⚠️ Le même geste joué par
+prochain équipement ; et depuis l'étape 24 `Desactivation` et `Reactivation`, qui lui
+retirent puis lui rendent l'accès. Rien n'y est lu ; c'est l'exception écrite à la règle
+« seules les divulgations sont consignées » de `CLAUDE.md` §7 bis. La ligne ne dit que
+l'auteur, le compte visé et l'instant — jamais le nom de la personne. ⚠️ Le même geste joué par
 l'exploitant, en base, par `backend/Scripts/reinitialiser-second-facteur.sql`, **ne laisse
 aucune ligne** : le journal attribue chaque ligne à un compte, et l'exploitant n'en est
 pas un. `DEPLOIEMENT.md` §10 lui demande de consigner le geste de son côté.
@@ -209,7 +219,7 @@ Les treize tables du modèle, plus les tables d'Identity. « DP » = donnée per
 | `TypesPrestation` | aucune — un libellé de catalogue et une durée | — | `/api/types-prestation` |
 | `ConsommationsType` | aucune — une quantité de produit par passage d'un type | — | `/api/consommations-type` ; la prévision `/api/stocks/prevision` en dérive des besoins **par site**, sans agent ni vacation nommés |
 | `AccesJournalises` | `UtilisateurId`, `CibleId`, `Horodatage` | trace d'activité d'un utilisateur | `/api/journal-acces` |
-| `AspNetUsers` | `Email`, `UserName`, `PhoneNumber`, `Nom`, `Prenom`, `PasswordHash`, verrouillage, `DateAnonymisation` | identité et **secret d'authentification** | `/api/auth/moi`, et nom et prénom des chefs d'équipe par `/api/agents/chefs-equipe` (administrateur, journalisée) |
+| `AspNetUsers` | `Email`, `UserName`, `PhoneNumber`, `Nom`, `Prenom`, `PasswordHash`, verrouillage, `MotDePasseProvisoire`, `DateAnonymisation` | identité et **secret d'authentification** ; `MotDePasseProvisoire` dit seulement si la personne s'est déjà connectée | `/api/auth/moi` ; adresse, nom, prénom, rôle et état de chaque compte par `/api/auth/comptes` (administrateur, journalisée) ; nom et prénom des chefs d'équipe par `/api/agents/chefs-equipe` (administrateur, journalisée) |
 | `AspNetUserTokens` | sous le fournisseur `[KleanSecondFacteur]` : `Cle` (la clé de double authentification, **chiffrée**), `CodesRecuperation` (des **empreintes**), `DernierPas` (un numéro de pas de trente secondes) | **secret d'authentification** | **aucune route** — la clé ne sort qu'une fois, au QR code de l'équipement, et les codes qu'une fois, à leur création |
 | `JetonsRafraichissement` | `UtilisateurId`, **`AdresseIp`**, dates | trace de connexion | **aucune route** |
 
@@ -276,7 +286,7 @@ est la dernière : une durée sans mécanisme est une promesse que personne ne t
 | Interventions et leur statut | 5 ans | preuve des passages facturés, prescription de l'action contractuelle | 📋 `conservation-donnees-metier.sql` §1 |
 | Remplacements et scores | 1 an | état dérivé, sans valeur probante au-delà de l'exercice | 📋 `conservation-donnees-metier.sql` §3 |
 | Clients et sites | durée du contrat, puis 5 ans ; sans contrat, 5 ans après la création | relation commerciale ; pour un prospect jamais signé, la CNIL retient plutôt 3 ans (§9.7) | 📋 `conservation-donnees-metier.sql` §4 et §5 |
-| Comptes (`AspNetUsers`) | désactivation à la sortie, effacement à 5 ans | un compte désactivé reste nécessaire pour attribuer les lignes du journal | 📋 geste manuel par `POST /api/auth/comptes/{id}/anonymiser` (§9.3) |
+| Comptes (`AspNetUsers`) | désactivation à la sortie, effacement à 5 ans | un compte désactivé reste nécessaire pour attribuer les lignes du journal | 📋 deux gestes manuels, à l'écran *Comptes* : **Fermer** à la sortie (`/desactiver`, depuis l'étape 24), puis **Pseudonymiser** (`/anonymiser`, §9.3) |
 | Second facteur (`AspNetUserTokens`) | tant qu'il est actif ; effacé au retrait, à la réinitialisation et à la pseudonymisation du compte | un secret qui n'authentifie plus rien n'a aucun usage | ✅ par construction : chaque retrait efface les trois jetons, et `ServiceAnonymisation` les efface sur ses deux chemins |
 | Jetons de rafraîchissement | **30 jours après révocation ou expiration** | la fenêtre de diagnostic d'un rejeu ; au-delà, seule l'adresse IP survit, sans usage | ✅ `purge-jetons-rafraichissement.sql` |
 | Journal d'accès | **12 mois** | un journal RGPD est lui-même une donnée personnelle | ✅ `purge-journal-acces.sql` |
@@ -560,7 +570,8 @@ si un compte porte cet `AgentId`. Un compte de rôle `Responsable`, `Administrat
 `ClientSyndic` a `AgentId = null` : **aucun endpoint ne permettait d'effacer ses
 données.** Son nom, son prénom et son courriel restaient en base indéfiniment, et il
 n'existait même pas de route pour le désactiver — la fixture de tests le fait directement
-en base, faute d'endpoint.
+en base, faute d'endpoint. La fermeture d'un compte, `/desactiver`, n'existe que depuis
+l'étape 24.
 
 Ce n'était pas un oubli du lot B, qui traitait la demande d'effacement d'un **agent** ;
 c'était un trou du modèle de droits, et il concernait les personnes les mieux placées
@@ -734,8 +745,12 @@ Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail es
 - **Transport et navigateur** : HTTPS, HSTS hors développement, protection CSRF par
   double soumission, politique de sécurité du contenu en `default-src 'none'` sur
   l'API, limite de taille de corps appliquée avant toute lecture.
-- **Journalisation des accès** : dix actions, dont les trois que personne n'aurait
-  cherchées — les deux routes de candidats et le planning.
+- **Journalisation des accès** : dix-sept actions — douze lectures, dont les trois que
+  personne n'aurait cherchées, les deux routes de candidats et le planning, et cinq
+  gestes d'administrateur sur le compte ou la fiche d'autrui.
+- **Mots de passe des comptes créés** (étape 24) : tirés par le serveur, montrés une seule
+  fois, et remplacés obligatoirement à la première connexion — un administrateur ne garde
+  la connaissance du mot de passe d'un collègue que jusque-là.
 - **Traçabilité du code** : 329 tests côté serveur, 499 côté interface, et la
   discipline de validation par sabotage décrite dans `CLAUDE.md`.
 - ⚠️ **Les valeurs de paramètres SQL ne sont pas journalisées** :
