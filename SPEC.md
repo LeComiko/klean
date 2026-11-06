@@ -2692,6 +2692,97 @@ Corrigé :
 
 ---
 
+# Étape 24 — Les comptes de l'entreprise
+
+L'étape 23 a laissé un geste sans écran : la réinitialisation du second facteur d'un
+collègue n'existe que par l'API. Elle n'est pas seule. **Aucun écran ne gère les comptes**,
+et un administrateur qui prépare le pilote ne peut ni voir qui a accès, ni ouvrir un
+compte, ni fermer celui d'une personne partie.
+
+**Ce qui existe, relu le 6 novembre 2026**
+
+- **`POST /api/auth/comptes`** crée un compte, administrateur seul, sans écran. Il vérifie
+  le rôle, exige un `AgentId` pour le rôle `Agent` et un `ClientId` pour `ClientSyndic`,
+  et cadre les deux à la main sur l'entreprise de l'appelant.
+- **`POST /api/auth/comptes/{id}/anonymiser`** et
+  **`POST /api/auth/comptes/{id}/reinitialiser-second-facteur`** existent, sans écran.
+- ⚠️ **Aucune route ne liste les comptes.** `GET /api/agents/chefs-equipe` est la seule
+  lecture de comptes, et elle ne rend que les chefs d'équipe, pour le rattachement.
+- ⚠️ **Aucune route ne désactive un compte**, ni ne le réactive. La pseudonymisation le
+  fait, mais elle est irréversible ; la fixture de tests le fait en base, faute d'endpoint.
+  Une personne partie garde donc son accès tant qu'on ne l'efface pas.
+- ⚠️ **À la création, c'est l'administrateur qui choisit le mot de passe du collègue**, et
+  il le connaît. C'est exactement ce que `CLAUDE.md` §6 dit vouloir éviter à propos du
+  changement de mot de passe. Rien n'oblige à le changer à la première connexion.
+- `AspNetUsers` n'est pas filtrée (`CLAUDE.md` §7) : la liste filtre à la main sur
+  `EntrepriseId`, et son test construit l'intrus d'une autre entreprise directement en base.
+
+**Ce que je propose**
+
+1. **`GET /api/auth/comptes`**, administrateur seul, journalisé en `Compte` / `Liste`.
+   L'invariante de `JournalAccesTests` l'exigera d'elle-même, puisque le DTO portera `Nom`
+   et `Email`. Les colonnes : nom, prénom, adresse, rôle, actif, double authentification
+   active ou non, la fiche agent ou le client rattachés, la date de création, et la date de
+   pseudonymisation s'il y en a une. ⚠️ **Pas de dernière connexion** : elle n'est pas
+   stockée, se déduirait de `JetonsRafraichissement`, et serait une donnée de surveillance
+   des collègues à justifier dans `RGPD.md` pour un usage que personne n'a demandé.
+2. **Un écran « Comptes »**, administrateur seul, rangé dans la section *Entreprise* comme
+   un écran propre (`ecrans` de `sections.ts`). Ce n'est pas un écran de référence : la
+   création porte un mot de passe et des règles par rôle, et les gestes de ligne sont tous
+   hors CRUD. Chaque ligne porte les gestes qui existent : réinitialiser la double
+   authentification, pseudonymiser — ou, pour un compte rattaché à une fiche, le lien vers
+   cette fiche, comme le dit déjà le refus 409 du serveur.
+3. **La création, dans le même lot.** Une liste qui ne crée rien laisse l'administrateur
+   dans Swagger pour la moitié du travail.
+
+**À trancher avant le lot A**
+
+| Question | Options | Penchant |
+|---|---|---|
+| Le mot de passe initial | l'administrateur le choisit, comme aujourd'hui ; le serveur en tire un, affiché une fois, et la première connexion impose de le changer ; une invitation par courriel | **Tiré par le serveur, changé à la première connexion.** L'administrateur ne choisit rien et ne peut rien réemployer ; ce qu'il transmet ne sert qu'une fois. La connexion gagne une étape `ChangementMotDePasse`, sur le même défi que le second facteur. ⚠️ Il faut une colonne, donc une **migration additive**, à présenter avant de la jouer. L'invitation par courriel est exclue comme chemin unique : le SMTP est optionnel (`CLAUDE.md` §2) |
+| Désactiver et réactiver | dans ce lot ; plus tard ; jamais, la pseudonymisation suffit | **Dans ce lot.** Une personne partie doit perdre son accès le jour même, sans effacement irréversible : son compte attribue encore les lignes du journal, et une erreur d'identifiant doit se rattraper. Désactiver régénère l'empreinte et coupe les sessions, comme la pseudonymisation ; jamais sur soi-même, jamais le dernier administrateur actif |
+| Changer le rôle d'un compte | dans ce lot ; plus tard | **Plus tard.** Un changement de rôle touche l'obligation du second facteur, le rattachement des agents à un chef et la frontière du syndic. C'est un lot à lui seul. En attendant : désactiver, puis créer |
+| Les comptes pseudonymisés | affichés, marqués de leur date ; masqués | **Affichés en fin de liste, marqués.** Le registre doit pouvoir montrer qu'un effacement a eu lieu, et un compte masqué serait recréé par erreur sous la même adresse — ce qu'Identity refuserait d'ailleurs, sans que l'écran sache dire pourquoi |
+| Pagination | paginée comme les listes de référence ; entière, bornée par l'effectif | **Entière**, comme les candidats et les chefs d'équipe : sa taille est bornée par l'effectif et les clients syndics, quelques centaines de lignes au plus. Un filtre par rôle côté écran suffit |
+
+**Réponses obtenues le 6 novembre 2026** — les quatre penchants posés en question sont
+retenus. Celui de la pagination n'a pas été posé : il est retenu par défaut, sauf avis
+contraire.
+
+| Question | Réponse | Ce que cela veut dire dans le code |
+|---|---|---|
+| Mot de passe initial | **tiré par le serveur, changé à la première connexion** | `CompteCreateDto` perd `MotDePasse`, la réponse le rend une fois ; une colonne marque le mot de passe provisoire, par une migration additive présentée avant d'être jouée ; la connexion rend 202 `{ etape: "ChangementMotDePasse" }` avant le second facteur |
+| Désactiver et réactiver | **dans ce lot** | deux routes administrateur, journalisées ; désactiver régénère l'empreinte et coupe les sessions ; jamais sur soi, jamais le dernier administrateur actif |
+| Changer le rôle | **plus tard** | aucune route ; l'écran ne propose pas de modifier le rôle |
+| Comptes pseudonymisés | **affichés en fin de liste, marqués** | la liste les rend avec `DateAnonymisation`, l'écran les trie à la fin, sans geste de ligne |
+| Pagination | **entière** (par défaut) | comme `chefs-equipe` : non paginée, triée par nom, un filtre par rôle côté écran |
+
+**Conséquences à vérifier au cadrage**
+
+- **`RGPD.md` devient faux à deux endroits** : T4 dit « aucune route ne liste les
+  comptes », et le décompte des lectures journalisées change. `CLAUDE.md` §7 bis aussi :
+  « onze lectures », et `chefs-equipe` décrite comme « la seule liste de comptes ».
+- **Le test qui fige les actions journalisées** s'allonge de la liste, et de la
+  désactivation si elle est journalisée. Je penche pour la journaliser, sur le précédent de
+  la réinitialisation du second facteur : un geste d'administrateur sur le compte d'autrui.
+- **L'étape `ChangementMotDePasse`** passe avant le second facteur à la connexion : un
+  compte obligé équipe son téléphone **après** avoir choisi son mot de passe. Le
+  `DEPLOIEMENT.md` §2.4 change aussi : le premier administrateur de l'amorçage passerait par
+  là, ce qui rendrait inutile le conseil de changer le mot de passe initial à la main.
+- **Hors de ce lot, et dit tel quel** : l'écran du journal d'accès, qui n'en a pas non plus.
+
+**Lots, provisoires**
+
+- **A** — le serveur : la liste, la désactivation et la réactivation, le mot de passe
+  provisoire et son étape de connexion, la migration présentée avant d'être jouée, un
+  sabotage par garde.
+- **B** — l'écran : la liste, la création avec ses règles par rôle et le mot de passe
+  affiché une fois, les gestes de ligne ; l'étape de changement de mot de passe à la
+  connexion ; la logique de conversion extraite dans un module éprouvé.
+- **C** — les documents : `RGPD.md`, `CLAUDE.md` §6 et §7 bis, `DEPLOIEMENT.md` §2.4.
+
+---
+
 # Suite — non planifié
 
 Par ordre de valeur, à cadrer le moment venu.
