@@ -29,6 +29,13 @@ public static class RolesKlean
     /// <summary>Lecture interne, plus l'agent cadré sur ses propres interventions.</summary>
     public const string InterneEtAgent = $"{Interne},{Agent}";
 
+    /// <summary>
+    /// Les rôles qui n'ouvrent aucune session sans second facteur (SPEC.md, étape 23) :
+    /// ils lisent les domiciles, les arrêts maladie et le dossier complet d'un salarié.
+    /// Les autres comptes peuvent l'activer, sans y être tenus.
+    /// </summary>
+    public static readonly string[] ObligesAuSecondFacteur = [Administrateur, Responsable];
+
     public static readonly string[] Tous =
     [
         Administrateur,

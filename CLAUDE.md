@@ -98,11 +98,11 @@ KLEAN/
 │   │                    + RolesKlean
 │   ├── Data/            KleanDbContext (filtres multi-tenant)
 │   ├── DTOs/            un fichier par entité, XxxDto + XxxCreateDto
-│   ├── Controllers/     un par entité + Auth + Planning
+│   ├── Controllers/     un par entité + Auth + SecondFacteur + Planning
 │   ├── Services/        AffectationService, RemplacementService,
 │   │                    PlanningService, ServiceGeneration, JoursFeries,
 │   │                    ServiceStock, ServicePrevisionStock,
-│   │                    JwtService, ServiceSession,
+│   │                    JwtService, ServiceSession, ServiceSecondFacteur, Totp,
 │   │                    AmorcageService, TenantContext, LimiteurDebit,
 │   │                    ServiceCourrielSmtp, DescripteurErreursFrancais,
 │   │                    ListeTypePrestations
@@ -315,6 +315,30 @@ les écrans de référence (§11), et ce que lit un humain. Ce que la générati
 
   ⚠️ Elle tue aussi le jeton qui a servi à l'appeler. C'est voulu : « tous les
   appareils » inclut celui-ci, et les cookies sont effacés dans la même réponse.
+- **Double authentification** (étape 23) : codes TOTP à six chiffres, **obligatoire**
+  pour `Administrateur` et `Responsable` (`RolesKlean.ObligesAuSecondFacteur`),
+  facultative pour les autres. `ServiceSecondFacteur` et `SecondFacteurController`.
+  - **La connexion se fait en deux temps.** Un bon mot de passe sur un compte équipé, ou
+    obligé, rend **202** `{ etape: "SecondFacteur" | "Equipement" }` et un cookie de défi
+    de cinq minutes (`klean_defi`, chemin `/api/auth`, chiffré, lié à l'empreinte de
+    sécurité). `POST /api/auth/connexion/code` ouvre ensuite la session. Le compte obligé
+    non équipé s'équipe **dans** la connexion : `preparer` et `activer` acceptent ce défi
+    à la place d'une session.
+  - **Aucune session sans second facteur pour un rôle obligé** : `OnTokenValidated` et le
+    rafraîchissement le refusent, sans lecture de plus.
+  - ⚠️ **Rien de l'authentificateur d'Identity n'est employé**, et ce n'est pas un oubli :
+    il range la clé et les codes en clair, et accepte un code cinq pas durant, autant de
+    fois qu'on veut. Ici, la clé est chiffrée par la Data Protection, dont le trousseau
+    vit hors de la base ; les codes de récupération, sur 80 bits, ne sont gardés que par
+    empreinte ; et un code ne sert qu'une fois, à un pas près de tolérance. Le tout tient
+    en trois jetons du fournisseur `[KleanSecondFacteur]` dans `AspNetUserTokens`.
+  - ⚠️ **Un code faux compte dans le verrouillage, avec ceux du mot de passe** : cinq en
+    tout. Sans ce partage, le million de codes s'essaierait à côté du verrou.
+  - ⚠️ **Perdre le trousseau de la Data Protection, c'est perdre toutes les clés** : le
+    volume `cles-api` se sauvegarde avec la base. Une clé indéchiffrable lève une erreur
+    qui nomme la cause, plutôt que de répondre « code faux » jusqu'au verrouillage.
+  - En test, la fixture équipe les comptes obligés à leur première connexion et produit
+    les codes avec `TotpDeTest`, écrit sans rien reprendre de `Totp`.
 - **Messages d'Identity en français** via `DescripteurErreursFrancais` : les
   descriptions traversent l'API telles quelles, `AuthController` les recopie dans
   ses `BadRequest`, et l'écran n'a aucun moyen de traduire un texte libre.
@@ -623,7 +647,9 @@ divulgue une absence** sans qu'on lise la liste des absences.
 5. **Seules les divulgations sont consignées.** Un 403, un 404, une écriture ne
    laissent rien : rien n'est sorti. Journaliser les tentatives serait un journal de
    sécurité, légitime mais différent — mêlé à celui-ci, le sondage d'un compte mal
-   cadré noierait les divulgations réelles.
+   cadré noierait les divulgations réelles. **Deux exceptions écrites**, des gestes
+   d'administrateur sur le compte d'autrui : l'anonymisation, et la réinitialisation du
+   second facteur (étape 23), qui en abaisse la protection jusqu'au prochain équipement.
 6. **Lecture seule, administrateur seul, purge hors de l'application.**
    `JournalAccesController` n'expose que `GET` : un journal que l'API permet d'élaguer
    ne prouve rien, il suffirait d'un compte administrateur compromis. La conservation
@@ -663,7 +689,7 @@ est consignée dans le test, pas tranchée. Et `ProduitDto` montre le prix de la
 `ClientDto`. Une règle grossière dont chaque exception est écrite vaut mieux qu'une
 règle fine qui laisse passer en silence.
 
-Un second test garde l'excès symétrique — les treize actions journalisées sont
+Un second test garde l'excès symétrique — les quatorze actions journalisées sont
 exactement celles attendues, parce qu'un journal bruyant ne se lit plus.
 
 **`Divulgation` et `Compter` sont `public`, pour être éprouvées directement.** Même
@@ -676,9 +702,10 @@ sont restés verts avant que ces tests existent.
 
 **Coût assumé** : une insertion synchrone par lecture sur ces onze endpoints.
 
-⚠️ **Treize attributs pour onze lectures** : les deux autres sont les deux `Anonymiser`, de
-l'agent et du compte, qui ne sont pas des lectures mais des **écritures irréversibles** —
-nature `Anonymisation`. Et
+⚠️ **Quatorze attributs pour onze lectures** : deux sont les `Anonymiser`, de l'agent et
+du compte, qui ne sont pas des lectures mais des **écritures irréversibles** — nature
+`Anonymisation` ; le troisième est la réinitialisation du second facteur d'un autre
+compte — nature `ReinitialisationSecondFacteur`. Et
 `Dossier` porte la nature `Export` plutôt que `Lecture`, parce que sortir le dossier
 complet d'un salarié n'est pas le même geste que consulter sa fiche : les confondre
 ferait disparaître l'export dans le bruit des consultations.

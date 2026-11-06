@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using Klean.Api.Data;
 using Klean.Api.DTOs;
@@ -27,6 +28,13 @@ public class FixtureApi : IAsyncLifetime
 
     public const string AdminAlpha = "admin.alpha@test.local";
     public const string AdminBeta = "admin.beta@test.local";
+
+    /// <summary>
+    /// La clé de chaque compte équipé par la fixture, telle que l'écran l'a affichée :
+    /// ce que le téléphone aurait retenu. Vidée avec la base.
+    /// </summary>
+    private readonly Dictionary<string, string> _cles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IReadOnlyList<string>> _codes = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task InitializeAsync()
     {
@@ -72,6 +80,8 @@ public class FixtureApi : IAsyncLifetime
         // finit par se bloquer elle-même sur sa propre limitation de débit. Les
         // tests exercent ainsi les vrais plafonds de production.
         portee.ServiceProvider.GetRequiredService<LimiteurDebit>().Vider();
+        _cles.Clear();
+        _codes.Clear();
         Fabrique.Courriels.Reinitialiser();
         Fabrique.Horloge.Liberer();
 
@@ -140,19 +150,129 @@ public class FixtureApi : IAsyncLifetime
     /// session vit dans trois cookies, que <c>CookieContainer</c> renvoie tout
     /// seul. Reste à faire ce que fera le frontend — recopier le cookie anti-CSRF
     /// dans un en-tête, puisque le navigateur ne le fait pas de lui-même.
+    ///
+    /// Depuis l'étape 23, l'administrateur et le responsable ne reçoivent pas de session
+    /// sur leur seul mot de passe : la fixture les équipe à leur première connexion, par
+    /// les routes de l'écran, puis produit un code à chacune des suivantes.
     /// </summary>
     public async Task<HttpClient> ClientConnecteAsync(string email)
     {
         var client = Fabrique.CreerClient();
 
-        var reponse = await client.PostAsJsonAsync("/api/auth/connexion",
-            new ConnexionDto { Email = email, MotDePasse = MotDePasse });
+        var reponse = await ConnexionCompleteAsync(client, email);
 
         reponse.EnsureSuccessStatusCode();
 
         ArmerCsrf(client, reponse);
 
         return client;
+    }
+
+    /// <summary>
+    /// La connexion jusqu'à la session : le mot de passe, puis, sur un 202, l'équipement
+    /// ou le code. Rend la réponse qui pose les cookies de session — ou la première, telle
+    /// quelle, si elle n'est pas un 202 : un refus de mot de passe reste observable. Le
+    /// corps d'une réussite est toujours une <c>SessionDto</c>.
+    ///
+    /// Pour les séries qui éprouvent la session et non le second facteur : les cookies de
+    /// session qu'elles inspectent viennent désormais de la dernière réponse.
+    /// </summary>
+    public async Task<HttpResponseMessage> ConnexionCompleteAsync(
+        HttpClient client, string email, string motDePasse = MotDePasse)
+    {
+        var reponse = await client.PostAsJsonAsync("/api/auth/connexion",
+            new ConnexionDto { Email = email, MotDePasse = motDePasse });
+
+        if (reponse.StatusCode != HttpStatusCode.Accepted) return reponse;
+
+        var etape = await reponse.Content.ReadFromJsonAsync<EtapeConnexionDto>();
+
+        if (etape!.Etape == nameof(EtapeDefi.SecondFacteur)) return await SaisirCodeAsync(client, email);
+
+        // Premier passage : l'activation ouvre bien une session, mais son corps porte les
+        // codes de récupération. L'équipement se fait donc sur un client à part, comme sur
+        // un autre appareil, puis la connexion reprend sur celui de l'appelant : il reçoit
+        // une réponse de connexion ordinaire, et ne garde aucun cookie de l'activation.
+        var appareil = Fabrique.CreerClient();
+        await appareil.PostAsJsonAsync("/api/auth/connexion",
+            new ConnexionDto { Email = email, MotDePasse = motDePasse });
+        var activation = await EquiperAsync(appareil, email);
+
+        // Puis cet appareil se déconnecte : une session de plus fausserait les séries qui
+        // comptent les sessions actives d'un compte.
+        ArmerCsrf(appareil, activation);
+        (await appareil.PostAsync("/api/auth/deconnexion", null)).EnsureSuccessStatusCode();
+
+        return await ConnexionCompleteAsync(client, email, motDePasse);
+    }
+
+    /// <summary>La clé que la fixture a scannée pour ce compte.</summary>
+    public string CleDe(string email) => _cles[email];
+
+    /// <summary>Les codes de récupération remis à l'activation, dans l'ordre.</summary>
+    public IReadOnlyList<string> CodesDe(string email) => _codes[email];
+
+    /// <summary>Le code que l'application du téléphone afficherait à l'heure du serveur.</summary>
+    public string CodeActuel(string email) => TotpDeTest.Code(_cles[email], Fabrique.Horloge.GetUtcNow());
+
+    /// <summary>
+    /// Le premier temps de l'équipement imposé : préparer, lire la clé, activer. Le
+    /// cookie de défi est dans le <c>CookieContainer</c> du client.
+    /// </summary>
+    public async Task<HttpResponseMessage> EquiperAsync(HttpClient client, string email)
+    {
+        var preparation = await client.PostAsync("/api/auth/second-facteur/preparer", null);
+        preparation.EnsureSuccessStatusCode();
+
+        var cle = (await preparation.Content.ReadFromJsonAsync<PreparationSecondFacteurDto>())!.Cle;
+        _cles[email] = cle;
+
+        var activation = await client.PostAsJsonAsync("/api/auth/second-facteur/activer",
+            new CodeSecondFacteurDto { Code = CodeActuel(email) });
+
+        if (!activation.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"Activation du second facteur impossible pour {email} : "
+                + await activation.Content.ReadAsStringAsync());
+        }
+
+        _codes[email] = (await activation.Content.ReadFromJsonAsync<CodesRecuperationDto>())!.Codes;
+
+        return activation;
+    }
+
+    /// <summary>
+    /// Le second temps d'une connexion ordinaire.
+    ///
+    /// ⚠️ <b>Oublie d'abord le dernier pas accepté du compte</b>, et c'est un
+    /// contournement délibéré, réservé à cette aide : un code ne sert qu'une fois, et un
+    /// test qui connecte deux fois le même compte en trente secondes buterait sinon sur
+    /// la garde du rejeu. Celle-ci est éprouvée par <c>SecondFacteurTests</c>, qui
+    /// n'appelle jamais cette méthode.
+    /// </summary>
+    private async Task<HttpResponseMessage> SaisirCodeAsync(HttpClient client, string email)
+    {
+        await AvecServicesAsync(async services =>
+        {
+            var utilisateurs = services.GetRequiredService<UserManager<Utilisateur>>();
+            var compte = await utilisateurs.FindByEmailAsync(email);
+
+            await utilisateurs.RemoveAuthenticationTokenAsync(
+                compte!, ServiceSecondFacteur.Fournisseur, ServiceSecondFacteur.JetonDernierPas);
+        });
+
+        var reponse = await client.PostAsJsonAsync("/api/auth/connexion/code",
+            new CodeSecondFacteurDto { Code = CodeActuel(email) });
+
+        if (!reponse.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"Second temps de la connexion refusé pour {email} : "
+                + await reponse.Content.ReadAsStringAsync());
+        }
+
+        return reponse;
     }
 
     /// <summary>

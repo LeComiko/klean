@@ -76,7 +76,9 @@ public class LimitationDebitTests : IAsyncLifetime
 
         var autre = await Connexion(client, FixtureApi.AdminBeta, FixtureApi.MotDePasse);
 
-        Assert.Equal(HttpStatusCode.OK, autre.StatusCode);
+        // 202 et non 200 depuis l'étape 23 : le mot de passe est accepté, le second
+        // facteur suit. Ce qui compte ici est l'absence de 429.
+        Assert.Equal(HttpStatusCode.Accepted, autre.StatusCode);
     }
 
     // ------------------------------------------------------------ par adresse

@@ -214,6 +214,7 @@ var jwt = new JwtService(builder.Configuration);
 builder.Services.AddSingleton(jwt);
 builder.Services.AddScoped<AmorcageService>();
 builder.Services.AddScoped<ServiceSession>();
+builder.Services.AddScoped<ServiceSecondFacteur>();
 
 // Singletons : le compteur de débit doit survivre aux requêtes, et la
 // configuration SMTP est lue une fois pour toutes.
@@ -325,6 +326,16 @@ builder.Services.AddAuthentication(options =>
                 if (empreinte != utilisateur.SecurityStamp)
                 {
                     contexte.Fail("Session invalidée : les droits ou le mot de passe ont changé.");
+                    return;
+                }
+
+                // Aucune session sans second facteur pour un rôle qui l'exige (SPEC.md,
+                // étape 23). Sans lecture de plus : le compte est déjà chargé, les rôles
+                // sont dans le jeton. Le rafraîchissement refuse le même cas.
+                if (!utilisateur.TwoFactorEnabled
+                    && RolesKlean.ObligesAuSecondFacteur.Any(contexte.Principal!.IsInRole))
+                {
+                    contexte.Fail("Ce compte doit activer la double authentification.");
                 }
             }
         };

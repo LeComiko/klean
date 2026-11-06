@@ -287,6 +287,5 @@ public class ChangementMotDePasseTests : IAsyncLifetime
             });
 
     private Task<HttpResponseMessage> Connexion(string email, string motDePasse) =>
-        _fixture.ClientAnonyme().PostAsJsonAsync("/api/auth/connexion",
-            new ConnexionDto { Email = email, MotDePasse = motDePasse });
+        _fixture.ConnexionCompleteAsync(_fixture.ClientAnonyme(), email, motDePasse);
 }

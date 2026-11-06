@@ -23,6 +23,7 @@ public class AuthController : ControllerBase
     private readonly LimiteurDebit _debit;
     private readonly IConfiguration _configuration;
     private readonly ServiceAnonymisation _anonymisation;
+    private readonly ServiceSecondFacteur _secondFacteur;
 
     public AuthController(
         KleanDbContext db,
@@ -32,9 +33,11 @@ public class AuthController : ControllerBase
         IServiceCourriel courriel,
         LimiteurDebit debit,
         IConfiguration configuration,
-        ServiceAnonymisation anonymisation)
+        ServiceAnonymisation anonymisation,
+        ServiceSecondFacteur secondFacteur)
     {
         _anonymisation = anonymisation;
+        _secondFacteur = secondFacteur;
         _db = db;
         _utilisateurs = utilisateurs;
         _connexions = connexions;
@@ -47,6 +50,10 @@ public class AuthController : ControllerBase
     /// <summary>
     /// Connexion. Pose les trois cookies de session et ne renvoie <b>aucun</b>
     /// jeton dans le corps.
+    ///
+    /// <b>200</b> avec la session si le mot de passe suffit ; <b>202</b> avec l'étape
+    /// suivante — <c>SecondFacteur</c> ou <c>Equipement</c> — si le compte a, ou doit
+    /// avoir, un second facteur (<see cref="SecondFacteurController"/>).
     /// </summary>
     [AllowAnonymous]
     [HttpPost("connexion")]
@@ -84,6 +91,21 @@ public class AuthController : ControllerBase
         if (!resultat.Succeeded)
         {
             return Unauthorized("Identifiants invalides.");
+        }
+
+        // Le mot de passe ne suffit pas toujours (SPEC.md, étape 23). Aucune session
+        // n'est alors ouverte : un cookie de défi de cinq minutes mène au second temps,
+        // ou à l'équipement d'un compte que son rôle oblige.
+        if (utilisateur.TwoFactorEnabled)
+        {
+            _secondFacteur.PoserDefi(HttpContext, utilisateur, EtapeDefi.SecondFacteur);
+            return Accepted(new EtapeConnexionDto { Etape = nameof(EtapeDefi.SecondFacteur) });
+        }
+
+        if (await _secondFacteur.EstObligeAsync(utilisateur))
+        {
+            _secondFacteur.PoserDefi(HttpContext, utilisateur, EtapeDefi.Equipement);
+            return Accepted(new EtapeConnexionDto { Etape = nameof(EtapeDefi.Equipement) });
         }
 
         return Ok(await _session.OuvrirAsync(HttpContext, utilisateur));

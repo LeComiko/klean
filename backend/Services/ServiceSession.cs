@@ -126,11 +126,24 @@ public class ServiceSession
             return ResultatSession.Refus("Ce compte est désactivé.");
         }
 
+        var roles = await RolesAsync(utilisateur);
+
+        // ⚠️ Un compte que son rôle oblige au second facteur n'a pas de session sans lui
+        // (SPEC.md, étape 23). Celles ouvertes avant l'obligation, ou survivant à une
+        // désactivation, s'arrêtent ici : sans ce refus, une session de quatorze jours
+        // d'avant le déploiement continuerait de se renouveler par mot de passe seul.
+        if (!utilisateur.TwoFactorEnabled && ServiceSecondFacteur.EstOblige(roles))
+        {
+            await RevoquerToutAsync(utilisateur.Id, "Second facteur exigé");
+            EffacerCookies(contexte);
+            return ResultatSession.Refus(
+                "Ce compte doit activer la double authentification. Se reconnecter.");
+        }
+
         var valeur = await EmettreRafraichissementAsync(
             contexte, utilisateur.Id, jeton.DateExpiration, jeton);
 
-        return ResultatSession.Ok(
-            PoserCookies(contexte, utilisateur, valeur, await RolesAsync(utilisateur)));
+        return ResultatSession.Ok(PoserCookies(contexte, utilisateur, valeur, roles));
     }
 
     /// <summary>

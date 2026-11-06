@@ -15,6 +15,12 @@ public class HorlogeDeTest : TimeProvider
     public void Fixer(DateOnly jour, int heure = 9) =>
         _fixee = new DateTimeOffset(jour.ToDateTime(new TimeOnly(heure, 0)), TimeSpan.Zero);
 
+    /// <summary>
+    /// À la seconde près : le second facteur raisonne en pas de trente secondes et en
+    /// défis de cinq minutes (étape 23), qu'une heure entière ne distingue pas.
+    /// </summary>
+    public void Fixer(DateTimeOffset instant) => _fixee = instant;
+
     public void Liberer() => _fixee = null;
 
     public override DateTimeOffset GetUtcNow() => _fixee ?? System.GetUtcNow();

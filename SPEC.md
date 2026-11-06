@@ -2483,6 +2483,96 @@ sauf avis contraire.
 - **C** — l'exploitation : le script du dernier administrateur, `DEPLOIEMENT.md`,
   `RGPD.md`, `CLAUDE.md` §6.
 
+**Lot A — fait le 4 novembre 2026**
+
+Trois vérifications faites au début du lot, dans le code source d'Identity .NET 10 et sur
+NuGet. Les trois ont changé quelque chose, et chacune a reçu une réponse :
+
+| Constat | Réponse |
+|---|---|
+| QRCoder 1.8.1 tire `System.Drawing.Common` 6.0.0, propre à Windows | **Net.Codecrete.QrCodeGenerator 3.2.1** : MIT, aucune dépendance, portage du générateur de Nayuki |
+| La clé et les codes de récupération sont rangés **en clair** dans `AspNetUserTokens`, et les codes ne portent que 50 bits | **clé chiffrée, codes par empreinte** |
+| `AuthenticatorTokenProvider` accepte cinq pas à la fois et ne mémorise rien : un code resservait pendant deux minutes et demie | **vérification écrite ici**, un pas de tolérance, un code ne sert qu'une fois |
+
+- **Rien d'Identity n'est repris, sauf `TwoFactorEnabled` et la table des jetons.** La
+  clé, les empreintes et le dernier pas accepté sont trois jetons du fournisseur
+  `[KleanSecondFacteur]`, écrits par `UserManager` : pas de sous-classe du magasin, et
+  pas de migration.
+  - La clé est chiffrée par la Data Protection.
+  - Les codes de récupération sont **les nôtres** : seize caractères de Crockford, soit
+    80 bits. Une empreinte SHA-256 de 50 bits se casse hors ligne ; de 80, non.
+  - Toute écriture passe par `UpdateAsync` d'Identity, qui compare le
+    `ConcurrencyStamp`. De deux usages simultanés du même code, le second échoue donc à
+    l'écriture. ⚠️ **Non éprouvé par un test** : c'est une propriété d'Identity, et le
+    provoquer de façon déterministe demanderait d'intercepter son `SaveChanges`.
+- **`Totp.cs`** : RFC 6238 sur HMAC-SHA1, éprouvé sur les six vecteurs de l'annexe B.
+  Il lit `TimeProvider`, donc les fenêtres et l'échéance du défi se testent sur une
+  horloge figée. Les tests produisent leurs codes avec `TotpDeTest`, écrit sans rien
+  reprendre du serveur.
+- **Le parcours.**
+  - `POST /api/auth/connexion` rend **202** `{ etape }` avec un cookie de défi :
+    `SecondFacteur` si le compte est équipé, `Equipement` si son rôle l'oblige.
+  - `POST /api/auth/connexion/code` attend `{ code }` ou `{ codeRecuperation }`. Un échec
+    compte dans le verrouillage d'Identity, **partagé avec le mot de passe** : Identity ne
+    remet pas le compteur à zéro sur un bon mot de passe quand le second facteur est
+    actif, et c'est éprouvé.
+  - `second-facteur/preparer` et `second-facteur/activer` acceptent une session ou un défi
+    d'`Equipement`, et lui seul. Un défi du second temps ne prépare pas une autre clé ;
+    sans cette garde, le mot de passe seul aurait suffi à remplacer le téléphone d'un
+    compte équipé.
+  - `GET /api/auth/second-facteur`, `second-facteur/codes` et `second-facteur/desactiver`
+    servent l'écran du compte. Les deux derniers exigent un code de l'application.
+- ⚠️ **Écart au cadrage : la désactivation reste ouverte aux comptes obligés.** C'est leur
+  geste « changer de téléphone » : toutes leurs sessions se ferment, et la connexion
+  suivante impose l'équipement. Sans cela, un administrateur qui change de téléphone
+  devait demander à un collègue de le réinitialiser.
+- **Aucune session sans second facteur pour un compte obligé**, à deux endroits :
+  `OnTokenValidated`, sans lecture de plus (le compte est déjà chargé, les rôles sont dans
+  le jeton), et le rafraîchissement. Sans eux, une session de quatorze jours ouverte avant
+  le déploiement continuait de se renouveler par mot de passe seul.
+- **`POST /api/auth/comptes/{id}/reinitialiser-second-facteur`** : administrateur seul,
+  jamais sur soi, cadré à la main sur l'entreprise, et journalisé en
+  `Compte` / `ReinitialisationSecondFacteur`. Quatorze actions sont maintenant
+  journalisées.
+- **Les deux pseudonymisations** retirent l'indicateur et toutes les lignes
+  `AspNetUserTokens` du compte.
+- **La série de tests.**
+  - La fixture équipe chaque compte obligé à sa première connexion, par les routes de
+    l'écran et sur un « appareil » à part, qu'elle déconnecte aussitôt.
+  - ⚠️ Avant chaque code, elle **oublie le dernier pas accepté** : un test qui connecte
+    deux fois le même compte en trente secondes buterait sinon sur la garde du rejeu.
+    C'est un contournement délibéré, écrit dans l'aide, et `SecondFacteurTests` ne
+    l'appelle jamais.
+  - Les sept séries qui appelaient la connexion à la main passent par
+    `ConnexionCompleteAsync`. Une série d'exploitation se connecte en chef d'équipe : elle
+    envoie ses requêtes à la main, sans second temps.
+- `SecondFacteurTests` : 43 tests. **Trente-trois sabotages, tous rouges** :
+  - le calcul : troncature, fenêtre de deux pas, rejeu ;
+  - le défi : étape, échéance, empreinte, compte désactivé ;
+  - le stockage : clé en clair, codes en clair, code réutilisable, normalisation ;
+  - le verrou : échec non compté, compteur non remis, défi accepté pendant le verrou ;
+  - l'équipement : activation sans code, sans révocation, sans plafond, seconde clé
+    préparée sur une session ;
+  - l'écran du compte : régénération et désactivation sans code, compte obligé non
+    déconnecté, clé gardée au retrait ;
+  - la réinitialisation : entre entreprises, sur soi, sans retrait, sans révocation, non
+    journalisée ;
+  - les gardes de session : connexion sans second temps, sans obligation, jeton et
+    rafraîchissement sans obligation ;
+  - les deux pseudonymisations.
+
+  Le sabotage « réinitialisation sans révocation » restait couvert par le refus du
+  rafraîchissement tant que la cible était un compte obligé. Un test sur un chef d'équipe
+  équipé de son plein gré l'isole.
+- Série complète : **609 tests verts**. Sa durée passe de 3 minutes à 6 min 25 s : chaque
+  première connexion d'un compte obligé coûte maintenant six requêtes.
+- ⚠️ **Écart ouvert jusqu'au lot B** : l'écran de connexion ne connaît pas le 202. Un
+  administrateur ne peut donc plus se connecter depuis le navigateur.
+- ⚠️ **Limite assumée** : le premier équipement d'un compte obligé se fait sur le mot de
+  passe seul. Qui détient ce mot de passe avant le titulaire peut équiper son propre
+  téléphone. C'est le cas de tout premier enrôlement, et c'est le cas que la
+  réinitialisation par un administrateur répare.
+
 ---
 
 # Suite — non planifié

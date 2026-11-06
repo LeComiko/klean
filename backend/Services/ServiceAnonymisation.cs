@@ -180,6 +180,7 @@ public class ServiceAnonymisation
             // Le jeton d'accès est signé, donc rien ne le rappelle : changer l'empreinte
             // de sécurité est ce qui le périme, parce qu'elle est vérifiée à chaque
             // requête (CLAUDE.md §6). `Actif = false` seul laisserait quinze minutes.
+            await RetirerSecondFacteurAsync(compte);
             await _utilisateurs.UpdateSecurityStampAsync(compte);
 
             sessions = await _session.RevoquerToutAsync(compte.Id, "Anonymisation de l'agent");
@@ -292,6 +293,7 @@ public class ServiceAnonymisation
         // Les deux gestes sont nécessaires, et aucun ne couvre l'autre (CLAUDE.md §6) :
         // l'empreinte périme les jetons d'accès déjà signés, la révocation tue les
         // sessions de rafraîchissement.
+        await RetirerSecondFacteurAsync(compte);
         await _utilisateurs.UpdateSecurityStampAsync(compte);
 
         var sessions = await _session.RevoquerToutAsync(compte.Id, "Anonymisation du compte");
@@ -316,6 +318,20 @@ public class ServiceAnonymisation
     /// compte — <c>OnTokenValidated</c> refuse ses requêtes — donc le compter comme
     /// relève ferait croire à une sortie qui n'existe pas.
     /// </summary>
+    /// <summary>
+    /// Le second facteur d'un compte pseudonymisé : la clé chiffrée, les empreintes des
+    /// codes de récupération, le dernier pas — toute ligne de <c>AspNetUserTokens</c> du
+    /// compte, qui n'a plus de raison d'exister une fois la connexion impossible.
+    /// Enregistré avec le reste, par le <c>SaveChangesAsync</c> de l'appelant.
+    /// </summary>
+    private async Task RetirerSecondFacteurAsync(Utilisateur compte)
+    {
+        compte.TwoFactorEnabled = false;
+
+        _db.UserTokens.RemoveRange(
+            await _db.UserTokens.Where(t => t.UserId == compte.Id).ToListAsync());
+    }
+
     private async Task<bool> EstLeDernierAdministrateurAsync(Utilisateur compte)
     {
         var administrateurs = await _db.UserRoles

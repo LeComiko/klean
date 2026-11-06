@@ -82,7 +82,19 @@ public enum NatureAcces
     /// sortir le dossier entier d'un salarié n'en est pas un. Les confondre ferait
     /// disparaître l'export dans le bruit des consultations.
     /// </summary>
-    Export
+    Export,
+
+    /// <summary>
+    /// Retrait du second facteur d'un autre compte par un administrateur (SPEC.md,
+    /// étape 23).
+    ///
+    /// ⚠️ Ce n'est pas une divulgation, et c'est l'exception écrite à la règle 5 de
+    /// <c>CLAUDE.md</c> §7 bis, sur le précédent d'<see cref="Anonymisation"/> : un geste
+    /// d'administrateur sur le compte d'autrui, qui en abaisse la protection jusqu'au
+    /// prochain équipement. Qu'il ne laisse aucune trace consultable permettrait de
+    /// l'enchaîner avec une connexion par mot de passe seul.
+    /// </summary>
+    ReinitialisationSecondFacteur
 }
 
 /// <summary>

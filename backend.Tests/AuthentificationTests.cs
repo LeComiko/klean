@@ -23,8 +23,7 @@ public class AuthentificationTests : IAsyncLifetime
     {
         var client = _fixture.ClientAnonyme();
 
-        var reponse = await client.PostAsJsonAsync("/api/auth/connexion",
-            new ConnexionDto { Email = FixtureApi.AdminAlpha, MotDePasse = FixtureApi.MotDePasse });
+        var reponse = await _fixture.ConnexionCompleteAsync(client, FixtureApi.AdminAlpha);
 
         Assert.Equal(HttpStatusCode.OK, reponse.StatusCode);
 
@@ -67,8 +66,7 @@ public class AuthentificationTests : IAsyncLifetime
         // Quinze minutes et non huit heures : la durée courte borne la fenêtre si
         // la vérification de révocation venait à être contournée.
         var client = _fixture.ClientAnonyme();
-        var reponse = await client.PostAsJsonAsync("/api/auth/connexion",
-            new ConnexionDto { Email = FixtureApi.AdminAlpha, MotDePasse = FixtureApi.MotDePasse });
+        var reponse = await _fixture.ConnexionCompleteAsync(client, FixtureApi.AdminAlpha);
 
         var session = await reponse.Content.ReadFromJsonAsync<SessionDto>();
         var restant = session!.Expiration - DateTime.UtcNow;
@@ -106,8 +104,7 @@ public class AuthentificationTests : IAsyncLifetime
     [Fact]
     public async Task Jeton_altere_renvoie_401()
     {
-        var connexion = await _fixture.ClientAnonyme().PostAsJsonAsync("/api/auth/connexion",
-            new ConnexionDto { Email = FixtureApi.AdminAlpha, MotDePasse = FixtureApi.MotDePasse });
+        var connexion = await _fixture.ConnexionCompleteAsync(_fixture.ClientAnonyme(), FixtureApi.AdminAlpha);
 
         var intact = FixtureApi.ValeurDuCookie(connexion, ServiceSession.CookieAcces);
         Assert.NotNull(intact);

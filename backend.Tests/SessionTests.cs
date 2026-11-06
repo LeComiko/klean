@@ -414,9 +414,12 @@ public class SessionTests : IAsyncLifetime
 
     // ------------------------------------------------------------- outillage
 
+    /// <summary>
+    /// Jusqu'à la session, second facteur compris (étape 23) : c'est la réponse qui pose
+    /// les cookies que cette série inspecte.
+    /// </summary>
     private Task<HttpResponseMessage> Connexion(HttpClient? client = null) =>
-        (client ?? _fixture.ClientAnonyme()).PostAsJsonAsync("/api/auth/connexion",
-            new ConnexionDto { Email = FixtureApi.AdminAlpha, MotDePasse = FixtureApi.MotDePasse });
+        _fixture.ConnexionCompleteAsync(client ?? _fixture.ClientAnonyme(), FixtureApi.AdminAlpha);
 
     // -----------------------------------------------------------------------
     // Déconnexion de tous les appareils (étape 16)

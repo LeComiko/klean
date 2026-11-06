@@ -125,4 +125,17 @@ public static class PlafondsDebit
     public const int ChangementsParAdresse = 20;
     public const int ChangementsParCompte = 10;
     public static TimeSpan FenetreChangements => TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Saisie d'un code du second facteur — à la connexion, à l'activation, à la
+    /// régénération des codes et à la désactivation.
+    ///
+    /// Le verrouillage d'Identity, partagé avec le mot de passe, borne déjà les essais
+    /// de la connexion à cinq. Ce plafond couvre les trois autres gestes, où un échec
+    /// ne verrouille pas le compte : s'en servir comme oracle depuis une session volée
+    /// reste ainsi aussi lent qu'au premier pas.
+    /// </summary>
+    public const int CodesParAdresse = 20;
+    public const int CodesParCompte = 10;
+    public static TimeSpan FenetreCodes => TimeSpan.FromMinutes(15);
 }
