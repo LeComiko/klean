@@ -20,6 +20,8 @@ interface Proprietes {
 
   onGenerer: (jusquAu: string) => void
   onFermerRapport: () => void
+  /** Replie le panneau : il ne s'ouvre qu'à la demande (SPEC.md, étape 30). */
+  onFermer: () => void
 }
 
 /**
@@ -34,12 +36,12 @@ interface Proprietes {
  * pas les recomposer.
  */
 export function GenerationVacations({
-  minimum, maximum, depart, enCours, erreur, rapport, onGenerer, onFermerRapport,
+  minimum, maximum, depart, enCours, erreur, rapport, onGenerer, onFermerRapport, onFermer,
 }: Proprietes) {
   const [jusquAu, setJusquAu] = useState(depart)
 
   return (
-    <section className="generation" aria-labelledby="generation-titre">
+    <section className="generation" id="generation" aria-labelledby="generation-titre">
       <form
         className="generation__formulaire"
         onSubmit={(evenement) => {
@@ -85,6 +87,17 @@ export function GenerationVacations({
       )}
 
       {rapport !== null && <Rapport rapport={rapport} onFermer={onFermerRapport} />}
+
+      {/* Dernier dans l'ordre du document, donc du clavier : on saisit, on génère, on
+          lit le rapport, puis on ferme. Placé en haut à droite par la feuille de style. */}
+      <button
+        className="generation__fermer"
+        type="button"
+        disabled={enCours}
+        onClick={onFermer}
+      >
+        Fermer
+      </button>
     </section>
   )
 }

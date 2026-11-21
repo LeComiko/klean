@@ -364,6 +364,31 @@ for (const fichier of ['csp.ts', 'index.html']) {
 }
 
 // ---------------------------------------------------------------------------
+// Taille du texte — SPEC.md, étape 30
+// ---------------------------------------------------------------------------
+
+titre('Le texte suit la taille de police du navigateur')
+
+// Une taille en `px` ignore le réglage « taille de police » du navigateur : seul le
+// zoom de la page l'agrandit. Le défaut ne se voit pas à la taille par défaut, où
+// 0,875rem et 14px se confondent au pixel près. D'où la règle, sur tout le CSS : une
+// taille de police, un interligne, ou un jeton d'échelle ne s'écrivent jamais en `px`.
+{
+  const enPx = []
+
+  for (const { relatif, contenu } of css) {
+    // Les commentaires citent les valeurs de §12 en pixels : seul le code compte.
+    const code = contenu.replace(/\/\*[\s\S]*?\*\//g, '')
+
+    for (const m of code.matchAll(/(font-size|line-height|--[\w-]+-(?:taille|interligne))\s*:\s*([^;]*\d+(?:\.\d+)?px[^;]*);/g)) {
+      enPx.push(`${relatif} › ${m[1]}: ${m[2].trim()}`)
+    }
+  }
+
+  verdict(enPx.length === 0, 'aucune taille de texte en px', enPx.join(' · '))
+}
+
+// ---------------------------------------------------------------------------
 
 console.log(
   echecs === 0

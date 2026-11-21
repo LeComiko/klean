@@ -4110,6 +4110,49 @@ passe à la ligne dans un bloc étroit, ce qui a été accepté.
 
 ---
 
+# Étape 30 — Le planning à toutes les largeurs
+
+Une revue de l'écran de planning contre les fondations des Human Interface Guidelines
+d'Apple — accessibilité, typographie, mise en page —, mesurée dans le navigateur, a
+trouvé trois défauts. Aucun ne levait d'erreur.
+
+**Un seul lot — fait le 21 novembre 2026**
+
+- **Sous 1100 px, toute la colonne débordait.** La règle étroite passe `.planning` en
+  colonne, mais gardait `align-items: flex-start` : chaque enfant prenait la largeur de
+  son contenu, donc les 940 px minimum de la grille. À 1024 px, 942 px pour 896 de
+  place : cartes et panneau de génération coupés de 46 px, et c'était la zone principale
+  qui défilait, pas la grille dans son cadre. `min-width: 0` n'y pouvait rien, il agit
+  sur l'axe principal. Corrigé par `align-items: stretch` dans la même règle.
+- **La grille commençait à 395 px d'une fenêtre de 656.** Le panneau « Générer les
+  vacations », qui sert quelques fois par mois, était ouvert en permanence entre les
+  cartes et la grille. Il s'ouvre désormais par « Générer… » dans l'en-tête, à côté du
+  sélecteur de semaine (`aria-expanded`), et se referme par ce bouton ou par « Fermer »
+  dans le panneau. Fermer efface le rapport et le refus, qui se rapportent à la
+  génération qu'on vient de jouer ; les deux boutons sont désactivés pendant une
+  génération, sinon son rapport ressortirait à la réouverture suivante. Le chef d'équipe,
+  qui ne génère pas, ne voit pas le bouton.
+- **Les tailles de texte étaient en `px`.** Le réglage « taille de police » du
+  navigateur restait sans effet ; seul le zoom agrandissait le texte, et c'est lui qui
+  déclenchait le débordement ci-dessus. L'échelle de `tokens.css` et les quatre hauteurs
+  de ligne et de cible passent en `rem`, la valeur de §12 en pixels en commentaire ; les
+  quatre `font-size` écrits en dur aussi. Espacements, rayons et bordures restent en
+  `px` : ils n'ont pas à grandir avec le texte.
+- **`npm run verifier` refuse désormais une taille de texte en `px`** — `font-size`,
+  `line-height`, ou jeton `--…-taille` et `--…-interligne` —, commentaires exclus. Deux
+  sabotages, rouges : un jeton remis à `14px`, une taille en dur dans un composant.
+- Vu au navigateur : à 1470 px, la grille et la liste « À pourvoir » tiennent dans la
+  fenêtre ; le panneau s'ouvre et se ferme. Texte à 200 %, par la racine de la page :
+  rien ne déborde à l'horizontale, rien n'est coupé.
+- `npm run lint`, `npm run verifier`, `npm test` et `npm run build` sont verts.
+- ⚠️ **Limites.** Chrome n'a pas laissé descendre la fenêtre sous 1024 px : la règle
+  étroite n'a pas été vue à 735 px, la largeur d'un zoom à 200 %. La colonne des agents
+  garde 160 px fixes : à 200 %, « 0 vac · 0 h » y passe sur deux lignes. Et le
+  « 1 planifiées cette semaine » d'une semaine passée, qui compte aussi les vacations
+  terminées, n'est pas corrigé : c'est un libellé à trancher, pas un défaut de forme.
+
+---
+
 # Suite — non planifié
 
 Par ordre de valeur, à cadrer le moment venu.

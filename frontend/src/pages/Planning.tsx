@@ -81,6 +81,10 @@ export function Planning() {
   // n'a rien à filtrer, seulement à le dire — sans quoi un planning vide se lirait comme
   // une semaine sans travail.
   const estChef = profil !== null && aUnRole(profil, [Roles.ChefEquipe])
+  // Le panneau de génération est replié par défaut. Générer sert quelques fois par
+  // mois, la grille tous les jours : ouvert en permanence entre les cartes et la
+  // grille, il repoussait celle-ci sous la ligne de flottaison (étape 30).
+  const [generationOuverte, setGenerationOuverte] = useState(false)
   const [generationEnCours, setGenerationEnCours] = useState(false)
   const [erreurGeneration, setErreurGeneration] = useState<string | null>(null)
   const [rapport, setRapport] = useState<RapportGeneration | null>(null)
@@ -212,6 +216,18 @@ export function Planning() {
     }
   }
 
+  /**
+   * Le rapport et le refus se rapportent à la génération qu'on vient de jouer :
+   * rouvrir le panneau plus tard ne doit pas les remontrer. On ne ferme pas pendant
+   * une génération : son rapport arriverait panneau fermé, et ressortirait à la
+   * réouverture suivante.
+   */
+  function fermerGeneration() {
+    setGenerationOuverte(false)
+    setRapport(null)
+    setErreurGeneration(null)
+  }
+
   async function generer(jusquAu: string) {
     setGenerationEnCours(true)
     setErreurGeneration(null)
@@ -242,6 +258,21 @@ export function Planning() {
               <output className="planning__attente-semaine">Chargement…</output>
             )}
             <SelecteurSemaine lundi={lundi} onChanger={setLundi} chargement={chargement} />
+            {peutGenerer && (
+              <button
+                className="planning__ouvrir-generation"
+                type="button"
+                aria-expanded={generationOuverte}
+                aria-controls="generation"
+                disabled={generationEnCours}
+                onClick={() => {
+                  if (generationOuverte) fermerGeneration()
+                  else setGenerationOuverte(true)
+                }}
+              >
+                Générer…
+              </button>
+            )}
           </>
         }
       />
@@ -267,7 +298,7 @@ export function Planning() {
               nonPourvues={obtenue.semaine.totalNonPourvues}
             />
 
-            {peutGenerer && (
+            {peutGenerer && generationOuverte && (
               <GenerationVacations
                 minimum={bornes.minimum}
                 maximum={bornes.maximum}
@@ -281,6 +312,7 @@ export function Planning() {
                 onFermerRapport={() => {
                   setRapport(null)
                 }}
+                onFermer={fermerGeneration}
               />
             )}
 

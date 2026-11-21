@@ -65,7 +65,7 @@
   color: var(--sur-brand);
   border-radius: var(--rayon-bloc);
   font-family: var(--police-chiffres);
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 700;
 }
 

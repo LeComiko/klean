@@ -142,46 +142,52 @@
   --police: 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --police-chiffres: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
 
-  /* Échelle : taille / interligne / graisse */
-  --titre-ecran-taille: 32px;
-  --titre-ecran-interligne: 36px;
+  /* Échelle : taille / interligne / graisse.
+
+     En `rem` depuis l'étape 30, la valeur de §12 en pixels en commentaire : 1 rem
+     vaut 16 px à la taille de police par défaut du navigateur. En `px`, le réglage
+     « taille de police » du navigateur restait sans effet, et seul le zoom de la
+     page agrandissait le texte. `npm run verifier` refuse une taille de police en
+     `px`, ici comme dans tout le CSS. */
+  --titre-ecran-taille: 2rem; /* 32 px */
+  --titre-ecran-interligne: 2.25rem; /* 36 px */
   --titre-ecran-graisse: 700;
 
-  --titre-section-taille: 20px;
-  --titre-section-interligne: 26px;
+  --titre-section-taille: 1.25rem; /* 20 px */
+  --titre-section-interligne: 1.625rem; /* 26 px */
   --titre-section-graisse: 600;
 
   /* Score d'un candidat au remplacement. 26 px n'est pas dans l'échelle de §12 :
      la taille vient de SPEC.md étape 15, qui la demande explicitement en chasse
      fixe. Posée en jeton plutôt qu'en dur pour rester au même endroit que le
      reste. */
-  --score-taille: 26px;
-  --score-interligne: 30px;
+  --score-taille: 1.625rem; /* 26 px */
+  --score-interligne: 1.875rem; /* 30 px */
   --score-graisse: 700;
 
-  --corps-mobile-taille: 16px;
-  --corps-mobile-interligne: 24px;
+  --corps-mobile-taille: 1rem; /* 16 px */
+  --corps-mobile-interligne: 1.5rem; /* 24 px */
   --corps-mobile-graisse: 500;
 
   /* L'information principale sur mobile — le site, l'heure : le plancher de 22 px de
      §12, posé en jeton à l'étape 25 avec le premier écran qui le sert. */
-  --info-mobile-taille: 22px;
-  --info-mobile-interligne: 28px;
+  --info-mobile-taille: 1.375rem; /* 22 px */
+  --info-mobile-interligne: 1.75rem; /* 28 px */
 
-  --corps-taille: 14px;
-  --corps-interligne: 20px;
+  --corps-taille: 0.875rem; /* 14 px */
+  --corps-interligne: 1.25rem; /* 20 px */
   --corps-graisse: 400;
 
-  --ligne-tableau-taille: 13px;
-  --ligne-tableau-interligne: 18px;
+  --ligne-tableau-taille: 0.8125rem; /* 13 px */
+  --ligne-tableau-interligne: 1.125rem; /* 18 px */
   --ligne-tableau-graisse: 500;
 
-  --bloc-planning-taille: 12px;
-  --bloc-planning-interligne: 16px;
+  --bloc-planning-taille: 0.75rem; /* 12 px */
+  --bloc-planning-interligne: 1rem; /* 16 px */
   --bloc-planning-graisse: 500;
 
-  --etiquette-taille: 11px;
-  --etiquette-interligne: 14px;
+  --etiquette-taille: 0.6875rem; /* 11 px */
+  --etiquette-interligne: 0.875rem; /* 14 px */
   --etiquette-graisse: 600;
 
   /* ---- Espacement, base 4 ---- */
@@ -201,11 +207,12 @@
 
   /* ---- Densités ----
      Deux seulement : desktop exploitation (dense, clavier) et mobile agent
-     (une action par écran). */
-  --ligne-compacte: 34px;
-  --ligne-confortable: 44px;
-  --cible-tactile: 56px;
-  --bouton-primaire-mobile: 64px;
+     (une action par écran). En `rem` comme l'échelle de texte : une ligne ou une
+     cible à hauteur fixe couperait le texte agrandi qu'elle contient. */
+  --ligne-compacte: 2.125rem; /* 34 px */
+  --ligne-confortable: 2.75rem; /* 44 px */
+  --cible-tactile: 3.5rem; /* 56 px */
+  --bouton-primaire-mobile: 4rem; /* 64 px */
 
   /* ---- Structure ---- */
   --largeur-navigation: 64px;

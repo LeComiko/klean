@@ -1,4 +1,5 @@
 .generation {
+  position: relative;
   margin-top: var(--espace-6);
   padding: var(--espace-4) var(--espace-6);
   background: var(--surface);
@@ -6,7 +7,27 @@
   border-radius: var(--rayon-carte);
 }
 
+/* Le même lien que « Fermer le rapport » : texte souligné, sans fond. Le panneau
+   s'ouvre par le bouton « Générer… » de l'en-tête, qui le referme aussi. */
+.generation__fermer {
+  position: absolute;
+  top: var(--espace-4);
+  right: var(--espace-6);
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  font-weight: 600;
+  color: var(--texte);
+  text-decoration: underline;
+}
+
+.generation__fermer:disabled {
+  color: var(--texte-2);
+  cursor: progress;
+}
+
 .generation__formulaire {
+  /* La place du bouton « Fermer », posé en haut à droite. */
+  padding-right: var(--espace-12);
   display: flex;
   flex-wrap: wrap;
   align-items: center;

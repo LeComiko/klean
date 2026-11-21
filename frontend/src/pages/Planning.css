@@ -47,6 +47,28 @@
   white-space: nowrap;
 }
 
+/* « Générer… » : même forme que « Cette semaine », voisin dans l'en-tête. Ouvert,
+   il garde le fond teinté — l'état se lit aussi par `aria-expanded`. */
+.planning__ouvrir-generation {
+  height: var(--ligne-compacte);
+  padding: 0 var(--espace-3);
+  background: var(--surface);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  white-space: nowrap;
+}
+
+.planning__ouvrir-generation:hover:not(:disabled),
+.planning__ouvrir-generation[aria-expanded='true'] {
+  background: var(--brand-tint);
+  border-color: var(--brand);
+}
+
+.planning__ouvrir-generation:disabled {
+  color: var(--texte-2);
+  cursor: progress;
+}
+
 /* ---- Deux colonnes : la grille et le panneau de 420 px ---- */
 
 .planning {
@@ -67,5 +89,10 @@
     /* Le panneau passe sous la grille : côte à côte, 420 px fixes plus une grille
        de 940 px minimum débordent. */
     flex-direction: column;
+    /* En colonne, `flex-start` donnait à chaque enfant la largeur de son contenu,
+       donc les 940 px minimum de la grille : toute la colonne débordait, cartes et
+       panneau de génération coupés à droite, au lieu que la grille défile dans son
+       cadre. `min-width: 0` n'y peut rien, il agit sur l'axe principal. */
+    align-items: stretch;
   }
 }
