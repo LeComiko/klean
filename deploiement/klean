@@ -13,7 +13,7 @@
 # dernière ligne. `mettre-a-jour` remplace ce fichier pendant qu'il tourne, et bash
 # lit un script au fil de l'exécution : le remplacement se fait par `mv`, qui laisse
 # l'ancien fichier au processus en cours, et une fonction déjà lue ne se relit pas.
-# shellcheck disable=SC2329,SC2034  # outils définis avant leurs appelants ; DERNIERE_SAUVEGARDE lue par mettre-a-jour
+# shellcheck disable=SC2329  # outils définis avant leurs appelants
 set -Eeuo pipefail
 umask 077
 
@@ -22,6 +22,7 @@ ENV="$REPERTOIRE/.env"
 # Deux racines, et non deux dossiers frères : une copie « du dossier des sauvegardes »
 # ne doit jamais emporter la base et le trousseau ensemble (CLAUDE.md §6).
 SAUVEGARDES="${KLEAN_SAUVEGARDES:-/var/backups/klean}"
+VERROU="${KLEAN_VERROU:-/run/klean.lock}"
 TROUSSEAU="${KLEAN_TROUSSEAU:-/var/lib/klean-trousseau}"
 JOURS_CONSERVATION=14
 
@@ -85,18 +86,45 @@ nombre_de_comptes() {
   compose exec -T postgres psql -U klean -d klean -tAc 'SELECT count(*) FROM "AspNetUsers"'
 }
 
+# verrouiller [attente_en_secondes] : une seule commande klean qui touche à la base ou
+# aux sauvegardes à la fois. La tâche de nuit et un `sudo klean sauvegarder` lancé à la
+# main, ou une mise à jour, s'écraseraient sinon : deux `pg_dump`, ou pire une
+# restauration pendant une sauvegarde.
+#
+# ⚠️ `restaurer`, `mettre-a-jour` et `revenir` devront l'appeler aussi, au début, sans
+# attente (une commande lancée à la main échoue tout de suite et dit pourquoi).
+# Réentrant dans le même processus : `mettre-a-jour` appelle `cmd_sauvegarder`, qui
+# redemanderait un verrou que le même processus tient déjà, et s'attendrait lui-même.
+# Le descripteur 9 reste ouvert jusqu'à la fin du processus, qui libère le verrou.
+verrouiller() {
+  [ -z "${KLEAN_VERROUILLE:-}" ] || return 0
+  local attente="${1:-0}" options=(-n)
+  [ "$attente" -eq 0 ] || options=(-w "$attente")
+  exec 9> "$VERROU"
+  flock "${options[@]}" 9 ||
+    echouer "Une autre commande klean est en cours (la sauvegarde de la nuit ?). Réessayez dans quelques minutes."
+  KLEAN_VERROUILLE=1
+}
+
 # ---- Sauvegarder -------------------------------------------------------------------
 
 # Chemin de la dernière sauvegarde de la base écrite par cmd_sauvegarder.
+# shellcheck disable=SC2034  # lue par mettre-a-jour, qui appellera cmd_sauvegarder dans ce processus
 DERNIERE_SAUVEGARDE=''
 
 cmd_sauvegarder() {
   exiger_root
+  # La tâche de nuit attend jusqu'à une demi-heure plutôt que d'abandonner : une
+  # commande à la main, ou une mise à jour, qui tient le verrou à 3 h 30 n'a pas à
+  # coûter la sauvegarde de la nuit.
+  verrouiller 1800
   local suffixe="${1:-}" horodatage nom temporaire
   horodatage=$(date +%Y-%m-%dT%H%M)
   install -d -m 700 "$SAUVEGARDES" "$TROUSSEAU"
   nom="$SAUVEGARDES/klean-$horodatage${suffixe:+-$suffixe}.dump"
-  temporaire="$nom.partiel"
+  # Un nom imprévisible, et qui ne suit pas le motif des sauvegardes : ni la rotation ni
+  # la restauration ne peuvent le prendre pour une copie.
+  temporaire=$(mktemp "$SAUVEGARDES/.partiel.XXXXXX")
 
   # Écrite à côté, relue, puis renommée : un pg_dump interrompu laisserait sinon un
   # fichier vide, et la rotation supprimerait les bonnes copies à sa place.
@@ -104,7 +132,9 @@ cmd_sauvegarder() {
     rm -f "$temporaire"
     echouer "La sauvegarde de la base a échoué. Les sauvegardes précédentes sont intactes."
   fi
-  if ! compose exec -T postgres pg_restore --list < "$temporaire" > /dev/null; then
+  # `--list` ne lit que la table des matières : il réussirait sur un fichier tronqué.
+  # Une restauration vers /dev/null relit tout, données comprises.
+  if ! compose exec -T postgres pg_restore -f /dev/null < "$temporaire"; then
     rm -f "$temporaire"
     echouer "La sauvegarde de la base est illisible : elle n'est pas gardée."
   fi
@@ -126,17 +156,22 @@ sauvegarder_trousseau() {
   temporaire=$(mktemp "$TROUSSEAU/.partiel.XXXXXX")
   if ! compose exec -T api tar czf - -C /home/app/.aspnet DataProtection-Keys > "$temporaire"; then
     rm -f "$temporaire"
-    echouer "La sauvegarde du trousseau a échoué."
+    echouer "La sauvegarde du trousseau a échoué : l'API tourne-t-elle ? Voir : sudo klean etat. La sauvegarde de la base, elle, est gardée : $DERNIERE_SAUVEGARDE"
   fi
   # Une instance où personne ne s'est encore connecté n'a aucune clé : ce n'est pas une
   # panne, et la sauvegarde de la base ne doit pas échouer pour autant.
-  if ! tar tzf "$temporaire" | grep -q 'key-.*\.xml$'; then
+  if ! tar tzf "$temporaire" | grep 'key-.*\.xml$' > /dev/null; then
     rm -f "$temporaire"
     avertir "Le trousseau ne contient encore aucune clé : rien à sauvegarder de ce côté."
     return
   fi
   empreinte=$(tar xzf "$temporaire" -O | sha256sum | cut -d' ' -f1)
   precedente=$(cat "$TROUSSEAU/.empreinte" 2> /dev/null || true)
+  # Une empreinte sans archive — les trousseau-*.tgz ont été déplacés ou supprimés — ne
+  # prouve rien : sans archive, le trousseau n'est pas sauvegardé, même inchangé.
+  if [ -z "$(find "$TROUSSEAU" -maxdepth 1 -type f -name 'trousseau-*.tgz' -print -quit)" ]; then
+    precedente=''
+  fi
   if [ "$empreinte" = "$precedente" ]; then
     rm -f "$temporaire"
     return
@@ -149,6 +184,11 @@ sauvegarder_trousseau() {
 tourner() {
   local dossier="$1" motif="$2" limite fichier
   limite=$(date -d "-$JOURS_CONSERVATION days" +%F)
+  # Un Ctrl-C ou un arrêt brutal laisse un temporaire. Aucun `trap` : un `trap EXIT` posé
+  # dans une fonction vaut pour tout le script et écraserait celui de `mettre-a-jour`.
+  # Le verrou garantit qu'aucune autre sauvegarde n'écrit en ce moment ; un jour de
+  # marge pour ne rien supposer d'autre.
+  find "$dossier" -maxdepth 1 -type f -name '.partiel.*' -mmin +1440 -delete
   sauvegardes_a_supprimer "$(find "$dossier" -maxdepth 1 -type f -name "$motif")" "$limite" |
     while IFS= read -r fichier; do
       [ -z "$fichier" ] || rm -f -- "$fichier"
@@ -159,11 +199,22 @@ tourner() {
 
 cmd_etat() {
   exiger_root
-  local derniere heures libre
+  local derniere heures libre enmarche service
   dire "KLEAN $(lire_env "$ENV" KLEAN_VERSION) — https://$(lire_env "$ENV" KLEAN_DOMAINE)"
-  compose ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'
+  # -a : un service arrêté ou sorti en erreur n'apparaît sinon pas du tout.
+  compose ps -a --format 'table {{.Service}}\t{{.State}}\t{{.Status}}' ||
+    avertir "Docker ne répond pas : l'état des services est inconnu."
+  if enmarche=$(compose ps --status running --services 2> /dev/null); then
+    for service in postgres api caddy; do
+      grep -qx "$service" <<< "$enmarche" ||
+        avertir "Le service $service ne tourne pas. Voir : sudo klean journaux"
+    done
+  else
+    avertir "Docker ne répond pas : impossible de dire quels services tournent."
+  fi
 
-  derniere=$(cat "$SAUVEGARDES/.derniere-reussie" 2> /dev/null || printf '0')
+  derniere=$(cat "$SAUVEGARDES/.derniere-reussie" 2> /dev/null || true)
+  [[ $derniere =~ ^[0-9]+$ ]] || derniere=0
   heures=$((($(date +%s) - derniere) / 3600))
   if [ "$derniere" -eq 0 ]; then
     avertir "Aucune sauvegarde réussie. Lancez : sudo klean sauvegarder"
@@ -173,8 +224,8 @@ cmd_etat() {
     dire "Dernière sauvegarde réussie il y a $heures heure(s)."
   fi
 
-  libre=$(df -Pk "$SAUVEGARDES" | awk 'NR == 2 { print $4 }')
-  if [ "$libre" -lt 1048576 ]; then
+  libre=$(df -Pk "$SAUVEGARDES" 2> /dev/null | awk 'NR == 2 { print $4 }')
+  if [[ $libre =~ ^[0-9]+$ ]] && [ "$libre" -lt 1048576 ]; then
     avertir "Moins d'un gigaoctet libre sur le disque des sauvegardes."
   fi
   avertir "Aucune copie hors de ce serveur : s'il est perdu, les sauvegardes le sont avec lui. Copiez $SAUVEGARDES et $TROUSSEAU ailleurs, séparément (README, section Sauvegardes)."
@@ -187,7 +238,13 @@ cmd_journaux() {
 
 cmd_code() {
   exiger_root
-  if [ "$(nombre_de_comptes)" != 0 ]; then
+  local comptes
+  # Une sortie vide n'est pas « zéro compte » : PostgreSQL muet ne prouve pas que KLEAN
+  # n'est pas installé, ni qu'il l'est.
+  comptes=$(nombre_de_comptes) || comptes=''
+  [[ $comptes =~ ^[0-9]+$ ]] ||
+    echouer "PostgreSQL ne répond pas : impossible de savoir si KLEAN est installé. Voir : sudo klean etat"
+  if [ "$comptes" -gt 0 ]; then
     dire "KLEAN est déjà installé : le code d'installation ne sert plus."
     return
   fi
@@ -197,7 +254,7 @@ cmd_code() {
 # ---- Aiguillage ------------------------------------------------------------------
 
 aide() {
-  sed -n '3,11p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 principal() {
@@ -212,7 +269,12 @@ principal() {
     etat) cmd_etat ;;
     journaux) cmd_journaux "$@" ;;
     code) cmd_code ;;
-    *) aide ;;
+    aide | -h | --help) aide ;;
+    *)
+      printf 'Commande inconnue : %s\n\n' "$COMMANDE" >&2
+      aide >&2
+      exit 2
+      ;;
   esac
 }
 
