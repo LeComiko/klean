@@ -4153,6 +4153,50 @@ trouvé trois défauts. Aucun ne levait d'erreur.
 
 ---
 
+# Étape 31 — Le reste de la revue
+
+Ce que l'étape 30 avait laissé : trois points de la revue, et deux de ses propres
+limites. Tout est traité.
+
+**Un seul lot — fait le 21 novembre 2026**
+
+- **« au planning cette semaine »**, et non plus « planifiées » : le total compte toute
+  vacation non annulée, y compris celles déjà terminées d'une semaine passée. Le
+  libellé change, pas le compte. Deux nombres, planifiées et réalisées, auraient
+  demandé un agrégat de plus au serveur, puisque les agrégats du planning y sont
+  calculés (voir *Décisions prises*) : non retenu.
+- **La barre latérale nomme les sections au-delà de 80em**, 1280 px à la taille par
+  défaut : « PL Planning », « CL Clients et sites ». En dessous, le code seul, et le nom
+  n'est lu que par le lecteur d'écran, comme avant ; c'est le même élément dans les
+  deux cas, donc rien n'est annoncé deux fois. Le seuil est en `em` : un texte agrandi
+  par l'utilisateur le recule, et la barre redevient étroite au lieu de prendre la
+  moitié de l'écran. Jamais d'ellipse : un nom trop long passe à la ligne, ce que le
+  vérificateur exigeait déjà.
+- **Le contraste élevé du système** (`prefers-contrast: more`) a sa réponse dans
+  `tokens.css` : le texte secondaire se rapproche du texte principal — de 5,32:1 à
+  9,26:1 en clair, de 6,69:1 à 10,89:1 en sombre —, et les bordures atteignent le
+  seuil non textuel de 3:1, que les bordures standard, discrètes, ne tiennent pas.
+  Deux blocs, clair puis sombre ; en sombre les deux s'appliquent, donc le second
+  redéfinit **exactement** les jetons du premier. Ni la marque ni l'alerte ne changent.
+- **`npm run verifier` mesure désormais quatre thèmes** : clair, sombre, et leurs deux
+  variantes de contraste élevé, sur toutes les paires de §12 ; plus les bordures à
+  3:1, un texte secondaire plus contrasté qu'en standard, et les mêmes jetons dans les
+  deux blocs. Deux sabotages, rouges : un jeton oublié dans le bloc sombre, une
+  bordure sombre à 1,56:1.
+- **La grille en `rem`** : la colonne des agents (10rem) et la largeur minimale
+  (58,75rem). Sous un texte agrandi, la colonne s'élargit avec lui, et la grille défile
+  dans son cadre au lieu de rétrécir les jours.
+- **La règle étroite revue à 1024 px**, au navigateur : la zone principale ne défile
+  plus, la colonne occupe ses 896 px, seule la grille défile. ⚠️ 735 px reste non vu :
+  Chrome ne descend pas sous 1024, et un cadre est refusé par la politique de sécurité
+  de la page — c'est voulu, et elle n'a pas été contournée.
+- `npm run lint`, `npm run verifier`, `npm test` et `npm run build` sont verts.
+- ⚠️ **Trouvé en passant, non traité** : dans une fenêtre de 656 px de haut, le bouton
+  *Déconnexion* dépasse de 11 px sous le bord de la barre latérale. Déjà le cas avant
+  ces deux étapes.
+
+---
+
 # Suite — non planifié
 
 Par ordre de valeur, à cadrer le moment venu.

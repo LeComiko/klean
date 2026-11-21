@@ -204,7 +204,47 @@ if (blocSombre === null) {
     ['contour de focus : alerte / surface', '--alerte', '--surface', SeuilNonTextuel],
   ]
 
-  for (const [nom, theme] of [['clair', clair], ['sombre', sombre]]) {
+  // Le contraste élevé (étape 31) : deux blocs, le clair puis le sombre, qui doivent
+  // redéfinir les mêmes jetons — en sombre les deux s'appliquent, et un jeton oublié
+  // dans le second garderait sa valeur claire sur fond sombre.
+  const blocFortClair = /@media\s*\(prefers-contrast:\s*more\)\s*\{([\s\S]*?)\n\}/.exec(jetons)
+  const blocFortSombre =
+    /@media\s*\(prefers-contrast:\s*more\)\s*and\s*\(prefers-color-scheme:\s*dark\)\s*\{([\s\S]*?)\n\}/
+      .exec(jetons)
+  const themes = [['clair', clair], ['sombre', sombre]]
+
+  if (blocFortClair === null || blocFortSombre === null) {
+    verdict(false, 'les deux blocs prefers-contrast: more sont présents dans tokens.css')
+  } else {
+    const fortClair = lireTheme(blocFortClair[1])
+    const fortSombre = lireTheme(blocFortSombre[1])
+    const nomsClair = Object.keys(fortClair).sort().join(' ')
+    const nomsSombre = Object.keys(fortSombre).sort().join(' ')
+
+    verdict(nomsClair === nomsSombre, 'contraste élevé : les mêmes jetons en clair et en sombre',
+      nomsClair === nomsSombre ? nomsClair : `clair « ${nomsClair} » · sombre « ${nomsSombre} »`)
+
+    const clairFort = { ...clair, ...fortClair }
+    const sombreFort = { ...sombre, ...fortClair, ...fortSombre }
+    themes.push(['clair fort', clairFort], ['sombre fort', sombreFort])
+
+    // Ce que le réglage promet, et que le thème standard ne tient pas exprès : des
+    // bordures au seuil non textuel, et un texte secondaire plus contrasté qu'avant.
+    for (const [nom, standard, fort] of [['clair', clair, clairFort], ['sombre', sombre, sombreFort]]) {
+      for (const bordure of ['--border', '--border-fort']) {
+        const ratio = contraste(fort[bordure], fort['--surface'])
+        verdict(ratio >= SeuilNonTextuel, `${nom} fort · ${bordure.slice(2)} / surface`,
+          `${ratio.toFixed(2)}:1 (seuil ${SeuilNonTextuel.toFixed(1)})`)
+      }
+
+      const avant = contraste(standard['--texte-2'], standard['--surface'])
+      const apres = contraste(fort['--texte-2'], fort['--surface'])
+      verdict(apres > avant, `${nom} fort · texte-2 / surface plus contrasté qu'en standard`,
+        `${avant.toFixed(2)}:1 → ${apres.toFixed(2)}:1`)
+    }
+  }
+
+  for (const [nom, theme] of themes) {
     for (const [libelle, avant, arriere, seuil] of paires) {
       const a = theme[avant]
       const b = theme[arriere]

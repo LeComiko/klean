@@ -99,3 +99,78 @@
 .navigation__compte {
   margin-top: var(--espace-4);
 }
+
+/* ---- Le nom de la section (étape 31) ----
+   Sous 80em, la barre ne montre que le code — PL, AN, CL — et le nom n'est lu que
+   par le lecteur d'écran, comme avant. Au-delà, la place existe : le nom s'affiche à
+   côté du code, et la barre s'élargit. « CL » pour « Clients et sites » s'apprend,
+   « Clients et sites » se lit.
+
+   Le seuil est en `em`, pas en `px` : dans une requête média, 1em vaut la taille de
+   police **du navigateur**. Un texte agrandi par l'utilisateur recule donc le
+   seuil, et la barre redevient étroite au lieu de prendre la moitié de l'écran. */
+.navigation__libelle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (min-width: 80em) {
+  .navigation {
+    align-items: stretch;
+    width: var(--largeur-navigation-large);
+    padding: var(--espace-3);
+  }
+
+  .navigation__liste {
+    align-items: stretch;
+  }
+
+  .navigation__pastille {
+    justify-content: flex-start;
+    gap: var(--espace-3);
+    width: auto;
+    padding: 0 var(--espace-3);
+  }
+
+  /* Le code garde sa colonne : les noms s'alignent, quelle que soit sa largeur. */
+  .navigation__code {
+    flex-shrink: 0;
+    width: 1.5rem;
+  }
+
+  .navigation__libelle {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+    /* Jamais tronqué (§12, « aucune troncature par ellipse ») : un nom trop long
+       passe à la ligne. */
+    white-space: normal;
+    font-family: var(--police);
+    font-size: var(--corps-taille);
+    line-height: var(--corps-interligne);
+    font-weight: 500;
+    letter-spacing: normal;
+  }
+
+  /* Les icônes du compte et de la sortie, centrées dans la même colonne que les
+     codes : 18 px de dessin, 3 px de chaque côté. */
+  .navigation__pastille > svg {
+    flex-shrink: 0;
+    margin-inline: 3px;
+  }
+
+  /* Le liséré de l'état actif reste collé au bord de la barre. */
+  .navigation__pastille--active::before {
+    left: calc(-1 * var(--espace-3) - 1px);
+  }
+}

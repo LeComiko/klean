@@ -7,15 +7,19 @@
   border-radius: var(--rayon-carte);
 }
 
+/* Les deux largeurs en `rem`, comme le texte (étape 31) : en pixels, la colonne des
+   agents restait à 160 px sous un texte agrandi, et les jours rétrécissaient sous
+   des blocs dont le texte grandissait. Au-delà de la place disponible, la grille
+   défile dans son cadre. */
 .grille-planning {
   width: 100%;
-  min-width: 940px;
+  min-width: 58.75rem; /* 940 px */
   table-layout: fixed;
   border-collapse: collapse;
 }
 
 .grille-planning__col-agent {
-  width: 160px;
+  width: 10rem; /* 160 px */
 }
 
 .grille-planning__coin,

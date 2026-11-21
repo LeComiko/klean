@@ -20,7 +20,9 @@ export function CartesKpi({ vacations, heures, nonPourvues }: Proprietes) {
       <li className="carte-kpi">
         <p className="carte-kpi__etiquette">Vacations</p>
         <p className="carte-kpi__valeur chiffres">{vacations}</p>
-        <p className="carte-kpi__detail">planifiées cette semaine</p>
+        {/* « au planning », pas « planifiées » : le total compte toute vacation non
+            annulée, y compris celles déjà terminées d'une semaine passée. */}
+        <p className="carte-kpi__detail">au planning cette semaine</p>
       </li>
 
       <li className="carte-kpi">

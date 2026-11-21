@@ -45,8 +45,10 @@ export function Navigation() {
               }
               title={section.libelle}
             >
-              <span aria-hidden="true">{section.pastille}</span>
-              <span className="pour-lecteur-d-ecran">{section.libelle}</span>
+              <span className="navigation__code" aria-hidden="true">{section.pastille}</span>
+              {/* Lu par le lecteur d'écran à toute largeur, affiché à côté du code
+                  quand la place le permet (Navigation.css, étape 31). */}
+              <span className="navigation__libelle">{section.libelle}</span>
             </NavLink>
           </li>
         ))}
@@ -80,7 +82,7 @@ export function Navigation() {
             strokeLinecap="round"
           />
         </svg>
-        <span className="pour-lecteur-d-ecran">Mon compte</span>
+        <span className="navigation__libelle">Mon compte</span>
       </NavLink>
 
       <button
@@ -108,7 +110,7 @@ export function Navigation() {
             strokeLinejoin="round"
           />
         </svg>
-        <span className="pour-lecteur-d-ecran">Déconnexion</span>
+        <span className="navigation__libelle">Déconnexion</span>
       </button>
     </nav>
   )

@@ -216,13 +216,16 @@
 
   /* ---- Structure ---- */
   --largeur-navigation: 64px;
+  /* Au-delà de 80em, quand la barre affiche le nom des sections (Navigation.css). */
+  --largeur-navigation-large: 13rem; /* 208 px */
   --focus-epaisseur: 2px;
   --focus-decalage: 2px;
 }
 
 /* ---- Thème sombre ----
    Même système, mêmes noms : aucun composant ne sait de quel thème il relève.
-   Le bascule est l'unique endroit du projet où ces couleurs sont redéfinies. */
+   Ce fichier est l'unique endroit du projet où ces couleurs sont redéfinies : ici,
+   et dans les deux blocs de contraste élevé qui suivent. */
 @media (prefers-color-scheme: dark) {
   :root {
     --brand: #5e6e7a;
@@ -249,6 +252,34 @@
     /* §12 ne donne pas de hachure sombre : la bordure forte joue ce rôle,
        elle a le même contraste relatif sur fond sombre. */
     --hachure: #454841;
+  }
+}
+
+/* ---- Contraste élevé (étape 31) ----
+   Le réglage « augmenter le contraste » du système. Le thème standard tient déjà AA
+   partout : ceci n'est pas une correction, c'est la réponse à une demande. Elle
+   rapproche le texte secondaire du texte principal et donne aux bordures le seuil
+   non textuel de 3:1, que les bordures standard, volontairement discrètes, ne
+   tiennent pas.
+
+   Deux blocs, et le second doit redéfinir **exactement** les jetons du premier : en
+   sombre, les deux s'appliquent, et un jeton oublié dans le second garderait sa
+   valeur claire sur fond sombre. `npm run verifier` compare les deux listes et
+   mesure les quatre thèmes. Aucun autre jeton n'est touché : la marque et
+   l'alerte ne changent pas de sens. */
+@media (prefers-contrast: more) {
+  :root {
+    --texte-2: #4a4741;
+    --border: #8f8b82;
+    --border-fort: #6e6b64;
+  }
+}
+
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root {
+    --texte-2: #cfccc5;
+    --border: #6b6e66;
+    --border-fort: #8a8d84;
   }
 }
 
