@@ -1,0 +1,92 @@
+/* Ce que le journal est, et n'est pas : une consigne, en texte secondaire. */
+.journal-acces__notice {
+  max-width: 72ch;
+  margin: 0 0 var(--espace-4);
+  color: var(--texte-2);
+}
+
+.journal-acces__filtres {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--espace-3) var(--espace-4);
+  margin-bottom: var(--espace-4);
+}
+
+.journal-acces__champ {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-1);
+}
+
+.journal-acces__libelle {
+  font-size: var(--etiquette-taille);
+  line-height: var(--etiquette-interligne);
+  font-weight: var(--etiquette-graisse);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texte-2);
+}
+
+.journal-acces__saisie {
+  min-width: 180px;
+  height: var(--ligne-compacte);
+  padding: 0 var(--espace-3);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-family: var(--police);
+  font-size: var(--corps-taille);
+}
+
+.journal-acces__saisie--date {
+  min-width: 0;
+  font-family: var(--police-chiffres);
+}
+
+.journal-acces__saisie:focus {
+  border-color: var(--brand);
+}
+
+.journal-acces__effacer {
+  height: var(--ligne-compacte);
+}
+
+/* Une correspondance incomplète n'est pas une erreur : le liséré de marque, comme une consigne. */
+.journal-acces__incomplet {
+  display: block;
+  margin: 0 0 var(--espace-4);
+  padding: var(--espace-3) var(--espace-4);
+  background: var(--brand-tint);
+  border: 1px solid var(--border-fort);
+  border-left: 3px solid var(--brand);
+  border-radius: var(--rayon-bloc);
+  color: var(--texte);
+}
+
+/* Un instant comparé en colonne : chasse fixe (§12). */
+.journal-acces__quand {
+  font-family: var(--police-chiffres);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* L'auteur est un bouton qui filtre ; il se lit comme un lien, en couleur de texte (§10). */
+.journal-acces__auteur {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--texte);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* Les gestes rares — export, pseudonymisation, fermeture — se distinguent par la
+   graisse, jamais par la couleur seule (§12). */
+.journal-acces__geste--marque {
+  font-weight: 600;
+}

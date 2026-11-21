@@ -12,6 +12,7 @@ import { Chantier } from './pages/Chantier'
 import { Compte } from './pages/Compte'
 import { Comptes } from './pages/Comptes'
 import { Connexion } from './pages/Connexion'
+import { JournalAcces } from './pages/JournalAcces'
 import { MaJournee } from './pages/MaJournee'
 import { Planning } from './pages/Planning'
 import { Prevision } from './pages/Prevision'
@@ -32,6 +33,7 @@ const Ecrans: Record<string, (section: Section) => ReactNode> = {
   '/stock': (section) => <Stock section={section} />,
   '/prevision': (section) => <Prevision section={section} />,
   '/comptes': (section) => <Comptes section={section} />,
+  '/journal-acces': (section) => <JournalAcces section={section} />,
 }
 
 function ecranDe(section: Section, chemin: string, libelle: string): ReactNode {

@@ -160,7 +160,14 @@ export const Sections: readonly Section[] = [
     ressources: ['entreprises'],
     // Les comptes (SPEC.md, étape 24) : qui a accès, administrateur seul. Rangés ici
     // plutôt qu'en pastille : on y vient à l'arrivée d'une personne et à son départ.
-    ecrans: [{ chemin: '/comptes', libelle: 'Comptes', roles: [Roles.Administrateur] }],
+    //
+    // Le journal d'accès (étape 27) : qui a lu quoi, administrateur seul, comme la route.
+    // Ouvert au responsable, il deviendrait un outil de surveillance des collègues
+    // (CLAUDE.md §7 bis, règle 6).
+    ecrans: [
+      { chemin: '/comptes', libelle: 'Comptes', roles: [Roles.Administrateur] },
+      { chemin: '/journal-acces', libelle: 'Journal d’accès', roles: [Roles.Administrateur] },
+    ],
   },
 
   // La journée de l'agent, sur son téléphone (SPEC.md, étape 25) : la seule section qui

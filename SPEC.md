@@ -3685,6 +3685,56 @@ puis recouper des identifiants à la main.
   - une conversion vers l'heure locale glissée dans `Utc()`.
 - Série serveur complète : 710 tests verts, 698 + 12.
 
+**Lot B — fait le 21 novembre 2026**
+
+- **`journal/journal.ts`** porte :
+  - les libellés des ressources et des gestes ;
+  - le nom de l'auteur et de la cible, ou leur identifiant court, jamais un blanc ;
+  - la période, de deux jours locaux vers deux instants ;
+  - la requête.
+
+  ⚠️ **Une absence n'est jamais nommée**, même si son identifiant résout ailleurs. Le test
+  pose cet identifiant dans l'annuaire des agents pour s'en assurer. `Anonymisation`
+  s'affiche « Pseudonymisation », ce qu'elle est.
+- **La page `/journal-acces`**, dans la section *Entreprise*, après *Comptes*, réservée à
+  l'administrateur :
+  - quatre filtres : qui, données, geste et période ;
+  - un clic sur un auteur filtre sur lui ;
+  - un en-tête dit ce que le journal ne contient pas ;
+  - un avertissement quand les noms n'ont pas tous été retrouvés.
+
+  Les comptes et les noms d'agents se chargent chacun de leur côté : l'échec de l'un ne
+  cache pas le journal.
+- **`journal.test.ts`, 21 cas**, ajoutés aux séries rejouées dans cinq fuseaux. Deux ne
+  tournent qu'à Paris : la valeur exacte d'une période et d'une heure.
+  - Les noms des deux énumérations sont lus dans `backend/Models/AccesJournalise.cs` : un
+    geste ajouté demain sans libellé fait rougir la série.
+  - Un jour de changement d'heure se borne au minuit local du lendemain, pas à
+    « +24 heures ».
+- **Neuf sabotages, tous rouges quelque part**, et la répartition justifie les cinq
+  fuseaux :
+  - une date lue comme de l'UTC ne rougit pas sous `TZ=UTC` ;
+  - « +24 heures » et l'heure affichée en UTC ne rougissent qu'à Paris ;
+  - les six autres rougissent partout : l'absence nommée, la fin sans le lendemain, une
+    nature oubliée, le pluriel, les instants non encodés, l'auteur sans repli.
+- **Essai au navigateur**, sur la base de développement, sous le compte administrateur, que
+  l'utilisateur a connecté lui-même :
+  - les auteurs et les comptes fermés sont nommés ;
+  - le filtre des fermetures rend les deux du 6 novembre ;
+  - une fin avant le début est refusée sans appel ;
+  - le 6 novembre seul part en `2026-11-05T23:00:00.000Z` → `2026-11-06T23:00:00.000Z` ;
+  - le clic sur un auteur filtre sur lui ;
+  - 94 lignes, en deux pages ;
+  - aucune erreur en console.
+
+  Les lectures de l'écran s'inscrivent bien au journal ; une lecture ne contient jamais sa
+  propre ligne, écrite après elle.
+- ⚠️ **À l'ouverture, en développement, les comptes et les noms d'agents sont lus deux
+  fois**, donc journalisés deux fois. C'est le `StrictMode` de React, qui monte deux fois
+  chaque composant ; la production le monte une fois. Ce n'est pas mesuré sur l'instance
+  Docker.
+- Lint, vérificateur d'interface et build verts ; interface, 351 cas, 330 + 21.
+
 ---
 
 # Suite — non planifié

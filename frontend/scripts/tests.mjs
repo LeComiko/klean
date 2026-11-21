@@ -49,6 +49,8 @@ const Fuseaux = [
 const SensiblesAuFuseau = [
   { fichier: 'src/utils/dates.test.ts', libelle: 'dates.ts' },
   { fichier: 'src/reference/valeurs.test.ts', libelle: 'valeurs.ts' },
+  // La période d'un jour local vers deux instants, et l'heure d'un accès (étape 27).
+  { fichier: 'src/journal/journal.test.ts', libelle: 'journal.ts' },
 ]
 
 /**
