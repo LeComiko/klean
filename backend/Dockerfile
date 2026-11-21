@@ -19,7 +19,9 @@ COPY Klean.Api.csproj ./
 RUN dotnet restore Klean.Api.csproj
 
 COPY . ./
-RUN dotnet publish Klean.Api.csproj -c Release -o /publication --no-restore
+# La version de l'étiquette, passée par publication.yml ; la sonde /api/sante l'annonce.
+ARG KLEAN_VERSION=0.0.0-dev
+RUN dotnet publish Klean.Api.csproj -c Release -o /publication --no-restore -p:Version=$KLEAN_VERSION
 
 # Le bundle de migration. Même version que Microsoft.EntityFrameworkCore.Design
 # dans Klean.Api.csproj : un outil d'une autre version génère un bundle qui

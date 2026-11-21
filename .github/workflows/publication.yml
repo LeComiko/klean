@@ -59,7 +59,7 @@ jobs:
           IMAGES: ${{ steps.noms.outputs.images }}
           VERSION: ${{ steps.noms.outputs.version }}
         run: |
-          docker build --platform linux/amd64 -t "$IMAGES-api:$VERSION" ./backend
+          docker build --platform linux/amd64 --build-arg KLEAN_VERSION="$VERSION" -t "$IMAGES-api:$VERSION" ./backend
           docker build --platform linux/amd64 -t "$IMAGES-caddy:$VERSION" ./frontend
           docker push "$IMAGES-api:$VERSION"
           docker push "$IMAGES-caddy:$VERSION"

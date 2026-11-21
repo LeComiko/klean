@@ -5,6 +5,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>c2363c12-a453-43d9-a9dd-af678994ecd4</UserSecretsId>
+    <!-- La version publiée vient de l'étiquette : publication.yml la passe au Dockerfile,
+         qui la donne à `dotnet publish -p:Version=…`. Hors publication, 0.0.0-dev. Sans
+         l'empreinte du commit, que .NET ajouterait sinon après un « + ». -->
+    <Version>0.0.0-dev</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

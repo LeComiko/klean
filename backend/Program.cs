@@ -486,6 +486,13 @@ app.MapControllers();
 // Anonyme et hors description OpenAPI. La réponse ne dit ni le nom de la base,
 // ni l'erreur : une sonde n'a besoin que d'un code de statut, et ce point
 // d'entrée est le seul ouvert sans authentification.
+// La version vient de l'assemblage, que la publication construit avec la version de
+// l'étiquette : elle était écrite en dur jusqu'à la 0.1.0, donc fausse dès la suivante.
+var versionKlean = typeof(Program).Assembly
+    .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+    .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+    .FirstOrDefault()?.InformationalVersion ?? "inconnue";
+
 app.MapGet("/api/sante", async (KleanDbContext db) =>
 {
     var joignable = await db.Database.CanConnectAsync();
@@ -495,7 +502,7 @@ app.MapGet("/api/sante", async (KleanDbContext db) =>
         {
             statut = joignable ? "ok" : "degrade",
             baseDeDonnees = joignable ? "joignable" : "injoignable",
-            version = "0.1.0"
+            version = versionKlean
         },
         statusCode: joignable
             ? StatusCodes.Status200OK
