@@ -122,8 +122,8 @@ nombre_de_comptes() {
 # main, ou une mise à jour, s'écraseraient sinon : deux `pg_dump`, ou pire une
 # restauration pendant une sauvegarde.
 #
-# ⚠️ `restaurer` l'appelle ; `mettre-a-jour` et `revenir` devront l'appeler aussi, au début, sans
-# attente (une commande lancée à la main échoue tout de suite et dit pourquoi).
+# ⚠️ `restaurer`, `installer`, `mettre-a-jour` et `revenir` l'appellent au début, sans
+# attente : une commande lancée à la main échoue tout de suite et dit pourquoi.
 # Réentrant dans le même processus : `mettre-a-jour` appelle `cmd_sauvegarder`, qui
 # redemanderait un verrou que le même processus tient déjà, et s'attendrait lui-même.
 # Le descripteur 9 reste ouvert jusqu'à la fin du processus, qui libère le verrou.
@@ -139,8 +139,8 @@ verrouiller() {
 
 # ---- Sauvegarder -------------------------------------------------------------------
 
-# Chemin de la dernière sauvegarde de la base écrite par cmd_sauvegarder.
-# shellcheck disable=SC2034  # lue par mettre-a-jour, qui appellera cmd_sauvegarder dans ce processus
+# Chemin de la dernière sauvegarde de la base écrite par cmd_sauvegarder. Lue par
+# mettre-a-jour, qui appelle cmd_sauvegarder dans le même processus.
 DERNIERE_SAUVEGARDE=''
 
 cmd_sauvegarder() {
@@ -230,7 +230,7 @@ tourner() {
 
 cmd_etat() {
   exiger_root
-  local derniere heures libre enmarche service
+  local derniere heures libre enmarche service en_cours
   dire "KLEAN $(lire_env "$ENV" KLEAN_VERSION) — https://$(lire_env "$ENV" KLEAN_DOMAINE)"
   # -a : un service arrêté ou sorti en erreur n'apparaît sinon pas du tout.
   compose ps -a --format 'table {{.Service}}\t{{.State}}\t{{.Status}}' ||
@@ -243,6 +243,9 @@ cmd_etat() {
   else
     avertir "Docker ne répond pas : impossible de dire quels services tournent."
   fi
+  en_cours=$(lire_env "$ENV" KLEAN_MAJ_EN_COURS)
+  [ -z "$en_cours" ] ||
+    avertir "La mise à jour vers $en_cours n'a pas abouti : reprenez-la (sudo klean mettre-a-jour) ou annulez-la (sudo klean revenir)."
 
   derniere=$(cat "$SAUVEGARDES/.derniere-reussie" 2> /dev/null || true)
   [[ $derniere =~ ^[0-9]+$ ]] || derniere=0
@@ -345,8 +348,13 @@ cmd_restaurer() {
 # $2 = migrer : rejoue les migrations de la version installée avant de démarrer —
 # une sauvegarde plus ancienne que les images laisserait sinon le schéma en retard.
 # `revenir` ne le demande pas : il remet aussi les images d'avant.
+#
+# $3 : la commande qui reprend, si ce n'est pas `restaurer` — `revenir` la donne. Ses
+# échecs ne proposent alors pas « sudo klean restaurer <copie> » pour annuler : la copie
+# est celle de la version d'après, que les fichiers remis en place ne savent plus lire.
 restaurer_base() {
-  local sauvegarde="$1" migrations="${2:-}" copie temporaire sortie
+  local sauvegarde="$1" migrations="${2:-}" relance="${3:-sudo klean restaurer $1}"
+  local copie temporaire sortie annuler
   compose up -d postgres
   attendre_postgres
   compose stop api
@@ -356,18 +364,28 @@ restaurer_base() {
   # Elle n'appelle pas cmd_sauvegarder : le trousseau s'y lit dans l'API, arrêtée ici.
   # Même forme que ses fichiers, donc la rotation la garde quatorze jours.
   install -d -m 700 "$SAUVEGARDES"
-  copie="$SAUVEGARDES/klean-$(date +%Y-%m-%dT%H%M)-avant-restauration.dump"
+  # À la seconde, et jamais par-dessus une autre : un `revenir` ou un `restaurer` relancé
+  # dans la même minute, après un échec qui a laissé la base vide, remplaçait sinon la
+  # copie des vraies données par celle de la base vide.
+  copie="$SAUVEGARDES/klean-$(date +%Y-%m-%dT%H%M%S)-avant-restauration.dump"
+  [ ! -e "$copie" ] || copie="${copie%.dump}-$$.dump"
   temporaire=$(mktemp "$SAUVEGARDES/.partiel.XXXXXX")
   if ! compose exec -T postgres pg_dump -U klean -d klean -Fc > "$temporaire" ||
     ! compose exec -T postgres pg_restore -f /dev/null < "$temporaire"; then
     rm -f "$temporaire"
-    echouer "La copie de l'état actuel a échoué, donc rien n'a été détruit. L'API est arrêtée : sudo klean etat, puis relancez."
+    echouer "La copie de l'état actuel a échoué, donc rien n'a été détruit. L'API est arrêtée : sudo klean etat, puis relancez : $relance"
   fi
   chmod 600 "$temporaire"
   mv -f "$temporaire" "$copie"
   dire "État actuel copié : $copie"
 
-  sortie="Relancez : sudo klean restaurer ${sauvegarde}, ou revenez à l'état d'avant avec : sudo klean restaurer $copie"
+  if [ -z "${3:-}" ]; then
+    sortie="Relancez : $relance, ou revenez à l'état d'avant avec : sudo klean restaurer $copie"
+    annuler="Pour annuler : sudo klean restaurer $copie"
+  else
+    sortie="Relancez : $relance — l'état d'avant reste copié dans $copie."
+    annuler="Puis relancez : $relance"
+  fi
   compose exec -T postgres psql -U klean -d postgres -v ON_ERROR_STOP=1 \
     -c 'DROP DATABASE IF EXISTS klean WITH (FORCE)' \
     -c 'CREATE DATABASE klean OWNER klean' ||
@@ -386,13 +404,13 @@ restaurer_base() {
   compose exec -T postgres psql -U klean -d klean -v ON_ERROR_STOP=1 -c \
     'UPDATE "JetonsRafraichissement" SET "DateRevocation" = now() WHERE "DateRevocation" IS NULL;' ||
     echouer "La base est restaurée, mais les anciennes sessions n'ont pas pu être révoquées ; l'API reste arrêtée. $sortie"
-  restaurer_trousseau
+  restaurer_trousseau "$sortie"
   if [ "$migrations" = migrer ]; then
     compose run --rm -T migrer ||
-      echouer "La base est restaurée, mais sa mise au niveau de la version installée a échoué ; l'API reste arrêtée. Voir les lignes ci-dessus et : sudo klean journaux. Pour annuler : sudo klean restaurer $copie"
+      echouer "La base est restaurée, mais sa mise au niveau de la version installée a échoué ; l'API reste arrêtée. Voir les lignes ci-dessus et : sudo klean journaux. $annuler"
   fi
   compose up -d ||
-    echouer "La base est restaurée, mais les services n'ont pas démarré. Voir : sudo klean etat, puis sudo klean journaux. Pour annuler : sudo klean restaurer $copie"
+    echouer "La base est restaurée, mais les services n'ont pas démarré. Voir : sudo klean etat, puis sudo klean journaux. $annuler"
 }
 
 # **Toujours fusionné**, jamais « seulement si le volume est vide » : l'API crée une clé
@@ -404,6 +422,7 @@ restaurer_base() {
 #
 # Le conteneur éphémère monte le volume `cles-api` et tourne sous `app`, l'utilisateur de
 # l'API (backend/Dockerfile) : les fichiers extraits lui appartiennent. L'API est arrêtée.
+# $1 : la phrase qui dit comment reprendre.
 restaurer_trousseau() {
   local archive
   archive=$(derniere_archive_trousseau)
@@ -412,7 +431,7 @@ restaurer_trousseau() {
     return
   fi
   compose run --rm --no-deps -T --entrypoint tar api xzf - -C /home/app/.aspnet < "$archive" ||
-    echouer "La base est restaurée, mais pas le trousseau ($archive) ; l'API reste arrêtée. Relancez : sudo klean restaurer <fichier>."
+    echouer "La base est restaurée, mais pas le trousseau ($archive) ; l'API reste arrêtée. $1"
 }
 
 # ---- Installer ------------------------------------------------------------------
@@ -519,7 +538,7 @@ ecrire_env() {
   while [ "$#" -ge 2 ]; do
     if ! poser_env "$temporaire" "$1" "$2"; then
       rm -f "$temporaire"
-      echouer "La configuration n'a pas pu être écrite : rien n'a changé. Relancez : sudo klean installer"
+      echouer "La configuration n'a pas pu être écrite : rien n'a changé. Relancez : sudo klean ${COMMANDE:-installer}"
     fi
     shift 2
   done
@@ -808,6 +827,298 @@ afficher_fin() {
   dire "État : sudo klean etat — Mise à jour : sudo klean mettre-a-jour"
 }
 
+# ---- Mettre à jour, revenir -----------------------------------------------------
+#
+# L'état d'une mise à jour tient dans trois variables de .env :
+#   KLEAN_VERSION_PRECEDENTE    la version d'avant, que `revenir` remet en place ;
+#   KLEAN_SAUVEGARDE_AVANT_MAJ  la base d'avant, que `revenir` restaure ;
+#   KLEAN_MAJ_EN_COURS          la version visée, de l'arrêt de l'API à son redémarrage.
+#                               Posée, elle dit qu'une mise à jour n'a pas abouti : la
+#                               relance la reprend, et n'écrase jamais les deux autres —
+#                               la sauvegarde d'une base à moitié transformée prendrait
+#                               la place de celle d'avant.
+
+# Les fichiers d'une version, dans l'ordre de leur mise en place : VERSION en dernier,
+# comme dans installer.sh.
+FICHIERS_VERSION='docker-compose.yml klean fonctions.sh klean.cron env.modele VERSION'
+
+# Jamais de HTTP, même au bout d'une redirection : GitHub renvoie les téléchargements
+# vers un autre domaine, et curl suivrait par défaut une redirection en clair.
+telecharger() {
+  curl -fsSL --proto '=https' --proto-redir '=https' "$@"
+}
+
+derniere_version() {
+  local url
+  url=$(telecharger -I -o /dev/null -w '%{url_effective}' "$(url_derniere_version)") ||
+    echouer "Impossible de joindre GitHub pour connaître la dernière version de KLEAN : le serveur est-il relié à Internet ? Rien n'a changé."
+  version_depuis_url "$url" ||
+    echouer "Aucune version publiée de KLEAN n'a été trouvée ($url). Rien n'a changé."
+}
+
+# Réussit si le dossier $1 porte tous les fichiers de la version $2, et bien les siens.
+version_complete() {
+  local fichier
+  for fichier in $FICHIERS_VERSION; do
+    [ -f "$1/$fichier" ] || return 1
+  done
+  [ "$(cat "$1/VERSION")" = "$2" ]
+}
+
+# Télécharge, vérifie et ouvre l'archive de la version $1 dans versions/$1, pendant que
+# la version installée tourne : un refus ici n'a rien arrêté. Les versions déjà
+# installées y restent — c'est ce que `revenir` remet en place.
+#
+# L'empreinte attendue est celle du klean-<v>.tar.gz.sha256 publié avec la version,
+# relue comme une donnée (empreinte_publiee) puis comparée à celle du fichier reçu.
+#   Ce qu'elle garantit : une archive entière — un téléchargement tronqué, abîmé, ou une
+#   page d'erreur à la place est refusé avant tout arrêt —, et celle de cette version :
+#   le .sha256 doit nommer klean-<v>.tar.gz, et VERSION, une fois l'archive ouverte,
+#   doit dire <v>. Le transport : HTTPS jusqu'à GitHub, certificat vérifié par curl,
+#   redirections comprises.
+#   Ce qu'elle ne garantit pas : qui peut publier sur le dépôt change l'archive et son
+#   empreinte ensemble. L'empreinte gravée dans l'installer.sh de la même version n'en
+#   dirait pas plus — elle vient du même endroit, par le même chemin — et il faudrait
+#   lire un script pour l'en extraire. Seule une signature dont la clé ne serait pas sur
+#   GitHub fermerait ce cas : hors du lot A1.
+telecharger_version() {
+  local version="$1" dossier="$REPERTOIRE/versions/$1" nom="klean-$1.tar.gz" url publiee attendue obtenue
+  url=$(url_archive "$version")
+  install -d -m 700 "$REPERTOIRE/versions" "$dossier"
+  dire "Téléchargement de KLEAN $version…"
+  telecharger -o "$dossier/$nom" "$url" ||
+    echouer "Téléchargement impossible : $url. Rien n'a changé ; réessayez dans quelques minutes."
+  publiee=$(telecharger "$url.sha256") ||
+    echouer "L'empreinte de la version $version est introuvable ($url.sha256). Rien n'a changé ; réessayez dans quelques minutes."
+  attendue=$(empreinte_publiee "$publiee" "$nom") ||
+    echouer "L'empreinte publiée pour la version $version est illisible. Rien n'a changé ; si cela se répète, signalez-le."
+  obtenue=$(sha256sum "$dossier/$nom" | cut -d' ' -f1)
+  if [ "$obtenue" != "$attendue" ]; then
+    rm -f "$dossier/$nom"
+    echouer "L'archive téléchargée n'est pas celle de KLEAN $version : rien n'a été installé, et la version actuelle tourne toujours. Réessayez plus tard ; si cela se répète, signalez-le."
+  fi
+  # --no-same-owner : extraite par root, l'archive ne doit pas poser un uid étranger.
+  if ! tar xzf "$dossier/$nom" -C "$dossier" --no-same-owner || ! version_complete "$dossier" "$version"; then
+    echouer "L'archive de la version $version ne contient pas ce qu'elle devrait. Rien n'a changé ; si cela se répète, signalez-le."
+  fi
+}
+
+# `revenir` remet les fichiers de versions/<précédente> : ceux de la version installée
+# doivent y être avant qu'elle soit remplacée. installer.sh les y laisse ; s'ils
+# manquent, ce sont ceux de /opt/klean, s'ils sont bien de cette version.
+conserver_version_actuelle() {
+  local version="$1" dossier="$REPERTOIRE/versions/$1" fichier
+  ! version_complete "$dossier" "$version" || return 0
+  version_complete "$REPERTOIRE" "$version" ||
+    echouer "Les fichiers de la version installée ($version) manquent, dans $dossier comme dans $REPERTOIRE : un retour arrière serait impossible, donc la mise à jour ne commence pas. Rien n'a changé. Relancez la commande d'installation de la version $version (page des versions de KLEAN), qui les remet en place, puis : sudo klean mettre-a-jour"
+  install -d -m 700 "$REPERTOIRE/versions" "$dossier"
+  for fichier in $FICHIERS_VERSION; do
+    cp -p "$REPERTOIRE/$fichier" "$dossier/$fichier"
+  done
+}
+
+# Remplace les fichiers de /opt/klean par ceux du dossier $1, chacun copié à côté puis
+# renommé : ce script se remplace lui-même pendant qu'il tourne (voir l'en-tête).
+# Chaque échec est rendu, et non laissé à `set -e` : appelée derrière un `||`, la
+# fonction ne s'arrêterait sinon sur aucun.
+installer_fichiers() {
+  local source="$1" fichier mode
+  for fichier in $FICHIERS_VERSION; do
+    mode=600
+    [ "$fichier" != klean ] || mode=700
+    { install -m "$mode" "$source/$fichier" "$REPERTOIRE/.$fichier.nouveau" &&
+      mv -f "$REPERTOIRE/.$fichier.nouveau" "$REPERTOIRE/$fichier"; } || return 1
+  done
+  # Mode et propriétaire explicites, comme à l'installation : cron refuse un fichier en 600.
+  install -m 644 -o root -g root "$REPERTOIRE/klean.cron" /etc/cron.d/klean
+}
+
+# Les images de la version $1, que décrit le compose du dossier $2 : gardées si elles sont
+# là, téléchargées sinon. Toujours avant le premier arrêt : un réseau coupé ne doit rien
+# laisser à moitié fait. La version visée l'emporte sur celle de .env — pour docker
+# compose, l'environnement du shell passe avant le fichier.
+obtenir_images() {
+  local version="$1" dossier="$2" images
+  images=$(lire_env "$ENV" KLEAN_IMAGES)
+  if [ -n "$images" ] && docker image inspect "$images-api:$version" "$images-caddy:$version" > /dev/null 2>&1; then
+    return 0
+  fi
+  KLEAN_VERSION="$version" docker compose --project-directory "$REPERTOIRE" --env-file "$ENV" \
+    -f "$dossier/docker-compose.yml" pull api caddy
+}
+
+cmd_mettre_a_jour() {
+  exiger_root
+  # Sans attente, comme `restaurer` : pendant la sauvegarde de la nuit, elle échoue tout
+  # de suite et dit pourquoi.
+  verrouiller
+  [ -f "$ENV" ] ||
+    echouer "KLEAN n'est pas installé sur ce serveur ($ENV manque) : rien à mettre à jour. Pour l'installer, prenez la commande de la page des versions de KLEAN."
+  local actuelle cible en_cours enmarche
+  actuelle=$(lire_env "$ENV" KLEAN_VERSION)
+  en_cours=$(lire_env "$ENV" KLEAN_MAJ_EN_COURS)
+
+  if [ -n "$en_cours" ]; then
+    [ -z "${1:-}" ] || [ "$1" = "$en_cours" ] ||
+      echouer "La mise à jour vers $en_cours n'a pas abouti. Terminez-la d'abord (sudo klean mettre-a-jour), ou annulez-la (sudo klean revenir). Rien n'a changé."
+    dire "La mise à jour vers $en_cours n'avait pas abouti : elle reprend là où elle s'était arrêtée."
+    dire "Aucune nouvelle sauvegarde n'est prise — elle serait celle d'une base à moitié transformée. Celle d'avant la mise à jour reste : $(lire_env "$ENV" KLEAN_SAUVEGARDE_AVANT_MAJ)"
+    basculer_vers "$en_cours" "$(lire_env "$ENV" KLEAN_VERSION_PRECEDENTE)"
+    return
+  fi
+
+  version_valide "$actuelle" ||
+    echouer "La version installée est inconnue (KLEAN_VERSION vaut « $actuelle » dans $ENV). Rien n'a changé. Reprenez l'installation : sudo klean installer"
+  cible="${1:-}"
+  if [ -z "$cible" ]; then
+    dire "Recherche de la dernière version publiée…"
+    cible=$(derniere_version)
+  fi
+  version_valide "$cible" ||
+    echouer "Version invalide : « $cible » (attendu : trois nombres, par exemple 1.2.3). Rien n'a changé."
+  if [ "$cible" = "$actuelle" ]; then
+    dire "KLEAN est déjà en version $actuelle : rien à faire."
+    return
+  fi
+  # Une version plus ancienne ne s'installe pas par-dessus : ses images ne connaissent pas
+  # le schéma de la base, et ses migrations ne le défont pas — le code qui le défait n'est
+  # que dans la version qui l'a fait (CLAUDE.md §10). Le seul retour est `revenir`, qui
+  # restaure la base d'avant la mise à jour.
+  if version_anterieure "$cible" "$actuelle"; then
+    echouer "La version $cible est plus ancienne que celle installée ($actuelle) : KLEAN ne se rétrograde pas ainsi. Rien n'a changé. Pour défaire la dernière mise à jour, dans les quatorze jours : sudo klean revenir"
+  fi
+
+  # Le mot de passe provisoire n'est retiré de .env qu'une fois montré, à la toute fin de
+  # l'installation : encore là, il dit qu'elle n'a pas fini, et que personne n'a pu se
+  # connecter. Rien à sauvegarder : la nouvelle version prend la place, et c'est son
+  # installation qui reprend — avec ses corrections, si l'ancienne échouait.
+  if [ -n "$(lire_env "$ENV" KLEAN_ADMIN_MOT_DE_PASSE)" ]; then
+    dire "L'installation de KLEAN $actuelle n'était pas terminée, et personne n'a encore pu s'y connecter : la version $cible prend sa place, puis l'installation reprend."
+    telecharger_version "$cible"
+    installer_fichiers "$REPERTOIRE/versions/$cible" ||
+      echouer "Les fichiers de la version $cible n'ont pas pu être mis en place. Relancez : sudo klean mettre-a-jour"
+    poser_env "$ENV" KLEAN_VERSION "$cible" ||
+      echouer "La configuration n'a pas pu être mise à jour. Relancez : sudo klean mettre-a-jour"
+    # Le verrou passe au nouveau processus par son descripteur, qui le reprend aussitôt.
+    exec "$REPERTOIRE/klean" installer
+  fi
+
+  conserver_version_actuelle "$actuelle"
+  telecharger_version "$cible"
+  dire "Téléchargement des images de la version $cible, pendant que $actuelle tourne…"
+  obtenir_images "$cible" "$REPERTOIRE/versions/$cible" ||
+    echouer "Le téléchargement des images de la version $cible a échoué : rien n'a changé, KLEAN $actuelle tourne toujours. Réessayez dans quelques minutes : sudo klean mettre-a-jour"
+
+  # L'API doit tourner : le trousseau se sauvegarde depuis son conteneur.
+  compose up -d ||
+    echouer "KLEAN $actuelle ne démarre pas, et la sauvegarde d'avant la mise à jour en a besoin. Rien n'a changé. Voir : sudo klean etat, puis sudo klean journaux."
+  attendre_postgres
+  enmarche=$(compose ps --status running --services 2> /dev/null) || enmarche=''
+  grep -qx api <<< "$enmarche" ||
+    echouer "L'API de KLEAN $actuelle ne démarre pas, et la sauvegarde d'avant la mise à jour a besoin d'elle. Rien n'a changé. Voir : sudo klean etat, puis sudo klean journaux."
+  dire "Sauvegarde d'avant la mise à jour. Si elle échoue, tout s'arrête là, sans rien changer."
+  cmd_sauvegarder "avant-$cible"
+  ecrire_env KLEAN_VERSION_PRECEDENTE "$actuelle" KLEAN_SAUVEGARDE_AVANT_MAJ "$DERNIERE_SAUVEGARDE" \
+    KLEAN_MAJ_EN_COURS "$cible"
+  basculer_vers "$cible" "$actuelle"
+}
+
+# De l'arrêt de l'API à son redémarrage sous la version $1. Chaque geste se rejoue :
+# une mise à jour interrompue reprend ici (KLEAN_MAJ_EN_COURS).
+basculer_vers() {
+  local cible="$1" precedente="$2" retour
+  retour="Pour revenir à $precedente et à la base d'avant la mise à jour : sudo klean revenir"
+  # Les saisies faites après la sauvegarde, jusqu'ici, seraient perdues par un `revenir`
+  # (plan de l'étape 34, décision 4) : quelques secondes, et `revenir` le dit.
+  compose stop api ||
+    echouer "L'API n'a pas pu être arrêtée ; la version $precedente est encore en place. Voir : sudo klean etat, puis reprenez : sudo klean mettre-a-jour"
+  installer_fichiers "$REPERTOIRE/versions/$cible" ||
+    echouer "Les fichiers de la version $cible n'ont pas pu être mis en place ; l'API est arrêtée, la base n'a pas changé. Reprenez : sudo klean mettre-a-jour. $retour"
+  completer_env_version "$REPERTOIRE"
+  poser_env "$ENV" KLEAN_VERSION "$cible" ||
+    echouer "La configuration n'a pas pu être mise à jour ; l'API est arrêtée, la base n'a pas changé. Reprenez : sudo klean mettre-a-jour. $retour"
+  dire "Mise à niveau de la base pour la version $cible…"
+  if ! compose run --rm -T migrer; then
+    avertir "La mise à niveau de la base pour la version $cible a échoué (voir les lignes ci-dessus). L'API est arrêtée : KLEAN est inaccessible."
+    avertir "La base a peut-être reçu une partie des changements de $cible. Celle d'avant la mise à jour est gardée : $(lire_env "$ENV" KLEAN_SAUVEGARDE_AVANT_MAJ)"
+    echouer "Si la cause est corrigée (un disque plein, par exemple), reprenez : sudo klean mettre-a-jour. $retour"
+  fi
+  compose up -d ||
+    echouer "La version $cible est en place, mais KLEAN n'a pas démarré. Voir : sudo klean journaux, puis reprenez : sudo klean mettre-a-jour. $retour"
+  # La mise à jour est faite : un défaut d'HTTPS ne doit pas bloquer la suivante.
+  poser_env "$ENV" KLEAN_MAJ_EN_COURS '' ||
+    avertir "KLEAN tourne en version $cible, mais la configuration n'a pas pu le noter : la prochaine commande reprendra une mise à jour déjà faite, sans dommage."
+  verifier_https ||
+    echouer "KLEAN est passé en version $cible, mais ne répond pas en HTTPS (voir ci-dessus). Si cela vient de la nouvelle version : sudo klean revenir"
+  dire "KLEAN est passé de la version $precedente à la version $cible."
+  dire "En cas de problème, dans les quatorze jours : sudo klean revenir — ce qui aura été saisi depuis serait perdu."
+}
+
+cmd_revenir() {
+  exiger_root
+  verrouiller
+  [ -f "$ENV" ] || echouer "KLEAN n'est pas installé sur ce serveur ($ENV manque) : rien à défaire."
+  local actuelle precedente sauvegarde dossier en_cours cle
+  actuelle=$(lire_env "$ENV" KLEAN_VERSION)
+  precedente=$(lire_env "$ENV" KLEAN_VERSION_PRECEDENTE)
+  sauvegarde=$(lire_env "$ENV" KLEAN_SAUVEGARDE_AVANT_MAJ)
+  en_cours=$(lire_env "$ENV" KLEAN_MAJ_EN_COURS)
+  version_valide "$precedente" ||
+    echouer "Aucune mise à jour à défaire : KLEAN $actuelle n'a pas été mis à jour depuis son installation, ou le retour a déjà été fait. Rien n'a changé."
+
+  # Tout se vérifie avant le premier arrêt.
+  dossier="$REPERTOIRE/versions/$precedente"
+  version_complete "$dossier" "$precedente" ||
+    echouer "Les fichiers de la version $precedente manquent dans $dossier : le retour est impossible. Rien n'a changé ; KLEAN reste en version $actuelle."
+  # La sauvegarde d'avant la mise à jour suit la rotation : quatorze jours, pas plus.
+  if [ -z "$sauvegarde" ] || [ ! -f "$sauvegarde" ]; then
+    lister_sauvegardes >&2
+    [ -n "$sauvegarde" ] || sauvegarde='aucune notée'
+    echouer "La sauvegarde prise avant la mise à jour n'existe plus ($sauvegarde) : les sauvegardes sont gardées quatorze jours. Le retour à $precedente n'est plus possible, et rien n'a changé : KLEAN reste en version $actuelle. Pour remettre la base à l'une des sauvegardes ci-dessus, dans cette version : sudo klean restaurer <fichier>"
+  fi
+  compose up -d postgres ||
+    echouer "PostgreSQL n'a pas démarré : rien n'a changé. Voir : sudo klean journaux"
+  attendre_postgres
+  # Relue en entier, comme par `restaurer` : avant de détruire, savoir qu'elle se lit.
+  compose exec -T postgres pg_restore -f /dev/null < "$sauvegarde" ||
+    echouer "La sauvegarde d'avant la mise à jour ($sauvegarde) est illisible : le retour est impossible. Rien n'a changé ; KLEAN reste en version $actuelle."
+  obtenir_images "$precedente" "$dossier" ||
+    echouer "Les images de la version $precedente n'ont pas pu être téléchargées : rien n'a changé. Réessayez dans quelques minutes : sudo klean revenir"
+
+  if [ "$actuelle" = "$precedente" ]; then
+    avertir "Un retour à la version $precedente a été interrompu : il reprend, et la base est de nouveau remise telle qu'elle était avant la mise à jour."
+  else
+    avertir "Retour de la version $actuelle à la version $precedente, et de la base à son état d'avant la mise à jour (${sauvegarde##*/})."
+  fi
+  [ -z "$en_cours" ] || avertir "La mise à jour vers $en_cours, qui n'avait pas abouti, est abandonnée."
+  avertir "Tout ce qui a été saisi depuis la mise à jour sera perdu — y compris les quelques secondes entre sa sauvegarde et l'arrêt de l'API."
+  avertir "Toutes les sessions sont fermées : chacun devra se reconnecter."
+  avertir "L'état actuel sera d'abord copié dans $SAUVEGARDES (…-avant-restauration.dump, gardé 14 jours)."
+  confirmer "Revenir à la version $precedente ?" REVENIR || echouer "Retour abandonné. Rien n'a changé."
+
+  compose stop api ||
+    echouer "L'API n'a pas pu être arrêtée : rien n'a changé. Voir : sudo klean etat"
+  installer_fichiers "$dossier" ||
+    echouer "Les fichiers de la version $precedente n'ont pas pu être remis en place ; l'API est arrêtée, la base n'a pas changé. Relancez : sudo klean revenir"
+  poser_env "$ENV" KLEAN_VERSION "$precedente" ||
+    echouer "La configuration n'a pas pu être mise à jour ; l'API est arrêtée, la base n'a pas changé. Relancez : sudo klean revenir"
+  # Aucune migration descendante : la base entière est remplacée par celle d'avant la
+  # mise à jour, et l'image de $precedente ne connaîtrait de toute façon pas le code qui
+  # défait les migrations suivantes (CLAUDE.md §10 ; plan de l'étape 34, décision 3).
+  restaurer_base "$sauvegarde" '' 'sudo klean revenir'
+
+  # KLEAN_VERSION_PRECEDENTE d'abord : c'est elle qui ferait rejouer le retour, et
+  # restaurer de nouveau la base d'avant par-dessus ce qui sera saisi demain.
+  for cle in KLEAN_VERSION_PRECEDENTE KLEAN_SAUVEGARDE_AVANT_MAJ KLEAN_MAJ_EN_COURS; do
+    poser_env "$ENV" "$cle" '' ||
+      avertir "KLEAN est revenu en version $precedente, mais $cle n'a pas pu être effacée de $ENV : ne relancez pas sudo klean revenir, qui remettrait encore la base d'avant la mise à jour."
+  done
+  verifier_https ||
+    echouer "KLEAN est revenu en version $precedente, mais ne répond pas en HTTPS (voir ci-dessus) : sudo klean etat, puis sudo klean journaux."
+  dire "KLEAN est revenu en version $precedente, avec la base d'avant la mise à jour. Chacun doit se reconnecter."
+  dire "Pour retenter la mise à jour plus tard : sudo klean mettre-a-jour"
+}
+
 # ---- Aiguillage ------------------------------------------------------------------
 
 aide() {
@@ -828,6 +1139,8 @@ principal() {
     journaux) cmd_journaux "$@" ;;
     code) cmd_code ;;
     restaurer) cmd_restaurer "$@" ;;
+    mettre-a-jour) cmd_mettre_a_jour "$@" ;;
+    revenir) cmd_revenir ;;
     aide | -h | --help) aide ;;
     *)
       printf 'Commande inconnue : %s\n\n' "$COMMANDE" >&2

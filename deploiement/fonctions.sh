@@ -297,6 +297,36 @@ version_depuis_url() {
   fi
 }
 
+version_valide() {
+  [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+
+# Réussit si la version $1 précède strictement $2. Nombre par nombre, pas en texte :
+# 0.10.0 vient après 0.9.0. 10# : « 08 » n'est pas de l'octal. Échoue sur une version
+# mal formée, qui ne précède rien.
+version_anterieure() {
+  local a b i
+  version_valide "$1" && version_valide "$2" || return 1
+  IFS=. read -r -a a <<< "$1"
+  IFS=. read -r -a b <<< "$2"
+  for i in 0 1 2; do
+    if ((10#${a[i]} < 10#${b[i]})); then return 0; fi
+    if ((10#${a[i]} > 10#${b[i]})); then return 1; fi
+  done
+  return 1
+}
+
+# L'empreinte que porte le contenu $1 d'un fichier .sha256 publié par publier.sh, s'il
+# décrit bien le fichier $2 : une seule ligne, 64 chiffres hexadécimaux, deux espaces,
+# puis ce nom exactement. Sinon, rien, et un échec. Lu comme une donnée — jamais par
+# `sha256sum -c`, qui vérifie le fichier que le .sha256 nomme, quel qu'il soit.
+empreinte_publiee() {
+  # `.` couvre aussi un saut de ligne : une seconde ligne tombe dans le nom, et le refus.
+  [[ "$1" =~ ^([0-9a-f]{64})\ \ (.*)$ ]] || return 1
+  [ "${BASH_REMATCH[2]}" = "$2" ] || return 1
+  printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
 url_archive() {
   printf 'https://github.com/%s/releases/download/v%s/klean-%s.tar.gz\n' "$KLEAN_DEPOT_GITHUB" "$1" "$1"
 }

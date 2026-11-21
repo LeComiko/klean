@@ -190,6 +190,32 @@ verifier 'version lue sur une URL de version' \
 version_absente() { ! version_depuis_url https://github.com/a/b/releases > /dev/null; }
 verifier 'une URL sans version est refusée' version_absente
 
+verifier '0.1.0 précède 0.2.0' version_anterieure 0.1.0 0.2.0
+verifier '0.9.0 précède 0.10.0, en nombres et non en texte' version_anterieure 0.9.0 0.10.0
+verifier '1.9.9 précède 2.0.0' version_anterieure 1.9.9 2.0.0
+pas_anterieure() { ! version_anterieure "$1" "$2"; }
+verifier 'une version ne se précède pas elle-même' pas_anterieure 1.2.3 1.2.3
+verifier '0.10.0 ne précède pas 0.9.0' pas_anterieure 0.10.0 0.9.0
+verifier '1.2.3 ne précède pas 1.2.2' pas_anterieure 1.2.3 1.2.2
+verifier '08 n’est pas de l’octal' version_anterieure 0.8.0 0.08.1
+verifier 'une version mal formée ne précède rien' pas_anterieure 1.2 1.2.3
+verifier 'rien ne précède une version mal formée' pas_anterieure 1.2.3 v1.3.0
+pas_valide() { ! version_valide "$1"; }
+verifier '1.2.3 est une version' version_valide 1.2.3
+verifier 'v1.2.3 n’en est pas une' pas_valide v1.2.3
+verifier '1.2.3-rc1 n’en est pas une' pas_valide 1.2.3-rc1
+
+hex=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+verifier 'l’empreinte publiée est lue' \
+  egal "$(empreinte_publiee "$hex  klean-1.2.3.tar.gz" klean-1.2.3.tar.gz)" "$hex"
+empreinte_refusee() { ! empreinte_publiee "$1" klean-1.2.3.tar.gz > /dev/null; }
+verifier 'l’empreinte d’une autre version est refusée' empreinte_refusee "$hex  klean-1.2.2.tar.gz"
+verifier 'une empreinte en majuscules est refusée' empreinte_refusee "${hex^^}  klean-1.2.3.tar.gz"
+verifier 'une empreinte de 63 chiffres est refusée' empreinte_refusee "${hex:1}  klean-1.2.3.tar.gz"
+verifier 'une seconde ligne est refusée' empreinte_refusee "$hex  klean-1.2.3.tar.gz"$'\n'"$hex  klean-1.2.3.tar.gz"
+verifier 'un fichier vide est refusé' empreinte_refusee ''
+verifier 'une page HTML est refusée' empreinte_refusee '<html>Not Found</html>'
+
 KLEAN_DEPOT_GITHUB=LeComiko/klean
 verifier 'URL de l’archive' egal "$(url_archive 1.2.3)" \
   https://github.com/LeComiko/klean/releases/download/v1.2.3/klean-1.2.3.tar.gz
@@ -269,6 +295,11 @@ empreinte_gravee() {
     "$(sha256sum "$sortie/klean-1.2.3.tar.gz" | cut -d' ' -f1)"
 }
 verifier 'l’installateur porte l’empreinte de l’archive' empreinte_gravee
+# La forme que `klean mettre-a-jour` relit : si publier.sh en changeait, aucune mise à
+# jour ne passerait plus.
+verifier 'mettre-a-jour sait lire le .sha256 publié' \
+  egal "$(empreinte_publiee "$(cat "$sortie/klean-1.2.3.tar.gz.sha256")" klean-1.2.3.tar.gz)" \
+  "$(sha256sum "$sortie/klean-1.2.3.tar.gz" | cut -d' ' -f1)"
 klean_executable() { [ -x "$contenu/klean" ]; }
 verifier 'klean est exécutable dans l’archive' klean_executable
 refuse_version() { ! "$ici/../publier.sh" 1.2 a/b "$sortie" 2> /dev/null; }
