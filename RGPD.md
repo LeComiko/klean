@@ -164,7 +164,7 @@ dernier pas de trente secondes accepté, qui empêche de rejouer un code.
 | **Personnes** | utilisateurs (ceux qui lisent), et indirectement les agents (par `CibleId`) |
 | **Données** | identifiant de l'utilisateur, ressource, nature de l'accès, identifiant de la cible pour une lecture unitaire, **nombre** de lignes pour une liste, horodatage |
 | **Table** | `AccesJournalises` |
-| **Accès** | `GET /api/journal-acces`, **administrateur seul**, lecture seule |
+| **Accès** | l'écran *Journal d'accès* et `GET /api/journal-acces`, **administrateur seul**, lecture seule. Le journal ne stocke que des identifiants ; l'écran nomme l'auteur, une fiche agent ou un compte visé à l'affichage, jamais une absence (étape 27) |
 | **Durée** | **12 mois**, par `backend/Scripts/purge-journal-acces.sql` |
 | **Journalisé** | oui — lire le journal laisse une ligne dans le journal |
 
@@ -425,8 +425,8 @@ figurent pas, et les trois sont des choix, inscrits dans la réponse elle-même 
 - **L'identité de ceux qui ont consulté la fiche.** Le dossier donne leur **nombre** et
   la nature de leurs accès, jamais leurs noms : les lignes du journal nomment des
   **collègues**, et l'article 15(4) écarte l'atteinte aux droits d'autrui. Le nombre dit
-  que la traçabilité existe ; les identités appartiennent à la direction, par
-  `GET /api/journal-acces`.
+  que la traçabilité existe ; les identités appartiennent à la direction, par l'écran
+  *Journal d'accès*.
 - **L'historique des connexions et les adresses IP.** Leur finalité est la sécurité des
   sessions, pas la description de la personne, et leur conservation est de trente jours.
 
@@ -959,7 +959,9 @@ Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail es
   l'API, limite de taille de corps appliquée avant toute lecture.
 - **Journalisation des accès** : dix-sept actions — douze lectures, dont les trois que
   personne n'aurait cherchées, les deux routes de candidats et le planning, et cinq
-  gestes d'administrateur sur le compte ou la fiche d'autrui.
+  gestes d'administrateur sur le compte ou la fiche d'autrui. Consultable par
+  l'administrateur seul, sur un écran filtré par personne, données, geste et période
+  (étape 27).
 - **Certification des passages** (étape 25) : coordonnées jetées par le serveur, qui
   n'en garde que la distance au site ; position demandée au seul geste ; métadonnées des
   photos retirées par le serveur, sans s'en remettre à l'écran ; photos relues en
@@ -968,8 +970,8 @@ Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail es
 - **Mots de passe des comptes créés** (étape 24) : tirés par le serveur, montrés une seule
   fois, et remplacés obligatoirement à la première connexion — un administrateur ne garde
   la connaissance du mot de passe d'un collègue que jusque-là.
-- **Traçabilité du code** : 698 tests côté serveur, 330 cas côté interface — dont 106
-  rejoués dans cinq fuseaux —, et la discipline de validation par sabotage décrite dans
+- **Traçabilité du code** : 710 tests côté serveur, 351 cas côté interface — dont 127
+  dans les séries rejouées dans cinq fuseaux —, et la discipline de validation par sabotage décrite dans
   `CLAUDE.md`.
 - ⚠️ **Les valeurs de paramètres SQL ne sont pas journalisées** :
   `EnableSensitiveDataLogging` n'est activé nulle part, et ne doit jamais l'être en

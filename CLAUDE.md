@@ -132,10 +132,12 @@ KLEAN/
         ├── auth/        AuthContext, RouteProtegee, motDePasse.ts
         ├── comptes/     comptes.ts — l'état, les gestes et la création d'un compte
         ├── composants/  un .tsx + un .css par composant
+        ├── journal/     journal.ts — les noms, la période et la requête du journal d'accès
         ├── layout/      Navigation, Disposition, sections.ts
         ├── pages/       un fichier par écran, plus Reference.tsx, Compte.tsx — le sien —
         │                et Comptes.tsx — ceux de l'entreprise ; MaJournee.tsx pour
-        │                l'agent, Anomalies.tsx pour les rôles internes
+        │                l'agent, Anomalies.tsx pour les rôles internes ;
+        │                JournalAcces.tsx pour l'administrateur
         ├── passage/     passage.ts — gestes, preuves, checklist —, photo.ts — la réduction
         ├── reference/   descriptions.ts, valeurs.ts — le motif liste-et-formulaire
         ├── stock/       mouvements.ts, prevision.ts — la saisie et la lecture du stock
@@ -785,6 +787,25 @@ divulgue une absence** sans qu'on lise la liste des absences.
    est de **douze mois**, par `Scripts/purge-journal-acces.sql`. Ouvert au
    `Responsable` ou au `ChefEquipe`, le journal deviendrait un outil de surveillance
    des collègues — ce qu'un journal RGPD n'est pas censé être.
+
+**L'écran *Journal d'accès*** (étape 27), dans la section *Entreprise*, administrateur seul
+comme la route. Quatre choses à savoir avant d'y toucher :
+
+- ⚠️ **Le journal ne nomme personne ; l'écran nomme, à l'affichage.** Les auteurs et les
+  comptes visés viennent de `GET /api/auth/comptes`, les fiches agents de
+  `GET /api/agents/choix` : deux lectures de plus, journalisées elles aussi, à chaque
+  ouverture. Rien n'est recopié en base, et la règle 1 tient.
+- ⚠️ **Une absence n'est jamais nommée**, ni une vacation : seuls une fiche agent et un
+  compte le sont. Nommer « l'absence de Marie » à côté de « qui l'a lue » n'a été demandé
+  par aucun choix. Un nom introuvable rend l'identifiant court, jamais un blanc, et
+  l'écran dit quand la correspondance est incomplète.
+- **Quatre filtres** : qui, données, geste — `?nature=`, ajouté à l'étape 27 — et période.
+  Ressource et nature sont lues par leurs noms exacts, et `jusqua` est **exclu** : l'écran
+  envoie le minuit local du lendemain. Un clic sur un auteur filtre sur lui.
+- **Chaque page lue laisse une ligne `JournalAcces / Liste`**, et une lecture ne contient
+  jamais la sienne, écrite après la réponse. ⚠️ En développement, le `StrictMode` de React
+  monte l'écran deux fois : les comptes et les noms d'agents y sont lus, donc journalisés,
+  deux fois.
 
 **Le branchement est un filtre d'action par attribut**, et ce qui tient n'est pas
 l'attribut, c'est l'invariante : `JournalAccesTests` énumère par réflexion toutes les
@@ -1621,6 +1642,15 @@ ne gardait rien, puis ont fait vingt-deux échecs à la première série sous la
 `now() - date > interval`.** La seconde compare deux intervalles, et PostgreSQL y compte
 un mois pour trente jours : « plus d'un an » commence à 360 jours. Détail en §7 bis.
 
+**Un composant qui ressemble au chemin n'est pas le chemin.** Au cadrage de l'étape 27,
+j'ai annoncé un décalage de fuseau dans le filtre de période du journal, mesuré sur le
+convertisseur de type de .NET, qui rend bien une heure locale pour `…T00:00:00Z`. Mais une
+requête passe par le lieur de dates d'ASP.NET, qui normalise un instant en UTC : le défaut
+n'existait pas, et la « correction » ne corrigeait rien. C'est le premier sabotage qui l'a
+montré — l'ancien code remis, le test restait vert —, puis une sonde dans le contrôleur.
+Avant d'affirmer un défaut, le mesurer **sur le chemin réel** ; et un sabotage qui reste
+vert peut dire que le défaut n'existe pas.
+
 **EF ne retire pas d'un filtre global la branche d'un paramètre nul.** Un filtre écrit
 `Axe == null || EXISTS (…)` ne devient pas `TRUE` quand l'axe est nul : EF émet
 `(@p OR EXISTS …)` pour tout le monde, et la sous-requête reste dans le SQL. J'avais
@@ -1870,6 +1900,14 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   confirmation, et le corps de la création. ⚠️ Le masquage y a ses deux moitiés, comme le
   motif d'une absence (§10) : une fiche agent choisie avant de passer au rôle « Client
   syndic » part à `null`, sinon elle suivrait un compte qui ne doit pas en porter.
+
+  Et pour `src/journal/journal.ts` (étape 27) : les libellés, le nom de l'auteur et de la
+  cible, la période et la requête. Un journal qui nomme la mauvaise personne ou décale la
+  période d'un jour ressemble à une réponse. ⚠️ Sa série est rejouée dans les cinq
+  fuseaux, et pas par précaution : la période d'un jour local devient deux instants, et
+  sur neuf sabotages, une date lue en UTC ne rougit pas sous `TZ=UTC`, « +24 heures » et
+  l'heure affichée en UTC ne rougissent qu'à Paris. Elle lit aussi les deux énumérations
+  dans `backend/Models/AccesJournalise.cs` : un geste ajouté sans libellé la fait rougir.
 - **Un QR code se dessine noir sur blanc dans les deux thèmes.** `--qr-fond` et
   `--qr-module` ne sont pas redéfinis par le bloc sombre, et c'est délibéré : un QR
   inversé n'est pas lu par toutes les applications. C'est le seul dessin du produit

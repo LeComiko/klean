@@ -3735,6 +3735,25 @@ puis recouper des identifiants à la main.
   Docker.
 - Lint, vérificateur d'interface et build verts ; interface, 351 cas, 330 + 21.
 
+**Lot C — fait le 21 novembre 2026**
+
+- **`CLAUDE.md`** :
+  - §4 : `journal/` et `JournalAcces.tsx` dans l'arborescence ;
+  - §7 bis : l'écran, en quatre points — le nom à l'affichage, jamais en base ; l'absence
+    jamais nommée ; les quatre filtres et la fin exclue ; une ligne par page lue, et le
+    double montage du `StrictMode` en développement ;
+  - §10 : un piège, celui du cadrage. Un composant qui ressemble au chemin n'est pas le
+    chemin, et un sabotage qui reste vert peut dire que le défaut n'existe pas ;
+  - §11 : `journal.ts` rejoint les modules extraits, avec la raison des cinq fuseaux.
+- **`RGPD.md`** :
+  - T5 : l'accès passe par l'écran, qui nomme à l'affichage sans rien stocker ;
+  - §6 : les identités des lecteurs d'une fiche appartiennent à la direction, par cet
+    écran ;
+  - §10 : le journal est consultable, et les séries sont à jour, 710 et 351.
+- **L'étape 27 est close.** Elle n'avait pas d'entrée dans « Suite », où restent ouverts le
+  test d'intrusion externe, le rattachement agent ↔ site, le jeu de démonstration
+  installable, le portail du conseil syndical et le module devis.
+
 ---
 
 # Suite — non planifié
