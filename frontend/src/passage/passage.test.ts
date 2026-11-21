@@ -5,6 +5,7 @@ import { describe, test } from 'node:test'
 import type { PointChecklist, Pointage, VacationAgent } from '../types/passage.ts'
 import {
   ConsignePhoto,
+  LibellesStatut,
   LongueurMaxDescription,
   NoticeLocalisation,
   TailleMaxPhoto,
@@ -269,5 +270,33 @@ describe('anomalies — le filtre de la liste', () => {
     assert.equal(statutDuFiltre('Toutes'), null)
     assert.equal(statutDuFiltre('Ouverte'), 'Ouverte')
     assert.equal(statutDuFiltre('Traitee'), 'Traitee')
+  })
+})
+
+describe('les statuts d’une vacation — un nom, sur les deux écrans', () => {
+  /** `StatutIntervention`, lu dans le source du serveur. */
+  function statutsDuServeur(): string[] {
+    const source = readFileSync(new URL('../../../backend/Models/Intervention.cs', import.meta.url), 'utf8')
+    const bloc = /public enum StatutIntervention\s*\{([\s\S]*?)\n\}/.exec(source)
+    assert.ok(bloc, 'énumération StatutIntervention introuvable')
+
+    return (bloc[1] ?? '')
+      .split('\n')
+      .map((ligne) => /^\s*([A-Z]\w*),?\s*$/.exec(ligne)?.[1])
+      .filter((nom): nom is string => nom !== undefined)
+  }
+
+  test('chaque statut du serveur a son libellé, et aucun n’est son nom brut', () => {
+    assert.deepEqual(Object.keys(LibellesStatut), statutsDuServeur())
+
+    for (const [nom, libelle] of Object.entries(LibellesStatut)) assert.notEqual(libelle, nom)
+  })
+
+  // Le défaut qu'a montré le jeu de démonstration (étape 28) : le bloc écrivait `{statut}`.
+  test('le bloc du planning écrit le libellé, pas le statut brut', () => {
+    const bloc = readFileSync(new URL('../composants/BlocVacation.tsx', import.meta.url), 'utf8')
+
+    assert.match(bloc, /\{LibellesStatut\[statut\]\}/)
+    assert.doesNotMatch(bloc, />\{statut\}</)
   })
 })

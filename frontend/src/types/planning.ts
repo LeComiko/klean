@@ -7,6 +7,8 @@
  * total, et c'est alors le serveur qu'on accuse.
  */
 
+import type { StatutVacation } from './passage'
+
 /** Horodatage de l'API : minuit **UTC**. Le lire avec `jourIso`, pas avec `Date`. */
 type HorodatageApi = string
 
@@ -45,8 +47,8 @@ export interface PlanningVacation {
   siteId: string
   siteNom: string
   prestationLibelle: string
-  /** `Planifiee`, `EnCours`, `Terminee` ou `NonCertifiee`. */
-  statut: string
+  /** Jamais `Annulee` : le serveur ne les sert pas au planning. */
+  statut: StatutVacation
   /** Vrai quand l'agent de cette ligne est absent ce jour-là. */
   nonPourvue: boolean
 }

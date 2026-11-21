@@ -58,6 +58,10 @@ export const NoticeLocalisation =
  */
 export const ConsignePhoto = 'Photographie le lieu ou le dégât, jamais une personne.'
 
+/**
+ * Le nom d'un statut de vacation, sur *Ma journée* et dans les blocs du planning : un seul
+ * jeu, pour qu'une vacation porte le même nom sur les deux écrans (SPEC.md, étape 29).
+ */
 export const LibellesStatut: Readonly<Record<StatutVacation, string>> = {
   Planifiee: 'À faire',
   EnCours: 'En cours',

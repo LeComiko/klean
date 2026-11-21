@@ -4075,6 +4075,38 @@ le journal ne se découvrent qu'après avoir tout saisi soi-même. « Suite » l
 
 ---
 
+# Étape 29 — Les statuts du planning en français
+
+Le jeu de démonstration de l'étape 28 l'a rendu visible dès la première ouverture : les
+blocs du planning écrivaient le statut tel que le serveur l'envoie, « NonCertifiee » et
+« Terminee ». `BlocVacation` affichait `{statut}`, et le type en était un `string`. Les
+libellés existaient pourtant depuis l'étape 25 : `LibellesStatut`, dans
+`passage/passage.ts`, que lit *Ma journée*.
+
+**Décidé** : le planning reprend ces libellés-là, au lieu d'un jeu plus court qui lui
+serait propre. Une même vacation porte ainsi le même nom pour le responsable et pour
+l'agent : « En cours », « Certifié », « Terminé, non certifié ». Le dernier est long, et
+passe à la ligne dans un bloc étroit, ce qui a été accepté.
+
+**Un seul lot — fait le 21 novembre 2026**
+
+- `BlocVacation` écrit `LibellesStatut[statut]`. `statut` y est un `StatutVacation`, comme
+  dans `PlanningVacation`, et une faute de nom ne compile plus. `Planifiee` reste caché :
+  c'est l'état ordinaire du planning. Le serveur ne sert jamais `Annulee` au planning.
+- **`passage.test.ts`, deux cas de plus**, 30 en tout :
+  - les clés de `LibellesStatut` sont les membres de `StatutIntervention`, lus dans
+    `backend/Models/Intervention.cs`, et aucun libellé n'est son nom brut ;
+  - le source de `BlocVacation.tsx` écrit le libellé, et jamais `{statut}`.
+- **Trois sabotages, tous rouges** :
+  - le bloc remis à `{statut}` ;
+  - un libellé retiré ;
+  - un libellé égal à son nom brut.
+- `npm test`, `npm run lint`, `npm run verifier` et `npm run build` sont verts.
+- ⚠️ **Pas d'essai au navigateur.** Le passage à la ligne de « Terminé, non certifié »
+  n'a pas été vu dans un bloc réel.
+
+---
+
 # Suite — non planifié
 
 Par ordre de valeur, à cadrer le moment venu.

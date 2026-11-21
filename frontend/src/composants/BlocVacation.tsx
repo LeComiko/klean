@@ -1,3 +1,5 @@
+import { LibellesStatut } from '../passage/passage'
+import type { StatutVacation } from '../types/passage'
 import { formaterDuree, formaterPlage } from '../utils/dates'
 import './BlocVacation.css'
 
@@ -6,8 +8,11 @@ interface Proprietes {
   dureeMinutes: number
   siteNom: string
   prestationLibelle: string
-  /** `Planifiee`, `EnCours`, `Terminee` ou `NonCertifiee`. */
-  statut?: string
+  /**
+   * Écrit par son libellé, celui de *Ma journée* : une vacation porte le même nom sur
+   * les deux écrans. `Planifiee` ne s'affiche pas — c'est l'état ordinaire du planning.
+   */
+  statut?: StatutVacation
   /**
    * Mot à écrire quand la vacation n'est pas pourvue : « Absent » pour un agent
    * en absence, « À pourvoir » pour une vacation jamais affectée. Le mot est
@@ -40,7 +45,7 @@ export function BlocVacation({
 
       <p className="bloc-vacation__pied">
         <span className="bloc-vacation__duree chiffres">{formaterDuree(dureeMinutes)}</span>
-        {statutVisible && <span className="bloc-vacation__statut">{statut}</span>}
+        {statutVisible && <span className="bloc-vacation__statut">{LibellesStatut[statut]}</span>}
       </p>
 
       {enAlerte && (
