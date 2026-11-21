@@ -1,0 +1,88 @@
+# Publier une version de KLEAN (SPEC.md, étape 34, lot A1) : à l'étiquette vX.Y.Z,
+# tout le CI d'abord, puis les deux images sur ghcr.io, puis la version GitHub avec
+# l'archive, l'installateur et leurs empreintes.
+#
+# La version est créée en brouillon, ses quatre fichiers y sont attachés et les images
+# poussées avant qu'elle soit publiée : « la dernière version » que lit `klean
+# mettre-a-jour` ne désigne jamais une version dont une pièce manque. Un échec en
+# route laisse un brouillon, invisible des exploitants ; le supprimer avant de
+# relancer le travail.
+#
+# ⚠️ Une fois, à la première publication : rendre publics les paquets klean-api et
+# klean-caddy (GitHub › Packages › Package settings › Change visibility). Un paquet
+# ghcr.io est privé à sa création, même pour un dépôt public, et l'installation
+# anonyme échoue sinon.
+name: Publication
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  publier:
+    name: Images et version
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # L'étiquette est la seule source de la version : v1.2.3 donne 1.2.3, partout.
+      - name: Version et nom des images
+        id: noms
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Étiquette invalide : « $GITHUB_REF_NAME » (attendu : vMAJ.MIN.CORR)." >&2
+            exit 1
+          fi
+          proprietaire="${GITHUB_REPOSITORY_OWNER,,}"
+          {
+            echo "version=${GITHUB_REF_NAME#v}"
+            echo "images=ghcr.io/${proprietaire}/klean"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # linux/amd64 seulement : l'architecture des serveurs visés et de l'exécuteur.
+      - name: Construire et publier les images
+        env:
+          IMAGES: ${{ steps.noms.outputs.images }}
+          VERSION: ${{ steps.noms.outputs.version }}
+        run: |
+          docker build --platform linux/amd64 -t "$IMAGES-api:$VERSION" ./backend
+          docker build --platform linux/amd64 -t "$IMAGES-caddy:$VERSION" ./frontend
+          docker push "$IMAGES-api:$VERSION"
+          docker push "$IMAGES-caddy:$VERSION"
+
+      # Quatre fichiers, tels quels : klean-X.tar.gz, son .sha256, installer.sh (qui
+      # porte l'empreinte de l'archive) et son .sha256. Ce que `klean mettre-a-jour`
+      # télécharge porte ces noms ; ne rien régénérer après.
+      - name: Fabriquer l'archive et l'installateur
+        env:
+          VERSION: ${{ steps.noms.outputs.version }}
+        run: |
+          deploiement/publier.sh "$VERSION" "$GITHUB_REPOSITORY" dist
+          ls -l dist
+          test "$(ls dist | wc -l)" -eq 4
+
+      - name: Publier la version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.noms.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --draft --verify-tag --latest \
+            --title "KLEAN $VERSION" --generate-notes \
+            "dist/klean-$VERSION.tar.gz" "dist/klean-$VERSION.tar.gz.sha256" \
+            dist/installer.sh dist/installer.sh.sha256
+          gh release edit "$GITHUB_REF_NAME" --draft=false

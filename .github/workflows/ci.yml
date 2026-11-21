@@ -3,6 +3,9 @@ name: CI
 on:
   push:
   pull_request:
+  # La publication d'une version (publication.yml) rejoue tout ce CI avant de
+  # construire quoi que ce soit.
+  workflow_call:
 
 jobs:
   backend:
@@ -101,3 +104,32 @@ jobs:
 
       - name: Caddy, document et en-têtes
         run: docker build -t klean-caddy:ci ./frontend
+
+  # Le script d'installation et ses fonctions. La série tourne sur l'exécuteur, en
+  # bash 5 et GNU tar comme les serveurs visés ; shellcheck y est préinstallé.
+  deploiement:
+    name: Déploiement — shellcheck, série, compose publié
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck
+        run: shellcheck -x deploiement/installer.sh deploiement/klean deploiement/fonctions.sh deploiement/publier.sh deploiement/tests/tests.sh deploiement/tests/lancer.sh
+
+      - name: Série
+        run: bash deploiement/tests/tests.sh
+
+      # Le compose qu'un serveur reçoit n'a plus de build: ; il doit rester lisible
+      # par docker compose, et désigner les images de la version.
+      - name: Le compose d'une version publiée est valide
+        run: |
+          deploiement/publier.sh 0.0.0 essai/klean "$RUNNER_TEMP/dist"
+          mkdir "$RUNNER_TEMP/version"
+          tar xzf "$RUNNER_TEMP/dist/klean-0.0.0.tar.gz" -C "$RUNNER_TEMP/version"
+          printf 'KLEAN_DOMAINE=exemple.fr\nPOSTGRES_PASSWORD=x\nKLEAN_JWT_CLE=y\nKLEAN_IMAGES=ghcr.io/essai/klean\nKLEAN_VERSION=0.0.0\n' > "$RUNNER_TEMP/version/.env"
+          docker compose --project-directory "$RUNNER_TEMP/version" -f "$RUNNER_TEMP/version/docker-compose.yml" config -q
+          docker compose --project-directory "$RUNNER_TEMP/version" -f "$RUNNER_TEMP/version/docker-compose.yml" config --images | sort -u > "$RUNNER_TEMP/images.txt"
+          cat "$RUNNER_TEMP/images.txt"
+          grep -qx 'ghcr.io/essai/klean-api:0.0.0' "$RUNNER_TEMP/images.txt"
+          grep -qx 'ghcr.io/essai/klean-caddy:0.0.0' "$RUNNER_TEMP/images.txt"
