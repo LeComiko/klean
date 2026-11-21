@@ -3532,6 +3532,127 @@ L'API de développement y a démarré, et ses refus anonymes rendent 401 sans ex
 
 ---
 
+# Étape 27 — L'écran du journal d'accès
+
+Le journal d'accès existe depuis l'étape 17, et seule l'API le lit. `RGPD.md` T5 le donne
+comme ce qui rend compte de qui a lu les données d'agents et d'absences. Un administrateur
+qui veut savoir qui a exporté le dossier d'un salarié doit aujourd'hui passer par Swagger,
+puis recouper des identifiants à la main.
+
+**Ce qui existe, relu le 12 novembre 2026**
+
+- **`GET /api/journal-acces`**, administrateur seul, paginée, du plus récent au plus ancien.
+  Elle a trois filtres : `utilisateurId`, `ressource`, et une période (`depuis`, `jusqua`).
+  Lire le journal laisse une ligne dans le journal.
+- ⚠️ **Aucun de ces filtres n'est éprouvé.** `JournalAccesTests` lit la route sans
+  paramètre, ou avec `taille=200`. Le commentaire du contrôleur dit qu'ils entrent avant le
+  comptage, mais aucun test ne le vérifie.
+- ⚠️ **Le filtre de période est décalé du fuseau du serveur.** Mesuré : la liaison
+  d'ASP.NET lit `2026-11-12T00:00:00Z` comme 01:00 de type `Local` sur cette machine, et
+  `Utc()` étiquette ensuite cette heure comme UTC sans la convertir. Une date nue sort en
+  `Unspecified`, que `Utc()` traite bien. Le défaut est invisible dans le conteneur de
+  production, qui tourne en UTC, et faux d'une heure en développement.
+- **`Ressource` est lue par `Enum.TryParse`**, qui accepte « 0 » pour `Agent`
+  (`CLAUDE.md` §5).
+- **Les commentaires de `JournalAccesDto` sont périmés** : cinq ressources sur sept, trois
+  natures sur sept.
+- **Le journal ne nomme personne**, et c'est sa règle de conception. Le DTO le dit :
+  « l'écran qui lira ce journal fera la correspondance s'il en a le droit ».
+  L'administrateur a ce droit. Les comptes viennent de `GET /api/auth/comptes`, qui est
+  journalisée en `Compte / Liste` ; les noms d'agents de `GET /api/agents/choix`, qui est
+  journalisée en `ChoixAgents / Liste` et rend tous les agents, pseudonymisés compris.
+- **Un écran propre a sa place** dans la section *Entreprise*, réservée à l'administrateur,
+  à côté de *Comptes* (`CLAUDE.md` §11).
+
+**Réponses obtenues le 12 novembre 2026**
+
+| Question | Réponse | Ce que cela veut dire dans le code |
+|---|---|---|
+| L'auteur | **le nom, résolu à l'écran** | l'écran charge les comptes et fait la correspondance. Rien ne change en base, et chaque ouverture de l'écran laisse une ligne `Compte / Liste` de plus |
+| La cible d'une lecture | **les agents et les comptes nommés** | les fiches d'agents sont nommées par `/api/agents/choix`, les comptes par la liste déjà chargée. Une absence ou une vacation reste un identifiant court. L'écran répond à « qui a exporté le dossier de Marie ? » |
+| Un filtre de plus | **la nature** | `?nature=` côté serveur. Il isole les exports, les pseudonymisations, les fermetures et les réinitialisations du second facteur, aujourd'hui noyés dans les listes |
+
+**Ce que je propose**
+
+1. **Côté serveur, la route se corrige et gagne un filtre.**
+   - `?nature=`, lu par ses noms exacts.
+   - La période convertie en UTC quel que soit le type de la date reçue.
+   - Les commentaires du DTO remis à jour.
+
+   Aucune migration : la table ne change pas.
+2. **L'écran *Journal d'accès***, `/journal-acces`, dans la section *Entreprise*,
+   administrateur seul, après *Comptes*.
+   - Une ligne par accès, avec cinq colonnes :
+     - *Quand*, en heure locale et en chiffres à chasse fixe ;
+     - *Qui* ;
+     - *Ressource* ;
+     - *Nature* ;
+     - *Cible*, ou le nombre de lignes d'une liste.
+   - Quatre filtres : auteur, ressource, nature et période. Cliquer sur un auteur filtre sur
+     lui : « qu'a lu cette personne ».
+   - Un en-tête dit ce que le journal est et n'est pas :
+     - qui, quoi, quand et combien, jamais le contenu lu ;
+     - douze mois de conservation, avec une purge hors de l'application ;
+     - la lecture de cet écran s'y inscrit elle-même.
+3. **La correspondance des noms se fait dans le navigateur**, dans un module extrait et
+   éprouvé, `journal/journal.ts`, comme `comptes.ts` ou `passage.ts` (`CLAUDE.md` §11). Il
+   porte :
+   - les libellés français des ressources et des natures ;
+   - la résolution de l'auteur et de la cible ;
+   - la conversion d'une période en jours locaux vers deux instants UTC.
+
+   ⚠️ Cette conversion est sensible au fuseau : elle rejoint les séries rejouées dans cinq
+   fuseaux (`CLAUDE.md` §10).
+4. **Un nom introuvable ne s'invente pas.** Les comptes et les agents se chargent en une
+   page de 200, le maximum du serveur. Au-delà, l'écran dit que la correspondance est
+   incomplète, et montre l'identifiant court au lieu d'un blanc.
+
+**Les tests**
+
+- **Côté serveur, chaque filtre est éprouvé**, et son `Total` vérifié : le filtre entre
+  avant le comptage. Une nature inconnue, comme « 0 », rend 400 avec les valeurs acceptées.
+- **La période est éprouvée avec un instant en `Z` et un autre avec un décalage.**
+  ⚠️ Le test ne rougit que hors UTC, comme les dates de `CLAUDE.md` §10. La série serveur
+  tourne sur cette machine en heure de Paris, et c'est ce qui le rend utile ici. Je le dis
+  dans le test.
+- **`journal.ts`** :
+  - les libellés couvrent toutes les valeurs de l'énumération ;
+  - un auteur ou une cible introuvable rend l'identifiant court ;
+  - une absence n'est jamais nommée ;
+  - la période d'un jour local donne les bons instants dans les cinq fuseaux.
+- **`sections.test.ts`** garde déjà la cohérence des rôles d'un écran et de sa section.
+
+**À trancher au lot A** — des penchants, retenus par défaut sauf avis contraire.
+
+| Question | Penchant |
+|---|---|
+| La fin de période | **exclue** : `jusqua` devient « avant cet instant », et l'écran envoie le lendemain à minuit. C'est la seule façon d'écrire « jusqu'au 12 inclus » sans viser une milliseconde. Aucun écran ne lit la route aujourd'hui, donc rien ne casse |
+| `ressource` | **lue par ses noms exacts**, comme la nouvelle `nature`. Le motif : l'écran en devient le premier lecteur, et « 0 » ne doit pas filtrer sur `Agent` en silence |
+| Une ligne au journal par page lue | **gardée**. Chaque changement de filtre ou de page laisse une ligne `JournalAcces / Liste`. C'est la règle, et filtrer sur la ressource suffit à écarter ces lignes |
+
+**Hors de cette étape, et dit tel quel** :
+- un export du journal, en CSV ou autre ;
+- une recherche par cible ;
+- le journal technique du serveur, qui est autre chose (`DEPLOIEMENT.md` §8).
+
+**Lots, provisoires**
+
+- **A** — le serveur :
+  - le filtre de nature ;
+  - la période convertie, et sa fin exclue ;
+  - `ressource` lue par ses noms exacts ;
+  - les tests des cinq filtres, un sabotage par garde.
+- **B** — l'écran :
+  - `journal/journal.ts` et sa série ;
+  - la page, sa place dans `sections.ts` ;
+  - un essai au navigateur.
+- **C** — les documents :
+  - `CLAUDE.md` §7 bis et §11 ;
+  - `RGPD.md` T5 ;
+  - la note de fin.
+
+---
+
 # Suite — non planifié
 
 Par ordre de valeur, à cadrer le moment venu.
