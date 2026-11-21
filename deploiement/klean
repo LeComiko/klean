@@ -384,6 +384,170 @@ restaurer_trousseau() {
     echouer "La base est restaurée, mais pas le trousseau ($archive) ; l'API reste arrêtée. Relancez : sudo klean restaurer <fichier>."
 }
 
+# ---- Installer ------------------------------------------------------------------
+
+# Mot de passe provisoire de l'amorçage, gardé le temps de l'afficher une fois.
+MOT_DE_PASSE_PROVISOIRE=''
+
+cmd_installer() {
+  exiger_root
+  # Sans attente : une installation lancée pendant la sauvegarde de la nuit échoue tout de suite.
+  verrouiller
+  { : > /dev/tty; } 2> /dev/null ||
+    echouer "L'installation pose des questions : lancez-la dans un terminal (par ssh, ajoutez -t : ssh -t serveur '…')."
+  verifier_machine
+  if [ -f "$ENV" ]; then
+    dire "Installation existante trouvée dans $REPERTOIRE : elle est reprise, aucun secret n'est régénéré."
+  else
+    preparer_env
+  fi
+  completer_env_version "$REPERTOIRE"
+  verifier_dns "$(lire_env "$ENV" KLEAN_DOMAINE)"
+
+  install -d -m 700 "$SAUVEGARDES" "$TROUSSEAU"
+  dire "Téléchargement des images…"
+  compose pull
+  compose up -d postgres
+  attendre_postgres
+  compose run --rm -T migrer || echouer "La préparation de la base a échoué : voir les lignes ci-dessus, puis relancez sudo klean installer."
+  compose up -d
+  ln -sf "$REPERTOIRE/klean" /usr/local/bin/klean
+  # Nom sans point : cron ignore un fichier de /etc/cron.d qui en porte un. Mode et
+  # propriétaire explicites : le umask 077 de ce script donnerait 600, que cron refuse.
+  install -m 644 -o root -g root "$REPERTOIRE/klean.cron" /etc/cron.d/klean
+
+  verifier_https || echouer "KLEAN tourne, mais ne répond pas en HTTPS. Corrigez le point ci-dessus, puis relancez : sudo klean installer"
+  retirer_mot_de_passe_amorcage
+  afficher_fin
+}
+
+verifier_machine() {
+  local memoire
+  # shellcheck source=/dev/null
+  systeme_pris_en_charge "$(. /etc/os-release && printf '%s' "$ID")" "$(dpkg --print-architecture)" ||
+    echouer "KLEAN s'installe sur Debian ou Ubuntu, en amd64."
+  memoire=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
+  memoire_suffisante "$memoire" || echouer "Il faut 1 Go de mémoire au moins (trouvé : $((memoire / 1024)) Mo)."
+  # À la reprise, nos propres conteneurs occupent les ports et le réseau.
+  [ -f "$ENV" ] && return
+  if ss -ltnH '( sport = :80 or sport = :443 )' | grep -q .; then
+    echouer "Les ports 80 ou 443 sont déjà pris sur ce serveur (ss -ltnp les montre). KLEAN en a besoin pour son certificat."
+  fi
+  if ip -4 route | grep -q '^172\.28\.0\.'; then
+    echouer "Le réseau 172.28.0.0/24 est déjà utilisé sur ce serveur : voir DEPLOIEMENT.md, réseau du compose."
+  fi
+}
+
+preparer_env() {
+  local domaine raison email geocodage
+  dire "Installation de KLEAN. Quelques questions, puis tout se fait seul."
+  domaine=$(demander "Nom de domaine de KLEAN, sans https:// (ex. klean.mon-entreprise.fr)")
+  [[ "$domaine" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$ ]] || echouer "« $domaine » n'est pas un nom de domaine."
+  raison=$(demander "Raison sociale de votre entreprise")
+  [ -n "$raison" ] || echouer "La raison sociale est nécessaire."
+  email=$(demander "Adresse électronique de l'administrateur")
+  [[ "$email" == ?*@?*.?* ]] || echouer "« $email » n'est pas une adresse électronique."
+  dire "KLEAN peut trouver lui-même les coordonnées GPS des sites de vos clients. Leurs adresses — rue, code postal, ville — sont alors envoyées à l'API Adresse de l'État. Les domiciles de vos agents ne le sont jamais."
+  geocodage=$(demander "Activer la localisation des sites ? (oui/non)" non)
+
+  : > "$ENV"
+  chmod 600 "$ENV"
+  poser_env "$ENV" KLEAN_VERSION "$(cat "$REPERTOIRE/VERSION")"
+  poser_env "$ENV" KLEAN_IMAGES "$(nom_images)"
+  poser_env "$ENV" KLEAN_DOMAINE "$domaine"
+  poser_env "$ENV" POSTGRES_PASSWORD "$(generer_secret 32)"
+  poser_env "$ENV" KLEAN_JWT_CLE "$(generer_secret 48)"
+  poser_env "$ENV" KLEAN_CODE_INSTALLATION "$(generer_code)"
+  poser_env "$ENV" KLEAN_GEOCODAGE "$([ "$geocodage" = oui ] && printf true || printf false)"
+  # Transition jusqu'au lot A2 : l'amorçage crée l'administrateur avec un mot de passe
+  # provisoire, affiché une fois puis retiré de ce fichier (plan, décision 1).
+  poser_env "$ENV" KLEAN_RAISON_SOCIALE "$raison"
+  poser_env "$ENV" KLEAN_ADMIN_EMAIL "$email"
+  poser_env "$ENV" KLEAN_ADMIN_MOT_DE_PASSE "$(generer_mot_de_passe)"
+  configurer_smtp
+}
+
+configurer_smtp() {
+  local hote
+  dire "Un serveur de courriel permet aux utilisateurs de réinitialiser un mot de passe oublié. Facultatif : sans lui, KLEAN fonctionne, et le changement de mot de passe reste possible depuis l'écran Compte."
+  hote=$(demander "Serveur SMTP (laisser vide pour passer)")
+  [ -n "$hote" ] || return 0
+  poser_env "$ENV" KLEAN_SMTP_HOTE "$hote"
+  poser_env "$ENV" KLEAN_SMTP_PORT "$(demander "Port SMTP" 587)"
+  poser_env "$ENV" KLEAN_SMTP_EXPEDITEUR "$(demander "Adresse d'expédition")"
+  poser_env "$ENV" KLEAN_SMTP_UTILISATEUR "$(demander "Identifiant SMTP")"
+  poser_env "$ENV" KLEAN_SMTP_MOT_DE_PASSE "$(demander_secret "Mot de passe SMTP")"
+}
+
+# Les variables d'env.modele absentes de .env, avec leur défaut. Jamais d'écrasement.
+completer_env_version() {
+  local cle valeur
+  while IFS='=' read -r cle valeur; do
+    case "$cle" in '' | \#*) continue ;; esac
+    if [ "$valeur" = '@SECRET@' ]; then
+      valeur=$(generer_secret 32)
+    fi
+    completer_env "$ENV" "$cle" "$valeur"
+  done < "$1/env.modele"
+}
+
+verifier_dns() {
+  local domaine="$1" resolues locales etrangeres reponse
+  locales=$(ip -o addr show scope global | awk '{ print $4 }' | cut -d/ -f1)
+  resolues=$(getent ahosts "$domaine" | awk '{ print $1 }' | sort -u || true)
+  if [ -z "$resolues" ]; then
+    avertir "Le domaine $domaine ne pointe encore nulle part. Chez votre registraire, créez un enregistrement A vers ce serveur : $(tr '\n' ' ' <<< "$locales")"
+  elif etrangeres=$(adresses_etrangeres "$resolues" "$locales"); then
+    dire "Le domaine $domaine pointe bien sur ce serveur."
+    return
+  else
+    avertir "Le domaine $domaine pointe vers $(tr '\n' ' ' <<< "$etrangeres")— pas vers ce serveur ($(tr '\n' ' ' <<< "$locales"))."
+    avertir "Un enregistrement IPv6 (AAAA) oublié suffit à faire échouer le certificat. Après un changement, la propagation peut prendre jusqu'à une heure."
+  fi
+  reponse=$(demander "Continuer quand même ? (oui/non)" non)
+  [ "$reponse" = oui ] || echouer "Installation suspendue. Quand le domaine pointe sur ce serveur : sudo klean installer"
+}
+
+# Quelques essais espacés, sans boucler : Let's Encrypt plafonne les échecs.
+verifier_https() {
+  local domaine essai
+  domaine=$(lire_env "$ENV" KLEAN_DOMAINE)
+  for essai in 1 2 3 4 5 6; do
+    if curl -fsS --max-time 10 "https://$domaine/api/sante" > /dev/null 2>&1; then
+      return 0
+    fi
+    [ "$essai" -eq 6 ] || sleep 15
+  done
+  avertir "https://$domaine ne répond pas. Dernières lignes de Caddy :"
+  compose logs --tail 30 caddy >&2 || true
+  avertir "Vérifiez que le domaine pointe sur ce serveur, et que le pare-feu du panneau de votre hébergeur ouvre les ports 80 et 443."
+  return 1
+}
+
+# L'amorçage ne lit ces variables que si la base n'a aucun compte : une fois le compte
+# créé, le mot de passe n'a plus rien à faire dans .env (SPEC.md, étape 34).
+retirer_mot_de_passe_amorcage() {
+  MOT_DE_PASSE_PROVISOIRE=$(lire_env "$ENV" KLEAN_ADMIN_MOT_DE_PASSE)
+  [ -n "$MOT_DE_PASSE_PROVISOIRE" ] || return 0
+  [ "$(nombre_de_comptes)" != 0 ] || echouer "L'API tourne, mais aucun compte n'a été créé : voir sudo klean journaux."
+  poser_env "$ENV" KLEAN_ADMIN_MOT_DE_PASSE ''
+  # Recréé sans : le conteneur en gardait le mot de passe dans son environnement.
+  compose up -d api
+}
+
+afficher_fin() {
+  dire ''
+  dire "KLEAN est installé : https://$(lire_env "$ENV" KLEAN_DOMAINE)"
+  if [ -n "$MOT_DE_PASSE_PROVISOIRE" ]; then
+    dire "Adresse de connexion : $(lire_env "$ENV" KLEAN_ADMIN_EMAIL)"
+    dire "Mot de passe provisoire, affiché une seule fois : $MOT_DE_PASSE_PROVISOIRE"
+    dire "La première connexion le fait remplacer, puis équiper la double authentification."
+  fi
+  dire "Une sauvegarde se fait chaque nuit, dans $SAUVEGARDES et $TROUSSEAU."
+  avertir "Elles restent sur ce serveur : copiez-les ailleurs, chacune de son côté (README, section Sauvegardes)."
+  dire "État : sudo klean etat — Mise à jour : sudo klean mettre-a-jour"
+}
+
 # ---- Aiguillage ------------------------------------------------------------------
 
 aide() {
@@ -398,6 +562,7 @@ principal() {
   COMMANDE="${1:-aide}"
   shift || true
   case "$COMMANDE" in
+    installer) cmd_installer ;;
     sauvegarder) cmd_sauvegarder "$@" ;;
     etat) cmd_etat ;;
     journaux) cmd_journaux "$@" ;;
