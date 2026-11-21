@@ -22,10 +22,13 @@ public class JournalAccesDto
     /// </summary>
     public Guid UtilisateurId { get; set; }
 
-    /// <summary>Valeurs : Agent, Absence, Candidats, Planning, JournalAcces.</summary>
+    /// <summary>
+    /// Un nom de <see cref="Klean.Api.Models.RessourceAccedee"/>. Les valeurs ne sont pas
+    /// recopiées ici : elles l'étaient, et le commentaire en avait manqué deux.
+    /// </summary>
     public string Ressource { get; set; } = string.Empty;
 
-    /// <summary>Valeurs : Liste, Lecture, Anonymisation.</summary>
+    /// <summary>Un nom de <see cref="Klean.Api.Models.NatureAcces"/>, pour la même raison.</summary>
     public string Nature { get; set; } = string.Empty;
 
     /// <summary>La ligne visée, ou la vacation dont les candidats ont été listés.</summary>

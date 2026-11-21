@@ -3547,11 +3547,12 @@ puis recouper des identifiants à la main.
 - ⚠️ **Aucun de ces filtres n'est éprouvé.** `JournalAccesTests` lit la route sans
   paramètre, ou avec `taille=200`. Le commentaire du contrôleur dit qu'ils entrent avant le
   comptage, mais aucun test ne le vérifie.
-- ⚠️ **Le filtre de période est décalé du fuseau du serveur.** Mesuré : la liaison
-  d'ASP.NET lit `2026-11-12T00:00:00Z` comme 01:00 de type `Local` sur cette machine, et
-  `Utc()` étiquette ensuite cette heure comme UTC sans la convertir. Une date nue sort en
-  `Unspecified`, que `Utc()` traite bien. Le défaut est invisible dans le conteneur de
-  production, qui tourne en UTC, et faux d'une heure en développement.
+- ~~**Le filtre de période est décalé du fuseau du serveur.**~~ ⚠️ **Faux, et corrigé au
+  lot A.** Je l'avais mesuré sur le convertisseur de type de .NET, qui rend bien
+  `2026-11-12T00:00:00Z` en 01:00 de type `Local` sur cette machine. Mais ce n'est pas lui
+  qui lie la requête : le lieur de dates d'ASP.NET normalise un instant en UTC, et une
+  sonde dans `Utc()` a vu `Utc` pour les deux formes, en `Z` et avec un décalage. L'ancien
+  `Utc()` était donc juste.
 - **`Ressource` est lue par `Enum.TryParse`**, qui accepte « 0 » pour `Agent`
   (`CLAUDE.md` §5).
 - **Les commentaires de `JournalAccesDto` sont périmés** : cinq ressources sur sept, trois
@@ -3576,7 +3577,8 @@ puis recouper des identifiants à la main.
 
 1. **Côté serveur, la route se corrige et gagne un filtre.**
    - `?nature=`, lu par ses noms exacts.
-   - La période convertie en UTC quel que soit le type de la date reçue.
+   - ~~La période convertie en UTC quel que soit le type de la date reçue.~~ Sans objet,
+     voir plus haut.
    - Les commentaires du DTO remis à jour.
 
    Aucune migration : la table ne change pas.
@@ -3612,9 +3614,8 @@ puis recouper des identifiants à la main.
 - **Côté serveur, chaque filtre est éprouvé**, et son `Total` vérifié : le filtre entre
   avant le comptage. Une nature inconnue, comme « 0 », rend 400 avec les valeurs acceptées.
 - **La période est éprouvée avec un instant en `Z` et un autre avec un décalage.**
-  ⚠️ Le test ne rougit que hors UTC, comme les dates de `CLAUDE.md` §10. La série serveur
-  tourne sur cette machine en heure de Paris, et c'est ce qui le rend utile ici. Je le dis
-  dans le test.
+  ~~Le test ne rougit que hors UTC.~~ Sans objet : il fige la normalisation du lieur, et
+  les bornes.
 - **`journal.ts`** :
   - les libellés couvrent toutes les valeurs de l'énumération ;
   - un auteur ou une cible introuvable rend l'identifiant court ;
@@ -3639,7 +3640,7 @@ puis recouper des identifiants à la main.
 
 - **A** — le serveur :
   - le filtre de nature ;
-  - la période convertie, et sa fin exclue ;
+  - la fin de période exclue ;
   - `ressource` lue par ses noms exacts ;
   - les tests des cinq filtres, un sabotage par garde.
 - **B** — l'écran :
@@ -3650,6 +3651,39 @@ puis recouper des identifiants à la main.
   - `CLAUDE.md` §7 bis et §11 ;
   - `RGPD.md` T5 ;
   - la note de fin.
+
+**Lot A — fait le 21 novembre 2026**
+
+- **`GET /api/journal-acces` gagne `?nature=`.** `ressource` et `nature` sont lues par leurs
+  noms exacts : « 0 », la casse et une liste séparée par des virgules sont refusées en 400,
+  avec les valeurs acceptées. Un paramètre vide laisse le filtre ouvert.
+- **`jusqua` est exclu.** Aucun écran ne lisait la route : rien ne casse.
+- ⚠️ **Le défaut de fuseau annoncé au cadrage n'existait pas**, et la note du cadrage est
+  barrée sur place. Je l'avais mesuré sur le convertisseur de type de .NET, pas sur le lieur
+  de dates d'ASP.NET, qui normalise lui-même un instant en UTC. Je m'en suis aperçu par le
+  premier sabotage :
+  - l'ancien `Utc()` remis en place, le test de période restait vert ;
+  - une sonde dans `Utc()` a vu `Utc` pour les deux formes, en `Z` et avec un décalage ;
+  - la « correction » est retirée, et le commentaire de `Utc()` dit ce qui a été mesuré.
+
+  La leçon : sonder le chemin réel, pas un composant qui lui ressemble.
+- **`JournalAccesDto`** ne recopie plus les valeurs des deux énumérations dans ses
+  commentaires : la liste en avait manqué deux de chaque.
+- **`JournalAccesFiltresTests`, 12 cas.** Les lignes sont posées en base, sous un auteur
+  fictif propre à chaque test et à des instants choisis :
+  - auteur, ressource et nature, chacun avec son `Total`, et leur combinaison ;
+  - six valeurs illisibles ;
+  - les valeurs vides ;
+  - la période, en `Z` et avec un décalage, à une seconde de chaque borne.
+- **Sept sabotages, tous rouges** :
+  - la fin incluse ;
+  - la nature ignorée ;
+  - `Enum.TryParse` au lieu des noms exacts ;
+  - le total compté sur la page ;
+  - l'auteur ignoré ;
+  - la ressource ignorée ;
+  - une conversion vers l'heure locale glissée dans `Utc()`.
+- Série serveur complète : 710 tests verts, 698 + 12.
 
 ---
 
