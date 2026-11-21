@@ -231,9 +231,6 @@
   --bouton-primaire-mobile: 4rem; /* 64 px */
 
   /* ---- Structure ---- */
-  --largeur-navigation: 64px;
-  /* Au-delà de 80em, quand la barre affiche le nom des sections (Navigation.css). */
-  --largeur-navigation-large: 13rem; /* 208 px */
   --focus-epaisseur: 2px;
   --focus-decalage: 2px;
 }

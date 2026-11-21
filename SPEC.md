@@ -4251,6 +4251,43 @@ défaut.
 
 ---
 
+# Étape 33 — La navigation en haut
+
+La barre latérale ne plaisait pas : une colonne de 64 px à codes de deux lettres — PL,
+AN, CL —, qui prenait de la largeur au planning, une grille large, pour six liens.
+L'étape 31 y avait ajouté les noms sur grand écran ; c'était soigner la forme sans
+toucher au défaut.
+
+**Décidé** parmi trois propositions : une **barre en haut**, les sections en mots. Une
+barre latérale à noms groupés et repliable, et des icônes dessinées à la place des
+codes, ont été écartées.
+
+**Un seul lot — fait le 21 novembre 2026**
+
+- **`Navigation`** devient une ligne : le « K » à gauche, les sections en mots, puis
+  *Mon compte* et *Déconnexion* à droite, icône et mot. Elle reste à l'écran pendant
+  que la page défile (`sticky`), séparée du contenu par sa bordure. `Disposition`
+  passe en colonne.
+- **Deux niveaux, deux formes** : la section courante a un fond de marque et la
+  graisse, l'onglet courant de la sous-navigation un filet. `aria-current` les annonce
+  tous deux.
+- **Trop étroite, la liste des sections défile à l'horizontale** ; un nom n'est jamais
+  tronqué. Sous 720 px, le compte et la sortie gardent leur icône seule, le mot restant
+  lu par le lecteur d'écran.
+- **Le code de deux lettres disparaît** de `sections.ts`, où il ne servait plus qu'aux
+  tests. `sections.test.ts` vérifie à sa place l'ordre des noms et leur unicité ; un
+  sabotage, deux sections au même nom, rougit les deux.
+- Les jetons `--largeur-navigation` et `--largeur-navigation-large` sont retirés, et
+  la règle des 80em de l'étape 31 avec eux.
+- Vu au navigateur : planning et *Clients et sites*, sous-navigation comprise, en clair
+  et en sombre ; à 1024 px, toutes les sections tiennent sur la ligne, rien ne déborde.
+- `npm run lint`, `npm run verifier`, `npm test` et `npm run build` sont verts.
+- ⚠️ **Non vu** : *Ma journée* au téléphone, avec un compte agent — il ne porte qu'une
+  section, la barre y tient en une ligne courte, mais aucun compte agent n'a été ouvert
+  pour le voir.
+
+---
+
 # Suite — non planifié
 
 Par ordre de valeur, à cadrer le moment venu.

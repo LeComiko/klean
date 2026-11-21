@@ -15,32 +15,39 @@ import {
 /**
  * `Sections` est la source unique de la navigation, des routes et de la
  * destination d'arrivée. Ces trois usages doivent rester cohérents avec la matrice
- * des droits de `SPEC.md` étape 8 : une pastille visible dont la route n'est pas
+ * des droits de `SPEC.md` étape 8 : un lien visible dont la route n'est pas
  * gardée, ou une arrivée sur une section fermée au rôle, sont les deux formes
  * précises que prend la divergence.
  */
 describe('sections — navigation et destination d’arrivée', () => {
   test('aucune section ne mène au tableau de bord retiré', () => {
-    // La pastille TB accueillait tout le monde mais menait à « en chantier », et
+    // Le tableau de bord accueillait tout le monde mais menait à « en chantier », et
     // aucune étape ne prévoyait de l'écrire. Ce test garde son absence.
     assert.equal(Sections.some((section) => section.chemin === '/tableau-de-bord'), false)
-    assert.equal(Sections.some((section) => section.pastille === 'TB'), false)
   })
 
-  test('les pastilles sont celles de SPEC.md étape 13, moins TB, revues aux étapes 22 et 25', () => {
-    // `SI` est devenu `CL` : la pastille dit la ressource où l'on arrive. `AN` et `MJ`
-    // sont les deux écrans du passage de l'agent.
+  test('les sections, dans l’ordre de la barre de navigation', () => {
+    // Celles de SPEC.md étape 13, moins le tableau de bord, revues aux étapes 22 et
+    // 25 ; des mots seuls depuis l'étape 33, sans code de deux lettres. Anomalies et
+    // Ma journée sont les deux écrans du passage de l'agent ; Ma journée est
+    // dernière, pour qu'un compte qui porterait aussi un rôle interne arrive sur le
+    // planning.
     assert.deepEqual(
-      Sections.map((section) => section.pastille),
-      ['PL', 'AN', 'CL', 'AG', 'ST', 'EN', 'MJ'],
+      Sections.map((section) => section.libelle),
+      ['Planning', 'Anomalies', 'Clients et sites', 'Agents', 'Stock', 'Entreprise', 'Ma journée'],
     )
+  })
+
+  test('deux sections ne portent jamais le même nom', () => {
+    const noms = Sections.map((section) => section.libelle)
+
+    assert.equal(new Set(noms).size, noms.length, noms.join(' · '))
   })
 
   test('chaque section déclare un chemin absolu et un libellé', () => {
     for (const section of Sections) {
       assert.ok(section.chemin.startsWith('/'), section.chemin)
       assert.notEqual(section.libelle, '')
-      assert.equal(section.pastille.length, 2, section.pastille)
     }
   })
 
@@ -50,7 +57,7 @@ describe('sections — navigation et destination d’arrivée', () => {
     test('chaque clé de ressource existe dans descriptions.ts', () => {
       for (const section of avecRessources) {
         for (const cle of section.ressources ?? []) {
-          assert.notEqual(descriptionDe(cle), undefined, `${section.pastille} → ${cle}`)
+          assert.notEqual(descriptionDe(cle), undefined, `${section.libelle} → ${cle}`)
         }
       }
     })
@@ -64,14 +71,14 @@ describe('sections — navigation et destination d’arrivée', () => {
       for (const section of avecRessources) {
         const premiere = descriptionDe((section.ressources ?? [])[0] ?? '')
 
-        assert.equal(section.chemin, premiere?.chemin, section.pastille)
+        assert.equal(section.chemin, premiere?.chemin, section.libelle)
       }
     })
 
     test('les rôles d’une section valent l’union des lectures de ses ressources et écrans', () => {
-      // L'invariante qui empêche les deux divergences symétriques : une pastille
-      // visible dont toutes les listes répondent 403, et une liste lisible dont la
-      // pastille est cachée.
+      // L'invariante qui empêche les deux divergences symétriques : un lien visible
+      // dont toutes les listes répondent 403, et une liste lisible dont le lien est
+      // caché.
       for (const section of avecRessources) {
         const union = new Set<string>()
 
@@ -86,7 +93,7 @@ describe('sections — navigation et destination d’arrivée', () => {
         assert.deepEqual(
           [...(section.roles ?? [])].sort(),
           [...union].sort(),
-          section.pastille,
+          section.libelle,
         )
       }
     })
@@ -121,7 +128,7 @@ describe('sections — navigation et destination d’arrivée', () => {
   })
 
   describe('les onglets du stock', () => {
-    const stock = Sections.find((section) => section.pastille === 'ST')
+    const stock = Sections.find((section) => section.chemin === '/produits')
 
     test('les ressources dans l’ordre de la mise en route, puis les écrans', () => {
       assert.ok(stock)
@@ -171,7 +178,7 @@ describe('sections — navigation et destination d’arrivée', () => {
     })
 
     test('aucun rôle interne ni le syndic n’ont la journée d’un agent', () => {
-      // Ses routes sont réservées au rôle Agent : la pastille leur répondrait 403.
+      // Ses routes sont réservées au rôle Agent : le lien leur répondrait 403.
       for (const role of [Roles.Administrateur, Roles.Responsable, Roles.ChefEquipe, Roles.ClientSyndic]) {
         const journee = Sections.find((section) => section.chemin === '/ma-journee')
 

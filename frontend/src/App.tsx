@@ -113,8 +113,8 @@ export default function App() {
                 garde de la route de disposition suffit — en ajouter une seconde sans
                 rôles ne fermerait rien de plus.
 
-                Il est atteignable par tout rôle, l'agent compris, depuis le pied de la
-                barre latérale : c'est le compte, pas une fonction du produit. */}
+                Il est atteignable par tout rôle, l'agent compris, depuis la droite de
+                la barre de navigation : c'est le compte, pas une fonction du produit. */}
             <Route path={CheminCompte} element={<Compte />} />
           </Route>
 

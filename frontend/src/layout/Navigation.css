@@ -1,101 +1,88 @@
+/* ---- La barre de navigation, en haut (étape 33) ----
+   Une ligne : la marque, les sections en mots, puis le compte et la sortie à
+   droite. Elle remplace la barre latérale à codes — PL, AN, CL —, qui prenait de la
+   largeur au planning, une grille large, pour six liens.
+
+   Elle reste à l'écran pendant que la page défile. Séparée du contenu par sa
+   bordure, jamais par une ombre (§12). */
 .navigation {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex-shrink: 0;
-  /* La barre tient dans la fenêtre, et y reste pendant que la page défile (étape
-     32). Étirée sur toute la hauteur de la page, elle posait « Mon compte » et
-     « Déconnexion » au pied de la page et non de la fenêtre : sur un long écran, il
-     fallait descendre jusqu'en bas pour se déconnecter, et dans une fenêtre de 656 px
-     le bouton dépassait déjà de 11 px. Quand elle-même ne tient pas, elle défile. */
   position: sticky;
   top: 0;
-  align-self: flex-start;
-  height: 100vh;
-  height: 100dvh;
-  overflow-y: auto;
-  width: var(--largeur-navigation);
-  padding: var(--espace-3) 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--espace-4);
+  padding: var(--espace-2) var(--espace-8);
   background: var(--surface);
-  /* Séparation par la bordure, jamais par une ombre. */
-  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .navigation__marque {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  margin-bottom: var(--espace-6);
+  width: var(--ligne-compacte);
+  height: var(--ligne-compacte);
   background: var(--brand);
   color: var(--sur-brand);
   border-radius: var(--rayon-bloc);
   font-family: var(--police-chiffres);
-  font-size: 1.125rem;
+  font-size: 1rem;
   font-weight: 700;
 }
 
+/* La liste prend la place qui reste, et défile à l'horizontale plutôt que de
+   tronquer un nom ou de pousser le compte hors de l'écran. */
 .navigation__liste {
   display: flex;
-  flex-direction: column;
-  gap: var(--espace-2);
   flex: 1;
+  align-items: center;
+  gap: var(--espace-1);
+  min-width: 0;
+  overflow-x: auto;
 }
 
-.navigation__pastille {
-  position: relative;
+.navigation__session {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
+  gap: var(--espace-1);
+}
+
+/* Un lien de section, le compte ou la sortie. Le texte plein, pas un gris : §12
+   exige AA jusque sur les éléments de navigation inactifs. */
+.navigation__lien {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espace-2);
+  height: var(--ligne-compacte);
+  padding: 0 var(--espace-3);
   border-radius: var(--rayon-bloc);
-  /* Le texte plein, pas un gris : §12 exige AA jusque sur les éléments de
-     navigation inactifs. Un troisième niveau de gris ne le tenait pas — c'est
-     pour cette raison que §12 n'en a plus. */
   color: var(--texte);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  font-family: var(--police-chiffres);
-  font-size: var(--bloc-planning-taille);
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  font-weight: 500;
+  white-space: nowrap;
   text-decoration: none;
 }
 
-.navigation__pastille:hover {
+.navigation__lien:hover {
   background: var(--brand-tint);
-  border-color: var(--border-fort);
 }
 
-.navigation__pastille--active {
+/* La section courante : fond de marque **et** graisse. La sous-navigation d'une
+   section, juste en dessous, marque la sienne d'un filet : deux niveaux, deux
+   formes. */
+.navigation__lien--actif,
+.navigation__lien--actif:hover {
   background: var(--brand);
-  border-color: var(--brand-strong);
   color: var(--sur-brand);
-}
-
-/* Redondance non colorée de l'état actif : un liséré à gauche, lisible en noir
-   et blanc comme par un daltonien. */
-.navigation__pastille--active::before {
-  content: '';
-  position: absolute;
-  left: -12px;
-  top: 6px;
-  bottom: 6px;
-  width: 3px;
-  background: var(--brand);
-  border-radius: var(--rayon-pilule);
-}
-
-.navigation__sortie {
-  margin-top: var(--espace-4);
-  color: var(--texte);
+  font-weight: 700;
 }
 
 .navigation__sortie:hover:not(:disabled) {
   color: var(--alerte);
-  border-color: var(--alerte);
   background: var(--surface-2);
 }
 
@@ -104,84 +91,23 @@
   color: var(--texte-2);
 }
 
-/* Le compte ferme la barre avec la déconnexion : deux gestes qui portent sur la
-   session, séparés de la liste des sections par la poussée de `flex: 1`. Il garde
-   la forme et l'état actif d'une pastille — c'est bien une route. */
-.navigation__compte {
-  margin-top: var(--espace-4);
-}
-
-/* ---- Le nom de la section (étape 31) ----
-   Sous 80em, la barre ne montre que le code — PL, AN, CL — et le nom n'est lu que
-   par le lecteur d'écran, comme avant. Au-delà, la place existe : le nom s'affiche à
-   côté du code, et la barre s'élargit. « CL » pour « Clients et sites » s'apprend,
-   « Clients et sites » se lit.
-
-   Le seuil est en `em`, pas en `px` : dans une requête média, 1em vaut la taille de
-   police **du navigateur**. Un texte agrandi par l'utilisateur recule donc le
-   seuil, et la barre redevient étroite au lieu de prendre la moitié de l'écran. */
-.navigation__libelle {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
-
-@media (min-width: 80em) {
+/* Sur un écran étroit, le compte et la sortie gardent leur icône seule ; le mot
+   reste lu par le lecteur d'écran, et l'info-bulle le donne au pointeur. */
+@media (max-width: 720px) {
   .navigation {
-    align-items: stretch;
-    width: var(--largeur-navigation-large);
-    padding: var(--espace-3);
+    gap: var(--espace-2);
+    padding: var(--espace-2) var(--espace-4);
   }
 
-  .navigation__liste {
-    align-items: stretch;
-  }
-
-  .navigation__pastille {
-    justify-content: flex-start;
-    gap: var(--espace-3);
-    width: auto;
-    padding: 0 var(--espace-3);
-  }
-
-  /* Le code garde sa colonne : les noms s'alignent, quelle que soit sa largeur. */
-  .navigation__code {
-    flex-shrink: 0;
-    width: 1.5rem;
-  }
-
-  .navigation__libelle {
-    position: static;
-    width: auto;
-    height: auto;
-    margin: 0;
-    overflow: visible;
-    clip-path: none;
-    /* Jamais tronqué (§12, « aucune troncature par ellipse ») : un nom trop long
-       passe à la ligne. */
-    white-space: normal;
-    font-family: var(--police);
-    font-size: var(--corps-taille);
-    line-height: var(--corps-interligne);
-    font-weight: 500;
-    letter-spacing: normal;
-  }
-
-  /* Les icônes du compte et de la sortie, centrées dans la même colonne que les
-     codes : 18 px de dessin, 3 px de chaque côté. */
-  .navigation__pastille > svg {
-    flex-shrink: 0;
-    margin-inline: 3px;
-  }
-
-  /* Le liséré de l'état actif reste collé au bord de la barre. */
-  .navigation__pastille--active::before {
-    left: calc(-1 * var(--espace-3) - 1px);
+  .navigation__texte {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
   }
 }

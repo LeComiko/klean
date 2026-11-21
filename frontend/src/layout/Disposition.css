@@ -1,5 +1,7 @@
+/* La barre de navigation en haut, le contenu dessous (étape 33). */
 .disposition {
   display: flex;
+  flex-direction: column;
   min-height: 100%;
   background: var(--canvas);
 }
@@ -9,7 +11,7 @@
   min-width: 0;
   padding: var(--espace-6) var(--espace-8);
   /* min-width: 0 est indispensable : sans lui une grille large — le planning de
-     l'étape 14 — pousse la barre latérale hors de l'écran au lieu de défiler. */
+     l'étape 14 — élargit la page au lieu de défiler dans son cadre. */
   overflow-x: auto;
 }
 

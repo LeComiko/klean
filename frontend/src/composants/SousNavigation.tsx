@@ -13,10 +13,11 @@ interface Proprietes {
 
 /**
  * Navigation à l'intérieur d'une section, le long de la **chaîne du modèle** :
- * Clients → Sites → Contrats → Prestations pour `SI`, Agents → Absences pour `AG`.
+ * Clients → Sites → Contrats → Prestations pour *Clients et sites*, Agents → Absences
+ * pour *Agents*.
  *
- * L'alternative écartée était d'aligner huit pastilles dans la barre latérale de
- * 64 px. Elle aurait fait de la mise en route une chasse au trésor : rien n'y
+ * L'alternative écartée était d'aligner huit liens dans la barre de navigation.
+ * Elle aurait fait de la mise en route une chasse au trésor : rien n'y
  * indique qu'un site suppose un client, alors que l'ordre de cette barre le dit.
  *
  * Ne s'affiche pas quand la section n'ouvre qu'une ressource : un seul onglet

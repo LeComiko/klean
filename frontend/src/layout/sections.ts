@@ -6,11 +6,11 @@ import { Roles, RolesInternes } from '../types/auth.ts'
 import type { DescriptionRessource } from '../types/reference.ts'
 
 /**
- * Les sections de la barre latérale, source unique pour la navigation **et**
+ * Les sections de la barre de navigation, source unique pour la navigation **et**
  * pour les routes d'`App.tsx`.
  *
  * Deux listes séparées finiraient par diverger, et la divergence a une forme
- * précise : une pastille visible dont la route n'est pas gardée, ou l'inverse.
+ * précise : un lien visible dont la route n'est pas gardée, ou l'inverse.
  *
  * ⚠️ `roles` reflète la matrice des droits de `SPEC.md` étape 8, mais ne
  * l'applique pas : l'autorité est le serveur, qui répond 403. Ce champ évite
@@ -18,8 +18,11 @@ import type { DescriptionRessource } from '../types/reference.ts'
  */
 export interface Section {
   chemin: string
-  /** Deux lettres, le format de la pastille de 40 px. */
-  pastille: string
+  /**
+   * Le nom affiché dans la barre de navigation. Il y était doublé d'un code de deux
+   * lettres — PL, AN, CL — jusqu'à l'étape 33, quand la barre latérale de 64 px est
+   * devenue une barre en haut, assez large pour les mots.
+   */
   libelle: string
   /** Absent : tout compte connecté. */
   roles?: readonly string[]
@@ -27,8 +30,8 @@ export interface Section {
   /**
    * Clés de `reference/descriptions.ts`, **dans l'ordre de la chaîne du modèle**.
    *
-   * Une section en porte plusieurs plutôt que d'aligner huit pastilles dans une
-   * barre de 64 px : l'ordre dit la dépendance — un site suppose un client — et
+   * Une section en porte plusieurs plutôt que d'aligner huit liens dans la barre
+   * de navigation : l'ordre dit la dépendance — un site suppose un client — et
    * c'est ce que la sous-navigation affiche. `chemin` est celui de la première.
    *
    * ⚠️ `roles` doit valoir l'union des `rolesLecture` de ces ressources, sinon la
@@ -75,8 +78,8 @@ const Exploitation: readonly string[] = [Roles.Administrateur, Roles.Responsable
  * Pourquoi dehors : une section est une **fonction du produit**, ouverte par rôle,
  * et `premiereSectionOuverte` en fait une destination d'arrivée. Le compte n'est ni
  * l'un ni l'autre — il est ouvert à tout compte connecté, et personne ne doit
- * atterrir dessus en se connectant. Sa place dans la navigation est le pied de la
- * barre, auprès de la déconnexion, et non la liste des pastilles.
+ * atterrir dessus en se connectant. Sa place dans la navigation est à droite de la
+ * barre, auprès de la déconnexion, et non dans la liste des sections.
  */
 export const CheminCompte = '/compte'
 
@@ -92,23 +95,19 @@ const InternesEtClientSyndic: readonly string[] = [...RolesInternes, Roles.Clien
  */
 export const Sections: readonly Section[] = [
   // `GET /api/planning` est réservé aux trois rôles internes.
-  { chemin: '/planning', pastille: 'PL', libelle: 'Planning', roles: RolesInternes },
+  { chemin: '/planning', libelle: 'Planning', roles: RolesInternes },
 
   // Ce que les agents ont constaté sur place (SPEC.md, étape 25). Juste après le
   // planning : c'est de l'exploitation du jour, pas de la donnée de référence. Le chef
   // d'équipe y lit celles de son équipe, par le filtre global des vacations.
-  { chemin: '/anomalies', pastille: 'AN', libelle: 'Anomalies', roles: RolesInternes },
+  { chemin: '/anomalies', libelle: 'Anomalies', roles: RolesInternes },
 
   // La chaîne client, entière : Clients → Sites → Contrats → Prestations. Le syndic
   // y lit son propre client et ses sites, cadré par le deuxième axe d'isolation —
   // les contrats et les prestations lui sont fermés, et les rôles de la section
   // valent l'union des lectures de ses quatre ressources.
-  //
-  // La pastille dit la première ressource, celle où l'on arrive : `CL`. Elle a valu
-  // `SI` jusqu'à l'étape 22, où les libellés ont été revus d'un seul geste.
   {
     chemin: '/clients',
-    pastille: 'CL',
     libelle: 'Clients et sites',
     roles: InternesEtClientSyndic,
     // Le catalogue clôt la chaîne : il ne descend d'aucune ressource, il sert les
@@ -123,7 +122,6 @@ export const Sections: readonly Section[] = [
   // saisie par l'interface.
   {
     chemin: '/agents',
-    pastille: 'AG',
     libelle: 'Agents',
     roles: RolesInternes,
     ressources: ['agents', 'absences'],
@@ -138,7 +136,6 @@ export const Sections: readonly Section[] = [
   // qu'`App.tsx` ne monte pas.
   {
     chemin: '/produits',
-    pastille: 'ST',
     libelle: 'Stock',
     roles: RolesInternes,
     ressources: ['produits', 'emplacements', 'consommationsType'],
@@ -154,12 +151,11 @@ export const Sections: readonly Section[] = [
   // vient rarement — une fois à la mise en route, puis presque jamais.
   {
     chemin: '/entreprise',
-    pastille: 'EN',
     libelle: 'Entreprise',
     roles: RolesInternes,
     ressources: ['entreprises'],
     // Les comptes (SPEC.md, étape 24) : qui a accès, administrateur seul. Rangés ici
-    // plutôt qu'en pastille : on y vient à l'arrivée d'une personne et à son départ.
+    // plutôt qu'en section : on y vient à l'arrivée d'une personne et à son départ.
     //
     // Le journal d'accès (étape 27) : qui a lu quoi, administrateur seul, comme la route.
     // Ouvert au responsable, il deviendrait un outil de surveillance des collègues
@@ -177,7 +173,7 @@ export const Sections: readonly Section[] = [
   // ⚠️ Dernière, et ce n'est pas un rang d'importance : la première section ouverte est
   // l'arrivée, et un compte qui porterait aussi un rôle interne doit arriver sur le
   // planning. Pour l'agent seul, le rang ne change rien.
-  { chemin: '/ma-journee', pastille: 'MJ', libelle: 'Ma journée', roles: [Roles.Agent] },
+  { chemin: '/ma-journee', libelle: 'Ma journée', roles: [Roles.Agent] },
 ]
 
 /**

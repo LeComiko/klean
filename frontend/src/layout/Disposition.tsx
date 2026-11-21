@@ -4,8 +4,8 @@ import { Navigation } from './Navigation'
 import './Disposition.css'
 
 /**
- * Charpente des écrans authentifiés : la barre latérale de 64 px, puis la zone
- * de contenu. Les écrans se rendent dans l'`Outlet`.
+ * Charpente des écrans authentifiés : la barre de navigation en haut, puis la
+ * zone de contenu. Les écrans se rendent dans l'`Outlet`.
  */
 export function Disposition() {
   return (

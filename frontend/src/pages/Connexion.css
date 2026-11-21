@@ -53,7 +53,7 @@
   font-weight: 600;
 }
 
-/* Pastille de marque, même gabarit que celle de la barre latérale. */
+/* Pastille de marque, le « K » de la barre de navigation, en plus grand. */
 .connexion__marque {
   display: flex;
   align-items: center;

@@ -1936,13 +1936,20 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   `CheminCompte` sans le mettre dans `Sections`, et `sections.test.ts` garde
   l'absence. Une section est une fonction du produit, ouverte par rôle, et
   `premiereSectionOuverte` en fait une **destination d'arrivée** : le compte, ouvert à
-  tout rôle, deviendrait l'arrivée de tous. Il vit au pied de la barre latérale,
+  tout rôle, deviendrait l'arrivée de tous. Il vit à droite de la barre de navigation,
   auprès de la déconnexion, et reste atteignable pour tout rôle.
 
-  ⚠️ **Le rôle `Agent` a une section depuis l'étape 25**, *Ma journée* (`MJ`), qui est sa
+  **La navigation est une barre en haut depuis l'étape 33**, les sections en mots : la
+  barre latérale de 64 px à codes de deux lettres — PL, AN, CL — prenait de la largeur
+  au planning pour six liens, et « CL » s'apprenait au lieu de se lire. La section
+  courante a un fond de marque, l'onglet courant de la sous-navigation un filet : deux
+  niveaux, deux formes. Trop étroite, la liste des sections défile à l'horizontale ;
+  un nom n'est jamais tronqué.
+
+  ⚠️ **Le rôle `Agent` a une section depuis l'étape 25**, *Ma journée*, qui est sa
   destination d'arrivée ; avant, il arrivait sur un refus, et le compte était le seul
   écran qu'il atteignait. *Ma journée* est **dernière** dans `Sections` : un compte qui
-  porterait aussi un rôle interne arrive sur le planning. *Anomalies* (`AN`), juste après
+  porterait aussi un rôle interne arrive sur le planning. *Anomalies*, juste après
   le planning, est aux trois rôles internes. Les deux sont des écrans propres, montés par
   `Ecrans` dans `App.tsx`, sans ressource de référence.
 
