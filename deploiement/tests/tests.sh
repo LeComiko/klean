@@ -5,7 +5,7 @@
 set -uo pipefail
 
 ici=$(cd "$(dirname "$0")" && pwd)
-# shellcheck source=../fonctions.sh
+# shellcheck source-path=SCRIPTDIR source=../fonctions.sh
 . "$ici/../fonctions.sh"
 
 reussis=0
