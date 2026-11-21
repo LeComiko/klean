@@ -194,8 +194,17 @@ klean_executable() { [ -x "$contenu/klean" ]; }
 verifier 'klean est exécutable dans l’archive' klean_executable
 refuse_version() { ! "$ici/../publier.sh" 1.2 a/b "$sortie" 2> /dev/null; }
 verifier 'une version mal formée est refusée' refuse_version
+refuse_depot() { ! "$ici/../publier.sh" 1.2.3 a "$sortie" 2> /dev/null; }
+verifier 'un dépôt mal formé est refusé' refuse_depot
 
-rm -rf "$sortie" "$contenu"
+# La même version, publiée de nouveau une seconde plus tard, donne la même archive.
+seconde=$(mktemp -d)
+sleep 1
+"$ici/../publier.sh" 1.2.3 LeComiko/klean "$seconde" > /dev/null
+verifier 'l’archive est reproductible' \
+  egal "$(cut -d' ' -f1 "$seconde/klean-1.2.3.tar.gz.sha256")" "$(cut -d' ' -f1 "$sortie/klean-1.2.3.tar.gz.sha256")"
+
+rm -rf "$sortie" "$contenu" "$seconde"
 
 # ---- Bilan -------------------------------------------------------------------
 
