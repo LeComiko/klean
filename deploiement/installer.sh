@@ -42,8 +42,20 @@ paquets() {
 # image Debian minimale), iproute2 pour `ss` et `ip`, curl pour les téléchargements,
 # sudo pour les commandes que `klean` donne à taper, absent de certains serveurs où
 # l'on est root d'emblée.
+#
+# `update` réessaie seul : DPkg::Lock::Timeout ne couvre que le verrou de dpkg, pas
+# celui des listes, que tient la mise à jour automatique d'un serveur neuf (apt-daily).
+mettre_a_jour_listes() {
+  local _
+  for _ in $(seq 1 60); do
+    apt-get update -qq && return 0
+    sleep 10
+  done
+  echouer "La liste des paquets n'a pas pu être mise à jour pendant dix minutes : une mise à jour automatique du système est peut-être en cours, ou le serveur n'est pas relié à Internet. Attendez quelques minutes, puis relancez la même commande d'installation."
+}
+
 installer_outils() {
-  paquets update -qq
+  mettre_a_jour_listes
   paquets install -y -qq ca-certificates curl cron iproute2 sudo
 }
 
@@ -79,7 +91,7 @@ installer_docker() {
   printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' \
     "$(dpkg --print-architecture)" "$id" "$(os_release VERSION_CODENAME)" > /etc/apt/sources.list.d/docker.list
   chmod 644 /etc/apt/sources.list.d/docker.list
-  paquets update -qq
+  mettre_a_jour_listes
   paquets install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
 }
 

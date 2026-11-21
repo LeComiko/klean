@@ -31,6 +31,14 @@ cp "$racine/deploiement/klean" "$racine/deploiement/klean.cron" "$racine/deploie
 chmod 755 "$travail/klean"
 printf '%s\n' "$version" > "$travail/VERSION"
 
+# Une marque restée dans un fichier publié pointerait le serveur vers un dépôt nommé
+# « @DEPOT@ » : refusé ici, avant que l'archive existe, plutôt que découvert à la
+# première installation.
+if grep -l -e '@DEPOT@' -e '@VERSION@' -e '@EMPREINTE@' "$travail"/*; then
+  printf 'Marque non remplacée dans les fichiers ci-dessus.\n' >&2
+  exit 1
+fi
+
 # Reproductible : ni date, ni propriétaire, ni ordre de lecture du disque dans
 # l'archive — deux publications du même commit donnent la même empreinte, qu'un tiers
 # peut refaire. GNU tar, celui du CI et de la série.
@@ -44,10 +52,9 @@ sed -e "s|@DEPOT@|$depot|g" -e "s|@VERSION@|$version|g" -e "s|@EMPREINTE@|$empre
   "$racine/deploiement/installer.sh" > "$sortie/installer.sh"
 chmod 755 "$sortie/installer.sh"
 
-# Une marque restée dans un fichier publié pointerait le serveur vers un dépôt nommé
-# « @DEPOT@ », ou ferait refuser toute archive : refusé ici plutôt que découvert à la
-# première installation.
-if grep -l -e '@DEPOT@' -e '@VERSION@' -e '@EMPREINTE@' "$travail"/* "$sortie/installer.sh"; then
+# L'installateur, la seule marque qui reste à poser après l'archive, est relu à la fin.
+if grep -l -e '@DEPOT@' -e '@VERSION@' -e '@EMPREINTE@' "$sortie/installer.sh"; then
+  rm -f "$sortie/klean-$version.tar.gz" "$sortie/installer.sh"
   printf 'Marque non remplacée dans les fichiers ci-dessus.\n' >&2
   exit 1
 fi

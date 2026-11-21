@@ -421,12 +421,18 @@ cmd_installer() {
   exiger_root
   # Sans attente : une installation lancée pendant la sauvegarde de la nuit échoue tout de suite.
   verrouiller
+  # Dès le début : chaque échec qui suit dit « Relancez : sudo klean installer », et la
+  # commande doit déjà exister à ce moment-là.
+  ln -sf "$REPERTOIRE/klean" /usr/local/bin/klean
   { : > /dev/tty; } 2> /dev/null ||
     echouer "L'installation pose des questions : lancez-la dans un terminal (par ssh, ajoutez -t : ssh -t serveur '…')."
   if [ -f "$ENV" ]; then
     verifier_machine
     reprendre_env
-    verifier_dns "$(lire_env "$ENV" KLEAN_DOMAINE)"
+    # Une seule fois : reprendre_env vient peut-être de demander le domaine, et de le
+    # vérifier avant de l'écrire.
+    [ "${DOMAINE_VERIFIE:-}" = "$(lire_env "$ENV" KLEAN_DOMAINE)" ] ||
+      verifier_dns "$(lire_env "$ENV" KLEAN_DOMAINE)"
   else
     # Avant verifier_machine : les conteneurs d'une installation qui a perdu son .env
     # occupent les ports, et le refus parlerait d'autre chose que de la vraie cause.
@@ -450,7 +456,6 @@ cmd_installer() {
   completer_amorcage
   compose up -d ||
     echouer "KLEAN n'a pas démarré : voir les lignes ci-dessus et sudo klean journaux. Relancez : sudo klean installer"
-  ln -sf "$REPERTOIRE/klean" /usr/local/bin/klean
   # Nom sans point : cron ignore un fichier de /etc/cron.d qui en porte un. Mode et
   # propriétaire explicites : le umask 077 de ce script donnerait 600, que cron refuse.
   install -m 644 -o root -g root "$REPERTOIRE/klean.cron" /etc/cron.d/klean
@@ -504,7 +509,8 @@ refuser_base_orpheline() {
 # ressemble à aucun .env qu'un exploitant garderait à côté : leurs restes partent ici.
 ecrire_env() {
   local temporaire
-  find "$REPERTOIRE" -maxdepth 1 -type f -name '.env-en-cours.*' -delete
+  # Et ceux de poser_env, .env.XXXXXX, qu'une interruption aurait laissés.
+  find "$REPERTOIRE" -maxdepth 1 -type f \( -name '.env-en-cours.*' -o -name '.env.??????' \) -delete
   temporaire=$(mktemp "$REPERTOIRE/.env-en-cours.XXXXXX")
   if [ -f "$ENV" ] && ! cat "$ENV" > "$temporaire"; then
     rm -f "$temporaire"
@@ -612,6 +618,10 @@ reprendre_env() {
     base=oui
   fi
   A_ECRIRE=()
+  # La base sans son mot de passe se refuse avant toute question : rien ne la sauve ici.
+  if [ "$base" = oui ] && [ -z "$(lire_env "$ENV" POSTGRES_PASSWORD)" ]; then
+    refuser_base_orpheline "son mot de passe manque dans $ENV"
+  fi
   manquantes=$(cles_manquantes "$ENV" KLEAN_DOMAINE POSTGRES_PASSWORD KLEAN_JWT_CLE \
     KLEAN_VERSION KLEAN_IMAGES KLEAN_CODE_INSTALLATION)
   if [ -z "$manquantes" ]; then
@@ -625,6 +635,9 @@ reprendre_env() {
       '') ;;
       KLEAN_DOMAINE)
         demander_valide normaliser_domaine "Nom de domaine de KLEAN (ex. klean.mon-entreprise.fr)"
+        # Vérifié avant d'être écrit : un « non » laisse la question à la prochaine
+        # reprise, au lieu d'enregistrer un nom peut-être mal saisi.
+        verifier_dns "$REPONSE"
         A_ECRIRE+=("$cle" "$REPONSE")
         ;;
       POSTGRES_PASSWORD)
@@ -711,6 +724,7 @@ verifier_dns() {
     avertir "Le domaine $domaine ne pointe encore nulle part. Chez votre registraire, créez un enregistrement A vers ce serveur : $(tr '\n' ' ' <<< "$locales")"
   elif etrangeres=$(adresses_etrangeres "$resolues" "$locales"); then
     dire "Le domaine $domaine pointe bien sur ce serveur."
+    DOMAINE_VERIFIE="$domaine"
     return
   else
     avertir "Le domaine $domaine pointe vers $(tr '\n' ' ' <<< "$etrangeres")— pas vers une adresse de ce serveur ($(tr '\n' ' ' <<< "$locales"))."
@@ -719,13 +733,15 @@ verifier_dns() {
   fi
   demander_oui_non "Continuer quand même ?" non ||
     echouer "Installation suspendue. Quand le domaine pointe sur ce serveur : sudo klean installer"
+  DOMAINE_VERIFIE="$domaine"
 }
 
 # Interrogé en local, sous son vrai nom : le certificat est vérifié comme par un
 # navigateur, sans dépendre du DNS vu d'ici — derrière l'adresse publique d'un
 # hébergeur, un serveur ne se joint souvent pas lui-même.
 #
-# Jusqu'à cinq minutes : Caddy demande le certificat à son démarrage, et Let's Encrypt
+# Jusqu'à huit minutes environ — vingt essais de dix secondes au plus, à quinze
+# secondes d'intervalle : Caddy demande le certificat à son démarrage, et Let's Encrypt
 # peut tarder. Interroger KLEAN ne redemande aucun certificat : attendre ne touche pas
 # au plafond d'échecs de Let's Encrypt.
 verifier_https() {
@@ -733,7 +749,7 @@ verifier_https() {
   domaine=$(lire_env "$ENV" KLEAN_DOMAINE)
   port=$(lire_env "$ENV" KLEAN_PORT_HTTPS)
   port="${port:-443}"
-  dire "Attente de KLEAN en HTTPS, le temps d'obtenir le certificat (jusqu'à cinq minutes)…"
+  dire "Attente de KLEAN en HTTPS, le temps d'obtenir le certificat (jusqu'à huit minutes)…"
   for essai in $(seq 1 20); do
     code=$(curl -sS --max-time 10 --resolve "$domaine:$port:127.0.0.1" -o /dev/null \
       -w '%{http_code}' "https://$domaine:$port/api/sante" 2> /dev/null) || true

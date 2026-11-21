@@ -113,6 +113,9 @@ verifier 'les clés absentes ou vides sont nommées' \
   egal "$(cles_manquantes "$incomplet" KLEAN_DOMAINE POSTGRES_PASSWORD KLEAN_ADMIN_MOT_DE_PASSE | tr '\n' ' ')" \
   'POSTGRES_PASSWORD KLEAN_ADMIN_MOT_DE_PASSE '
 verifier 'un .env complet ne manque de rien' egal "$(cles_manquantes "$incomplet" KLEAN_DOMAINE)" ''
+printf "KLEAN_ADMIN_MOT_DE_PASSE=''\n" > "$incomplet"
+verifier 'une valeur vide entre apostrophes manque aussi' \
+  egal "$(cles_manquantes "$incomplet" KLEAN_ADMIN_MOT_DE_PASSE)" KLEAN_ADMIN_MOT_DE_PASSE
 
 rm -rf "$dossier"
 
