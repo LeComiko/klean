@@ -4137,9 +4137,14 @@ multi-tenant ne restreint pas cette colonne.
 figurait ici y devient une consommation **par type de prestation**, et les alertes
 🟢🟠🔴 y perdent leur rouge, réservé au « non pourvu ».
 
-**Rattachement agent ↔ site.** Table `AgentSite` avec `EstTitulaire`. Sert au
-filtrage et au périmètre du chef d'équipe. Ne remplace pas le calcul
-d'expérience du moteur, fondé sur l'historique réel.
+~~**Rattachement agent ↔ site.**~~ **Retiré le 21 novembre 2026, sans être cadré.** Ses
+deux usages annoncés sont couverts ailleurs : le périmètre du chef d'équipe est fait de
+personnes depuis l'étape 19 (`Agent.ChefEquipeId`), et le titulaire est
+`Prestation.AgentTitulaireId` depuis l'étape 20, plus fin qu'un titulaire par site. Le
+troisième usage, « le filtrage », n'avait jamais été précisé. Trois besoins de terrain
+le justifieraient encore, et aucun n'a été retenu : les accès matériels (clés, badges,
+codes), les remplaçants attitrés d'un site, et l'exclusion d'un agent à la demande du
+client. Si l'un apparaît, il se cadre sur ce besoin précis, pas sur une table générique.
 
 ~~**Certification des passages.**~~ Cadrée à l'étape 25, sans `ICertificationProvider` :
 aucun prestataire n'existe à substituer. Règle absolue : ne jamais considérer une intervention comme réalisée au seul
