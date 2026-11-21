@@ -305,7 +305,7 @@ Les tables du modèle, plus celles d'Identity. « DP » = donnée personnelle.
 **Ce qui n'existe pas, et qu'il est utile de pouvoir affirmer :** aucune position
 historisée — `Pointages` garde une distance, jamais des coordonnées (T7) —, aucun suivi
 en arrière-plan, aucun accusé de lecture de consigne, aucun cookie de mesure d'audience,
-aucune télémétrie, aucun appel sortant hors SMTP depuis la correction du §9.1.
+aucune télémétrie, aucun appel sortant hors SMTP, et hors le téléchargement des versions (§4), depuis la correction du §9.1.
 
 **Une seule valeur est rangée dans le navigateur**, depuis l'étape 32 : `klean.apparence`,
 dans le stockage local — le thème choisi dans *Mon compte*, « automatique », « clair » ou
@@ -342,10 +342,24 @@ Trois sorties depuis la correction du §9.1, et toutes les trois sont voulues.
    Une sauvegarde a sa propre durée de conservation : gardée cinq ans, elle conserve
    cinq ans ce que les scripts du §5 ont supprimé de la base. Une restauration ressuscite
    donc des données purgées, et les scripts sont à rejouer après (`DEPLOIEMENT.md` §4).
+   Les sauvegardes que fait `klean` restent **sur le serveur**, sans copie ailleurs tant que
+   l'exploitant n'en fait pas une : c'est à lui de choisir ce stockage, et sa durée est
+   celle du §5.
 4. ~~**Vers Google**, à chaque chargement de page.~~ **Supprimée** le 3 octobre 2026 :
    les polices sont servies par KLEAN, et les deux politiques de sécurité du contenu ne
    déclarent plus aucune origine externe. Voir §9.1 — c'était l'écart le plus sérieux de
    cette revue, et il n'en reste **trois** sorties.
+
+**Ce que l'instance télécharge, et qui n'est pas une sortie de données.** Avec le script
+d'installation, une instance contacte `github.com` et `ghcr.io` pour **récupérer** une
+version — l'archive, ses empreintes, les images — à l'installation, à chaque
+`klean mettre-a-jour` et à chaque `klean revenir`, et les dépôts de paquets — celui du système, celui de Docker — à l'installation
+seulement. Ces requêtes ne portent **aucune donnée de l'instance** : un nom de fichier et
+un numéro de version. Ces services voient l'adresse IP du **serveur**, jamais celle des
+utilisateurs ni aucune donnée sur eux. Elles sont à signaler à l'exploitant qui filtre ses
+sorties ; nous ne les lisons pas comme une sous-traitance de données personnelles, à
+confirmer avec le reste de ce document. Le téléchargement est
+la seule sollicitation de GitHub : une instance ne lui envoie rien d'autre.
 
 ---
 
@@ -366,6 +380,7 @@ est la dernière : une durée sans mécanisme est une promesse que personne ne t
 | Comptes (`AspNetUsers`) | désactivation à la sortie, effacement à 5 ans | un compte désactivé reste nécessaire pour attribuer les lignes du journal | 📋 deux gestes manuels, à l'écran *Comptes* : **Fermer** à la sortie (`/desactiver`, depuis l'étape 24), puis **Pseudonymiser** (`/anonymiser`, §9.3) |
 | Second facteur (`AspNetUserTokens`) | tant qu'il est actif ; effacé au retrait, à la réinitialisation et à la pseudonymisation du compte | un secret qui n'authentifie plus rien n'a aucun usage | ✅ par construction : chaque retrait efface les trois jetons, et `ServiceAnonymisation` les efface sur ses deux chemins |
 | Jetons de rafraîchissement | **30 jours après révocation ou expiration** | la fenêtre de diagnostic d'un rejeu ; au-delà, seule l'adresse IP survit, sans usage | ✅ `purge-jetons-rafraichissement.sql` |
+| Sauvegardes automatiques (`klean sauvegarder`) | **14 jours** | assez pour revenir d'une mise à jour ou d'une fausse manœuvre, sans qu'une copie complète de la base survive des mois à ce qu'on en a effacé. La plus récente n'est jamais supprimée, même hors délai | ✅ rotation par `klean sauvegarder` ; ⚠️ **aucune sur une copie que l'exploitant a faite ailleurs** |
 | Journal d'accès | **12 mois** | un journal RGPD est lui-même une donnée personnelle | ✅ `purge-journal-acces.sql` |
 | Mouvements de stock et leur auteur | 5 ans, comme les interventions | l'historique qui explique une quantité ; l'auteur suit son compte, pseudonymisé à la sortie | 📋 `conservation-donnees-metier.sql` §8 — purger un mouvement ne change aucune quantité, et son `DELETE` passe **avant** celui des sites qu'il cite |
 | Pointages des passages (`Pointages`) | **1 an après le pointage** | la CNIL retient un an quand une localisation sert à prouver une prestation au client, ce qui est la finalité de T7 — par analogie avec la norme NS-051, écrite pour les véhicules. Le statut de la vacation, lui, reste cinq ans avec elle | ✅ `purge-pointages.sql`, qui supprime avec `-v confirmer=1` |
@@ -394,6 +409,16 @@ violation de clé **à mi-parcours**, après avoir déjà supprimé ce qui préc
 `supprimable_maintenant` qui distingue une ligne hors délai d'une ligne hors délai
 **mais bloquée par un enfant encore dans le sien**. Les lignes bloquées le restent
 jusqu'à ce que leurs enfants tombent : le script est à **rejouer**, pas à forcer.
+
+⚠️ **Les sauvegardes automatiques conservent ce que les purges et les effacements
+retirent de la base, pendant quatorze jours.** Une donnée supprimée, ou pseudonymisée sur
+demande d'une personne, survit quatorze jours dans les sauvegardes et dans la copie
+`…-avant-restauration.dump`, puis disparaît par la rotation : à dire à la personne qui
+demande un effacement, qui n'est complet qu'à l'issue de ce délai. Une restauration, elle,
+**défait** les pseudonymisations et les purges faites depuis la sauvegarde — à rejouer
+(`DEPLOIEMENT.md` §4 et §7) — et ressuscite les comptes fermés. La rotation ne s'applique
+qu'aux fichiers de `/var/backups/klean` et `/var/lib/klean-trousseau` : une copie faite
+ailleurs a la durée que l'exploitant lui donne, et c'est à lui de la tenir.
 
 ⚠️ **Aucun `DELETE` sur `Agents`, à aucun moment.** C'est le compromis de l'étape 17 :
 `Restrict` sur `Intervention.AgentId` rend un agent insupprimable dès qu'il a travaillé,

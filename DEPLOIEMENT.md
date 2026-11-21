@@ -4,6 +4,14 @@ De zéro jusqu'à la première connexion, puis la vie d'une instance : mises à 
 sauvegardes, retour arrière, secrets, journaux. Chaque commande de ce fichier a été
 jouée telle quelle sur une instance d'essai avant d'être écrite ici.
 
+**Le chemin recommandé est le script** : `README.md`, section *Installer KLEAN sur un
+serveur*, une commande qui installe Docker, pose les questions, obtient le certificat et
+installe la commande `klean` pour la suite (mises à jour, sauvegardes, restauration). Ce
+document reste le **parcours manuel** — pour qui ne veut pas du script, ou veut
+comprendre ce qu'il fait — et la référence de ce que `klean` décrit en une ligne. Les
+deux ne se mêlent pas sur une même instance : une installation faite par le script se
+tient par `klean`, et ses fichiers sont dans `/opt/klean`.
+
 KLEAN tourne en trois conteneurs : **PostgreSQL**, **l'API**, et **Caddy**, qui
 obtient le certificat HTTPS, sert l'interface et relaie `/api` vers l'API. Un
 quatrième, `migrer`, ne tourne que quand vous le lancez.
@@ -28,7 +36,10 @@ navigateur ──https──► caddy :443
 
 KLEAN n'a besoin d'**aucun accès sortant** pour servir son interface : les polices
 sont servies en propre (`RGPD.md` §9.1). Les seules sorties sont Let's Encrypt, pour
-le certificat, et votre serveur SMTP, si vous en configurez un.
+le certificat, et votre serveur SMTP, si vous en configurez un. Avec le script, s'y
+ajoutent le **téléchargement des versions** — `github.com` pour l'archive, `ghcr.io` pour
+les images — et, à l'installation seulement, le dépôt de Docker : aucune donnée de
+l'instance n'y est envoyée (`RGPD.md` §4).
 
 ---
 
@@ -168,6 +179,38 @@ l'API, mais pas par sa journalisation.
 
 ## 3. Mettre à jour
 
+### Avec `klean`
+
+```bash
+sudo klean mettre-a-jour            # la dernière version publiée
+sudo klean mettre-a-jour 1.2.3      # une version précise
+```
+
+Dans cet ordre, et chaque pas s'arrête sans rien changer s'il échoue :
+
+1. **Téléchargement** de la version — vérifié contre l'empreinte publiée avec elle, et la
+   version annoncée par l'archive doit être celle demandée — puis des images, **pendant que
+   l'ancienne version tourne**. Un réseau coupé ici n'a rien arrêté.
+2. **Sauvegarde** d'avant la mise à jour (`klean-….-avant-<version>.dump`), l'API en marche :
+   le trousseau se lit dans son conteneur.
+3. **Arrêt** de l'API, mise en place des fichiers de la nouvelle version, **migration** de
+   la base, **démarrage**.
+4. **Vérification** : KLEAN doit répondre en HTTPS.
+
+⚠️ **Les saisies faites entre la sauvegarde et l'arrêt de l'API** — quelques secondes — ne
+sont pas dans la sauvegarde : un `revenir` les perd (section 5).
+
+**Une mise à jour ratée se relance** par la même commande : elle reprend là où elle
+s'était arrêtée, **sans nouvelle sauvegarde** — celle d'une base à moitié transformée
+prendrait la place de celle d'avant. `sudo klean etat` signale une mise à jour en cours.
+
+**Une version plus ancienne que l'installée est refusée.** Ses images ne connaissent pas
+le schéma de la base, et ses migrations ne le défont pas : le code qui défait une
+migration n'est que dans la version qui l'a introduite (`CLAUDE.md` §10). Le seul retour
+est `sudo klean revenir`, section 5.
+
+### À la main
+
 ```bash
 # 1. Sauvegarder — toujours, avant toute migration (section 4)
 docker compose exec -T postgres pg_dump -U klean -d klean -Fc > klean-$(date +%F).dump
@@ -199,14 +242,48 @@ voient toujours toutes les lignes, comme avant.
 
 ## 4. Sauvegarder et restaurer
 
-### Sauvegarder
+### Sauvegarder, avec `klean`
+
+Une tâche cron fait `klean sauvegarder` **chaque nuit à 3 h 30** (`/etc/cron.d/klean`,
+journal dans `/var/log/klean-sauvegarde.log`), et la commande se lance aussi à la main :
+
+```bash
+sudo klean sauvegarder
+```
+
+- **La base** : `/var/backups/klean/klean-AAAA-MM-JJTHHMMSS.dump`.
+- **Le trousseau** de l'API : `/var/lib/klean-trousseau/trousseau-AAAA-MM-JJTHHMMSS.tgz`,
+  **séparément** — deux racines, et non deux dossiers frères, pour qu'une copie du dossier
+  des sauvegardes n'emporte jamais les deux ensemble (la raison est plus bas). Une archive
+  n'est écrite que si le trousseau a changé ; la plus récente contient toutes les clés.
+- **Quatorze jours** sont gardés, et la plus récente n'est jamais supprimée, même hors délai.
+- **Chaque sauvegarde est relue en entier** (`pg_restore -f /dev/null`) avant d'être
+  gardée : un `pg_dump` interrompu laisserait sinon un fichier vide, que la rotation
+  prendrait pour la bonne copie.
+- **Une seule commande `klean` à la fois** (`/run/klean.lock`). La tâche de nuit attend
+  jusqu'à trente minutes qu'une mise à jour ou une commande à la main finisse, plutôt que
+  d'abandonner.
+
+⚠️ **Elles restent sur le serveur.** `sudo klean etat` le rappelle à chaque appel. Copiez
+`/var/backups/klean` et `/var/lib/klean-trousseau` ailleurs, **chacune de son côté** — la
+séparation du trousseau est expliquée plus bas. Les trois conséquences de l'encadré
+suivant valent aussi pour elles.
+
+### Sauvegarder, à la main
 
 ```bash
 docker compose exec -T postgres pg_dump -U klean -d klean -Fc > klean-$(date +%F).dump
 ```
 
 Le format `-Fc` est compressé, et `pg_restore --list klean-AAAA-MM-JJ.dump` en montre
-le contenu sans rien restaurer. Exemple de tâche quotidienne, dans `crontab -e` :
+le contenu sans rien restaurer. ⚠️ `--list` ne lit que la table des matières : il réussit
+sur un fichier tronqué. Pour vérifier une sauvegarde, `pg_restore -f /dev/null` la relit
+en entier :
+
+```bash
+docker compose exec -T postgres pg_restore -f /dev/null < klean-AAAA-MM-JJ.dump
+```
+ Exemple de tâche quotidienne, dans `crontab -e` :
 
 ```
 30 3 * * *  cd /chemin/vers/klean && docker compose exec -T postgres pg_dump -U klean -d klean -Fc > sauvegardes/klean-$(date +\%F).dump
@@ -243,15 +320,62 @@ des clés que plus rien ne déchiffre : tous les comptes équipés sont à réé
 est toute la protection : une copie de la base seule ne livre aucune clé, une copie des
 deux les livre toutes. Deux destinations, ou deux chiffrements distincts.
 
-### Restaurer
+### Restaurer, avec `klean`
+
+```bash
+sudo klean restaurer /var/backups/klean/klean-AAAA-MM-JJTHHMMSS.dump
+```
+
+Sans argument, la commande liste les sauvegardes disponibles. Elle demande de taper
+`RESTAURER` après avoir dit ce qu'elle va faire, et **rien n'est détruit avant** :
+
+1. La sauvegarde est **relue en entier**. Illisible, elle est refusée : rien n'a changé.
+2. L'API s'arrête, et **l'état actuel est copié** dans `/var/backups/klean`
+   (`klean-….-avant-restauration.dump`, gardé quatorze jours) : une restauration lancée
+   sur la mauvaise sauvegarde ne coûte pas les saisies d'aujourd'hui, et `sudo klean
+   restaurer` sur cette copie défait la restauration.
+3. **La base est supprimée puis recréée**, puis la sauvegarde y est restaurée **en une seule
+   transaction** : un échec laisse une base vide, jamais à moitié remplie, et la commande
+   dit comment reprendre.
+4. **Toutes les sessions sont révoquées** : chacun doit se reconnecter. Un jeton de
+   rafraîchissement d'alors rouvrirait sinon la session d'un compte que la sauvegarde
+   croyait ouvert.
+5. **Le trousseau est fusionné** à celui du volume `cles-api`, depuis l'archive la plus
+   récente de `/var/lib/klean-trousseau`, puis les migrations de la version installée
+   sont rejouées et les services redémarrés. Le rôle `klean_app` est recréé s'il manque.
+
+⚠️ **Pourquoi la base est recréée, et non restaurée avec `--clean`.** `pg_restore --clean`
+ne supprime que les objets que la sauvegarde contient. Après une mise à jour, les tables
+qu'ajoutait la nouvelle version resteraient en place, et la mise à jour suivante échouerait
+en les recréant.
+
+⚠️ **Le trousseau se fusionne, jamais « seulement s'il est vide ».** L'API crée une clé
+de Data Protection dès son démarrage, sans requête : sur une machine neuve où l'installation
+a déjà démarré l'API, le volume n'est jamais vide, et une archive restaurée « si vide »
+ne le serait jamais. Chaque clé a son identifiant : celles de l'archive s'ajoutent à celle de
+la nouvelle installation, qui reste valable à côté.
+
+⚠️ **Ce qui revient à son état d'alors.** Un compte fermé depuis la sauvegarde est de
+nouveau ouvert ; un mot de passe changé depuis est de nouveau l'ancien ; les
+pseudonymisations et les purges faites depuis sont défaites — rejouez-les (section 7).
+Tout ce qui a été saisi après la sauvegarde est perdu.
+
+### Restaurer, à la main
 
 ```bash
 docker compose stop api
-docker compose exec -T postgres pg_restore -U klean -d klean --clean --if-exists --no-owner --exit-on-error < klean-AAAA-MM-JJ.dump
+docker compose exec -T postgres psql -U klean -d postgres -v ON_ERROR_STOP=1 \
+    -c 'DROP DATABASE IF EXISTS klean WITH (FORCE)' \
+    -c 'CREATE DATABASE klean OWNER klean'
+# le rôle klean_app, s'il manque : voir ci-dessous
+docker compose exec -T postgres pg_restore -U klean -d klean --no-owner --exit-on-error --single-transaction < klean-AAAA-MM-JJ.dump
 docker compose start api
 ```
 
-⚠️ **Sur une machine neuve, créez d'abord le rôle `klean_app`.** Un rôle vit dans la
+La base est recréée, pas restaurée avec `--clean` : voir plus haut. Révoquez ensuite les
+sessions de la sauvegarde (la requête `UPDATE "JetonsRafraichissement"` de la section 6).
+
+⚠️ **Sur une machine neuve, créez d'abord le rôle `klean_app`**, avant le `pg_restore`. Un rôle vit dans la
 grappe PostgreSQL, pas dans la base : la sauvegarde porte les droits et les politiques
 qui le nomment, pas le rôle lui-même. Sans lui, `pg_restore` s'arrête sur
 `role "klean_app" does not exist`, après les tables mais avant les droits, et l'API ne
@@ -273,7 +397,9 @@ train d'être remplacées. Tout ce qui a été saisi après la sauvegarde est **
 sessions comprises : qui s'est connecté depuis devra se reconnecter.
 
 Le trousseau, s'il a été perdu avec la machine, se restaure **avant** de redémarrer
-l'API — l'archive la plus récente, puisqu'elle contient aussi les clés plus anciennes :
+l'API — l'archive la plus récente, puisqu'elle contient aussi les clés plus anciennes. La
+commande **s'ajoute** aux clés présentes, elle n'écrase rien : c'est ce qui la rend sûre
+sur une machine dont l'API a déjà créé sa première clé.
 
 ```bash
 docker compose up -d api
@@ -290,6 +416,33 @@ restauration, rejouez les scripts de conservation de la section 7.
 ---
 
 ## 5. Revenir en arrière
+
+### Avec `klean`
+
+```bash
+sudo klean revenir
+```
+
+`revenir` ne joue **aucune migration descendante** : il remet les fichiers et les images de
+la version précédente, et **restaure la sauvegarde prise juste avant la mise à jour**
+(`klean-….-avant-<version>.dump`). C'est le choix que la fin de cette section recommande
+déjà, rendu systématique : défaire une migration qui a ajouté une colonne supprime ce
+qu'elle contenait, et le code qui la défait n'existe que dans la version qui l'a
+introduite.
+
+- **Dans les quatorze jours**, comme les sauvegardes : au-delà, la sauvegarde d'avant la
+  mise à jour a été supprimée par la rotation, `revenir` le dit et ne touche à rien.
+- Tout est vérifié **avant le premier arrêt** : les fichiers de la version précédente, la
+  sauvegarde (relue en entier), les images.
+- ⚠️ **Tout ce qui a été saisi depuis la mise à jour est perdu** — y compris les quelques
+  secondes entre sa sauvegarde et l'arrêt de l'API. La commande le dit et demande de taper
+  `REVENIR`. L'état actuel est d'abord copié (`…-avant-restauration.dump`, quatorze jours),
+  et toutes les sessions sont fermées.
+- **Un retour raté se relance** par `sudo klean revenir`, qui reprend : tant qu'il n'a pas
+  abouti, la base est peut-être vide, et une mise à jour est refusée. `sudo klean etat` le
+  signale.
+
+### À la main
 
 Une version qui pose problème se défait en **deux gestes, dans cet ordre** :
 

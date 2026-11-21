@@ -61,6 +61,10 @@ Conséquences pratiques sur le code :
   « pas configuré » est un choix d'exploitation, « configuré à moitié » est une
   erreur, et la découvrir quand un responsable a perdu son mot de passe est le
   pire moment.
+- **Le script d'installation est le chemin recommandé** (`deploiement/`, étape 34) :
+  `installer.sh` et la commande `klean`. Il n'ajoute **aucun service tiers obligatoire** —
+  GitHub n'est sollicité que pour *télécharger* les versions, jamais pour y envoyer quoi que
+  ce soit — et `DEPLOIEMENT.md` reste le parcours manuel, pour qui n'en veut pas.
 
 ---
 
@@ -92,6 +96,16 @@ KLEAN/
 ├── CLAUDE.md, SPEC.md, README.md, RGPD.md, DEPLOIEMENT.md, LICENSE
 ├── docker-compose.yml   postgres, api, migrer (profil outils), caddy
 ├── .env.example         le seul endroit où un exploitant écrit un secret
+├── deploiement/         l'installation et l'exploitation par script (étape 34, lot A1)
+│   ├── installer.sh     le premier geste : Docker, archive vérifiée, /opt/klean
+│   ├── klean            la commande : installer, mettre-a-jour, revenir, sauvegarder,
+│   │                    restaurer, etat, journaux, code
+│   ├── fonctions.sh     ce qui se calcule sans Docker ni réseau — éprouvé par tests/
+│   ├── publier.sh       fabrique l'archive, l'installateur et leurs empreintes (CI)
+│   ├── klean.cron       la sauvegarde de la nuit, posée dans /etc/cron.d/klean
+│   ├── env.modele       les variables non secrètes qu'une version ajoute à .env
+│   └── tests/           tests.sh, et lancer.sh qui le joue dans un conteneur Debian 12
+├── .github/workflows/   ci.yml, et publication.yml — l'étiquette vX.Y.Z publie la version
 ├── backend/
 │   ├── Dockerfile       l'API ET son bundle de migration, une seule image
 │   ├── Models/          20 entités métier + AccesJournalise + Utilisateur
@@ -1775,6 +1789,32 @@ Npgsql cherche `libgssapi_krb5`, absente de l'image .NET, et écrit « Error: �
 open shared object file » au premier démarrage. Sans conséquence, mais c'est la première
 ligne qu'un exploitant lirait.
 
+**Cinq pièges du script d'installation** (`deploiement/`, étape 34), chacun rencontré en
+l'écrivant ou en le relisant :
+
+- **Un fichier de `/etc/cron.d` dont le nom porte un point est ignoré par cron**, sans
+  erreur ni journal : `klean.cron` s'installe donc sous `/etc/cron.d/klean`. Il lui faut
+  aussi le mode 644 et root pour propriétaire, que l'`umask 077` du script ne donnerait pas.
+- **L'API crée une clé de Data Protection dès son démarrage**, sans requête. Sur une
+  machine neuve, « restaurer le trousseau s'il est vide » ne restaure donc jamais rien : le
+  trousseau se **fusionne** toujours, et chaque clé gardant son identifiant, celle de la
+  nouvelle installation reste valable à côté des anciennes. Sinon, tous les seconds
+  facteurs deviennent indéchiffrables, sans message.
+- **`pg_restore --list` réussit sur un fichier tronqué**, parce qu'il ne lit que la table
+  des matières. `pg_restore -f /dev/null` relit tout : c'est lui qui juge une sauvegarde
+  avant de la garder, et avant de détruire la base qu'elle remplace.
+- **`DPkg::Lock::Timeout` ne couvre pas le verrou des listes d'`apt-get update`**, que tient
+  la mise à jour automatique d'un serveur neuf : seul `apt-get install` attend. `update`
+  se réessaie donc à la main, et l'échec brut parlait d'un verrou sans dire de quoi.
+- **Une mise à jour est conduite par le `klean` de la version installée**, pas par celui
+  de la nouvelle. Ce que la version N exige de la version N+1 — le manifeste `FICHIERS`
+  de l'archive, les noms de ses ressources et de son `.sha256`, les services du compose, les
+  variables `KLEAN_VERSION` et `KLEAN_IMAGES`, `/home/app/.aspnet`, les variables d'état
+  d'une mise à jour — est un **contrat** : le changer casse la mise à jour de tous les
+  serveurs restés en N. La liste complète est le commentaire « Ce que la version installée
+  N exige de la version N+1 » de `deploiement/klean` : la lire avant de toucher à l'un de
+  ces points, et ne pas la recopier ici.
+
 ---
 
 ## 11. Conventions de code
@@ -2106,6 +2146,18 @@ docker compose run --rm api demonstration
 docker compose build
 docker compose run --rm migrer        # jamais au démarrage de l'API
 docker compose up -d
+```
+
+Le script d'installation (`deploiement/`, étape 34) :
+
+```bash
+deploiement/tests/lancer.sh           # la série, dans un conteneur Debian 12 (Docker requis)
+shellcheck -x deploiement/installer.sh deploiement/klean deploiement/fonctions.sh \
+    deploiement/publier.sh deploiement/tests/tests.sh deploiement/tests/lancer.sh
+
+# Publier une version : une étiquette, poussée par l'utilisateur — jamais par un agent.
+# publication.yml rejoue le CI, publie les deux images sur ghcr.io, puis la version.
+git tag vX.Y.Z && git push origin vX.Y.Z
 ```
 
 ⚠️ **Les migrations construisent leur contexte par `Data/FabriqueDeConception.cs`,

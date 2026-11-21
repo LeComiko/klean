@@ -26,6 +26,118 @@ aucune télémétrie, et il ne reçoit aucune donnée.
 
 ---
 
+## Installer KLEAN sur un serveur
+
+C'est le chemin recommandé pour exploiter une instance : une commande, des questions
+en français, et la même commande `klean` pour la tenir à jour, la sauvegarder et la
+restaurer. Il n'ajoute aucun service tiers obligatoire : GitHub n'est sollicité que
+pour **télécharger** les versions. Qui préfère tout faire à la main suit
+[`DEPLOIEMENT.md`](DEPLOIEMENT.md).
+
+### Ce qu'il faut
+
+- Un serveur **Debian ou Ubuntu**, en **amd64**, avec **1 Go de mémoire** au moins.
+- Un **nom de domaine** qui pointe sur ce serveur : un enregistrement A, et un
+  enregistrement AAAA si le serveur a une adresse IPv6. Un AAAA oublié suffit à faire
+  échouer le certificat.
+- Les ports **80 et 443** ouverts dans le pare-feu de l'hébergeur : Let's Encrypt vérifie
+  le domaine par le port 80.
+- Un accès `ssh` en root, ou par un compte qui peut lancer `sudo`.
+
+### La commande
+
+Sur le serveur :
+
+```bash
+curl -fsSL https://github.com/LeComiko/klean/releases/latest/download/installer.sh | sudo bash
+```
+
+Elle installe Docker s'il manque, télécharge KLEAN, puis pose ses questions : le nom de
+domaine, la raison sociale de l'entreprise, l'adresse électronique de l'administrateur, la
+localisation des sites, et un serveur de courriel si vous en avez un (facultatif).
+**Toutes les questions sont posées avant la moindre écriture** : un Ctrl-C à ce stade ne
+laisse rien. Le reste se fait seul, jusqu'à l'obtention du certificat HTTPS, qui peut
+prendre quelques minutes.
+
+À la fin, la commande affiche **une seule fois** le mot de passe provisoire de
+l'administrateur. Notez-le, puis tapez `NOTE` : il est alors retiré du fichier de
+configuration. La première connexion le fait remplacer, puis équiper la double
+authentification (`DEPLOIEMENT.md` §2.4).
+
+Une installation interrompue — réseau coupé, domaine pas encore prêt, `ssh` fermé —
+**reprend en relançant la même commande**, sans régénérer aucun secret. La commande
+`klean` existe dès le début : `sudo klean installer` reprend aussi.
+
+Sur un serveur auquel on se connecte par `ssh`, la commande pose des questions : un
+terminal est nécessaire (`ssh -t serveur '…'` si la commande est passée en argument).
+
+### La variante prudente
+
+Lancer ce qu'un serveur renvoie sans l'avoir lu demande de la confiance. Pour lire avant
+de lancer :
+
+```bash
+curl -fsSLO https://github.com/LeComiko/klean/releases/latest/download/installer.sh
+curl -fsSLO https://github.com/LeComiko/klean/releases/latest/download/installer.sh.sha256
+sha256sum -c installer.sh.sha256
+less installer.sh
+sudo bash installer.sh
+```
+
+**Ce que la vérification garantit :** que `installer.sh` est entier, tel que publié, et que
+l'archive qu'il télécharge ensuite est exactement celle de la version qu'il annonce — son
+empreinte SHA-256 est **gravée dans l'installateur** —, le tout par HTTPS. **Ce qu'elle ne
+garantit pas :** qui pourrait publier sur le dépôt changerait l'installateur et son
+empreinte ensemble. C'est la confiance accordée au dépôt, pas une signature.
+
+### Les commandes `klean`
+
+```
+sudo klean installer               première installation, ou reprise
+sudo klean mettre-a-jour [1.2.3]   sans version : la dernière publiée
+sudo klean revenir                 la version précédente, et la base d'avant (14 jours)
+sudo klean sauvegarder             ce que fait la tâche de chaque nuit
+sudo klean restaurer <sauvegarde>  une sauvegarde de la base, et le trousseau
+sudo klean etat                    les services, la dernière sauvegarde, les alertes
+sudo klean journaux [n]            les n dernières lignes de l'API et de Caddy (200)
+sudo klean code                    le code d'installation, tant qu'aucun compte n'existe
+```
+
+Une seule commande `klean` à la fois : une seconde répond tout de suite qu'une autre est
+en cours. La sauvegarde de la nuit, elle, attend jusqu'à trente minutes que le verrou se
+libère. `mettre-a-jour` et `revenir` sont décrites dans `DEPLOIEMENT.md` §3 et §5.
+
+### Sauvegardes
+
+La base est sauvegardée **chaque nuit à 3 h 30** (tâche `/etc/cron.d/klean`, journal dans
+`/var/log/klean-sauvegarde.log`). Chaque sauvegarde est relue en entier avant d'être gardée,
+et **quatorze jours** sont conservés.
+
+- La base va dans `/var/backups/klean`.
+- Le trousseau de l'API, qui chiffre les secrets de la double authentification, va
+  **ailleurs** : `/var/lib/klean-trousseau`.
+
+**Ces sauvegardes restent sur le serveur : s'il est perdu, elles le sont avec lui.
+Copiez-les régulièrement sur une autre machine, la base et le trousseau
+séparément — jamais ensemble, ni au même endroit en clair : une copie des deux livre
+toutes les clés.** Elles contiennent des données de santé et les adresses des domiciles
+des salariés : chiffrez-les (`gpg --symmetric`) si elles quittent un stockage que vous
+maîtrisez. Par exemple :
+
+```bash
+sudo rsync -a /var/backups/klean/ utilisateur@autre-machine:sauvegardes-klean/
+sudo rsync -a /var/lib/klean-trousseau/ utilisateur@une-troisieme-machine:trousseau-klean/
+```
+
+`sudo klean etat` signale l'absence de sauvegarde récente, et le rappelle. La restauration
+est décrite dans `DEPLOIEMENT.md` §4.
+
+---
+
+## Développement
+
+Les parties qui suivent concernent le développement de KLEAN, pas son exploitation.
+
 ## Prérequis
 
 | Outil | Version | Vérification |
