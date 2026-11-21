@@ -107,7 +107,78 @@ verifier 'completer_env ajoute ce qui manque' egal "$(lire_env "$env" KLEAN_GEOC
 verifier '.env reste en 600' egal "$(stat -c %a "$env")" 600
 verifier 'une clé absente se lit vide' egal "$(lire_env "$env" ABSENTE)" ''
 
+incomplet="$dossier/incomplet.env"
+printf 'KLEAN_DOMAINE=klean.exemple.fr\nKLEAN_ADMIN_MOT_DE_PASSE=\n' > "$incomplet"
+verifier 'les clés absentes ou vides sont nommées' \
+  egal "$(cles_manquantes "$incomplet" KLEAN_DOMAINE POSTGRES_PASSWORD KLEAN_ADMIN_MOT_DE_PASSE | tr '\n' ' ')" \
+  'POSTGRES_PASSWORD KLEAN_ADMIN_MOT_DE_PASSE '
+verifier 'un .env complet ne manque de rien' egal "$(cles_manquantes "$incomplet" KLEAN_DOMAINE)" ''
+
 rm -rf "$dossier"
+
+# ---- Réponses aux questions --------------------------------------------------
+
+# accepte validation saisie attendu ; refuse validation saisie : la sortie de refus
+# est la raison montrée, jamais vide.
+accepte() { egal "$("$1" "$2")" "$3"; }
+refuse() {
+  local raison
+  if raison=$("$1" "$2"); then printf '       accepté : « %s »\n' "$raison"; return 1; fi
+  [ -n "$raison" ] || { printf '       refus sans raison\n'; return 1; }
+}
+
+verifier 'domaine copié du navigateur' accepte normaliser_domaine ' https://Klean.Exemple.FR/ ' klean.exemple.fr
+verifier 'domaine en http, barres finales' accepte normaliser_domaine 'http://klean.exemple.fr//' klean.exemple.fr
+verifier 'domaine sans extension refusé' refuse normaliser_domaine klean
+verifier 'domaine avec un chemin refusé' refuse normaliser_domaine klean.exemple.fr/connexion
+verifier 'domaine vide refusé' refuse normaliser_domaine ''
+
+verifier 'l’apostrophe droite de la raison sociale devient typographique' \
+  accepte normaliser_raison_sociale "  Nettoyage de l'Ouest " 'Nettoyage de l’Ouest'
+apostrophe_ecrivable() {
+  local f
+  f=$(mktemp)
+  poser_env "$f" KLEAN_RAISON_SOCIALE "$(normaliser_raison_sociale "Propreté d'Arvor")" &&
+    egal "$(lire_env "$f" KLEAN_RAISON_SOCIALE)" 'Propreté d’Arvor'
+  local r=$?
+  rm -f "$f"
+  return "$r"
+}
+verifier 'une raison sociale à apostrophe s’écrit dans .env' apostrophe_ecrivable
+verifier 'raison sociale vide refusée' refuse normaliser_raison_sociale '   '
+verifier 'raison sociale de 201 caractères refusée' refuse normaliser_raison_sociale "$(printf 'a%.0s' {1..201})"
+
+verifier 'adresse plausible' accepte adresse_plausible ' patron@propre-sarl.fr ' patron@propre-sarl.fr
+verifier 'adresse sans domaine refusée' refuse adresse_plausible patron@exemple
+verifier 'adresse à apostrophe refusée' refuse adresse_plausible "o'neil@exemple.fr"
+verifier 'adresse vide refusée' refuse adresse_plausible ''
+verifier 'expéditeur obligatoire' refuse expediteur_smtp ''
+verifier 'expéditeur plausible' accepte expediteur_smtp klean@exemple.fr klean@exemple.fr
+
+verifier 'serveur SMTP vide : on s’en passe' accepte hote_smtp '  ' ''
+verifier 'serveur SMTP en minuscules' accepte hote_smtp SMTP.Exemple.fr smtp.exemple.fr
+verifier 'serveur SMTP à espace refusé' refuse hote_smtp 'smtp exemple.fr'
+
+verifier 'port 587' accepte port_smtp ' 587 ' 587
+verifier 'port à zéro de tête' accepte port_smtp 0465 465
+verifier 'port 65536 refusé' refuse port_smtp 65536
+verifier 'port 0 refusé' refuse port_smtp 0
+verifier 'port non numérique refusé' refuse port_smtp 58a7
+verifier 'port de six chiffres refusé' refuse port_smtp 100000
+
+verifier 'identifiant SMTP vide accepté' accepte identifiant_smtp '' ''
+verifier 'identifiant SMTP rogné' accepte identifiant_smtp ' moi@exemple.fr ' moi@exemple.fr
+verifier 'identifiant SMTP à apostrophe refusé' refuse identifiant_smtp "l'identifiant"
+verifier 'mot de passe SMTP gardé tel quel' accepte mot_de_passe_smtp ' a$b c ' ' a$b c '
+verifier 'mot de passe SMTP vide refusé' refuse mot_de_passe_smtp ''
+verifier 'mot de passe SMTP à apostrophe refusé' refuse mot_de_passe_smtp "l'secret"
+verifier 'mot de passe SMTP à saut de ligne refusé' refuse mot_de_passe_smtp $'un\ndeux'
+
+verifier 'Oui' accepte reponse_oui_non ' Oui ' oui
+verifier 'o' accepte reponse_oui_non o oui
+verifier 'N' accepte reponse_oui_non N non
+verifier 'peut-être refusé' refuse reponse_oui_non peut-être
+verifier 'vide refusé' refuse reponse_oui_non ''
 
 # ---- Versions et adresses ----------------------------------------------------
 

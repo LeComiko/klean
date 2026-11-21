@@ -131,6 +131,159 @@ completer_env() {
   fi
 }
 
+# Les clés parmi $2… absentes du fichier .env $1, ou présentes mais vides, une par
+# ligne. Vide pour une clé vaut absente : l'API refuserait de démarrer de même.
+cles_manquantes() {
+  local fichier="$1" cle
+  shift
+  for cle in "$@"; do
+    [ -n "$(lire_env "$fichier" "$cle")" ] || printf '%s\n' "$cle"
+  done
+}
+
+# ---- Réponses aux questions de l'installation ---------------------------------
+#
+# Chacune reçoit la saisie brute. Elle écrit la valeur retenue et réussit, ou écrit
+# la raison du refus et échoue : `klean` repose alors la question en la montrant.
+# Une saisie refusée ici est une saisie qui ne casserait rien plus loin — poser_env
+# ne refuse plus rien, et l'API ne refuse pas de démarrer.
+
+# Retire les espaces de début et de fin.
+rogner() {
+  local valeur="$1"
+  valeur="${valeur#"${valeur%%[![:space:]]*}"}"
+  valeur="${valeur%"${valeur##*[![:space:]]}"}"
+  printf '%s\n' "$valeur"
+}
+
+# Le nom de domaine, tel qu'un patron le copie depuis son navigateur :
+# « https://Klean.Exemple.fr/ » donne klean.exemple.fr.
+normaliser_domaine() {
+  local domaine
+  domaine=$(rogner "$1")
+  domaine="${domaine,,}"
+  domaine="${domaine#http://}"
+  domaine="${domaine#https://}"
+  while [ "${domaine%/}" != "$domaine" ]; do domaine="${domaine%/}"; done
+  if [[ "$domaine" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$ ]]; then
+    printf '%s\n' "$domaine"
+  else
+    printf '%s\n' "« $1 » n'est pas un nom de domaine (exemple : klean.mon-entreprise.fr)."
+    return 1
+  fi
+}
+
+# L'apostrophe droite de « Nettoyage de l'Ouest » ne peut pas figurer dans .env :
+# elle devient l'apostrophe typographique, que l'écran affiche de même. 200 : la
+# colonne de la base (Entreprise.RaisonSociale).
+normaliser_raison_sociale() {
+  local raison
+  raison=$(rogner "$1")
+  raison="${raison//\'/’}"
+  if [ -z "$raison" ]; then
+    printf 'La raison sociale est nécessaire.\n'
+    return 1
+  fi
+  if [ "${#raison}" -gt 200 ]; then
+    printf 'Trop longue : 200 caractères au plus.\n'
+    return 1
+  fi
+  printf '%s\n' "$raison"
+}
+
+# Une adresse de forme plausible, rien de plus : seul l'envoi d'un courriel prouve
+# qu'elle existe. Ni apostrophe ni espace, que .env n'écrirait pas tels quels.
+adresse_plausible() {
+  local adresse
+  adresse=$(rogner "$1")
+  if [[ "$adresse" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$ ]]; then
+    printf '%s\n' "$adresse"
+  else
+    printf '%s\n' "« $1 » n'est pas une adresse électronique (exemple : nom@mon-entreprise.fr)."
+    return 1
+  fi
+}
+
+# L'adresse d'expédition, obligatoire dès qu'un serveur est saisi : l'API refuse de
+# démarrer sans elle (CLAUDE.md §2, « configuré à moitié »).
+expediteur_smtp() {
+  if [ -z "$(rogner "$1")" ]; then
+    printf '%s\n' "Obligatoire avec un serveur de courriel. Sans elle, faites Ctrl-C et relancez en laissant le serveur vide : rien n'est encore écrit."
+    return 1
+  fi
+  adresse_plausible "$1"
+}
+
+# Le serveur SMTP : vide pour s'en passer, sinon un nom ou une adresse IPv4.
+hote_smtp() {
+  local hote
+  hote=$(rogner "$1")
+  hote="${hote,,}"
+  if [ -z "$hote" ] || [[ "$hote" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]]; then
+    printf '%s\n' "$hote"
+  else
+    printf '%s\n' "« $1 » n'est pas un nom de serveur (exemple : smtp.mon-fournisseur.fr)."
+    return 1
+  fi
+}
+
+# Un port de 1 à 65535, comme l'exige l'API au démarrage. 10# : « 0587 » n'est pas
+# de l'octal.
+port_smtp() {
+  local port
+  port=$(rogner "$1")
+  if [[ "$port" =~ ^[0-9]{1,5}$ ]] && [ "$((10#$port))" -ge 1 ] && [ "$((10#$port))" -le 65535 ]; then
+    printf '%s\n' "$((10#$port))"
+  else
+    printf '%s\n' "« $1 » n'est pas un port : un nombre, en général 587 ou 465."
+    return 1
+  fi
+}
+
+# L'identifiant SMTP, facultatif. Rogné : une espace finale copiée avec lui ferait
+# échouer chaque envoi, sans rien dire au démarrage.
+identifiant_smtp() {
+  local identifiant
+  identifiant=$(rogner "$1")
+  case "$identifiant" in
+    *"'"* | *[[:space:]]*)
+      printf 'Un identifiant ne contient ni apostrophe ni espace.\n'
+      return 1
+      ;;
+  esac
+  printf '%s\n' "$identifiant"
+}
+
+# Le mot de passe SMTP, obligatoire avec un identifiant. Pas rogné : une espace peut
+# en faire partie. L'apostrophe n'a pas d'écriture sûre dans .env (poser_env).
+mot_de_passe_smtp() {
+  case "$1" in
+    '')
+      printf '%s\n' "Obligatoire avec un identifiant : l'API refuserait de démarrer sans lui."
+      return 1
+      ;;
+    *"'"* | *$'\n'* | *$'\r'*)
+      printf '%s\n' "Ce mot de passe contient une apostrophe, que KLEAN ne sait pas enregistrer. Changez-le chez votre fournisseur de courriel, ou faites Ctrl-C et relancez en laissant le serveur vide : rien n'est encore écrit."
+      return 1
+      ;;
+  esac
+  printf '%s\n' "$1"
+}
+
+# oui, o, yes, y — en majuscules ou non — donnent « oui » ; non, n, no, « non ».
+reponse_oui_non() {
+  local reponse
+  reponse=$(rogner "$1")
+  case "${reponse,,}" in
+    oui | o | yes | y) printf 'oui\n' ;;
+    non | n | no) printf 'non\n' ;;
+    *)
+      printf 'Répondez oui ou non.\n'
+      return 1
+      ;;
+  esac
+}
+
 # La version d'une URL de version GitHub : …/releases/tag/v1.2.3 donne 1.2.3. Échoue
 # sur toute autre forme : la redirection de `releases/latest` sans version publiée
 # mène à …/releases.

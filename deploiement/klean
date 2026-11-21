@@ -14,7 +14,7 @@
 # lit un script au fil de l'exécution : le remplacement se fait par `mv`, qui laisse
 # l'ancien fichier au processus en cours, et une fonction déjà lue ne se relit pas.
 # shellcheck disable=SC2329  # outils définis avant leurs appelants
-set -Eeuo pipefail
+set -euo pipefail
 umask 077
 
 REPERTOIRE="${KLEAN_REPERTOIRE:-/opt/klean}"
@@ -49,19 +49,50 @@ exiger_root() {
 
 # Les questions se lisent sur le terminal, jamais sur l'entrée standard : lancé par
 # `curl … | sudo bash`, l'entrée standard est le script lui-même.
+#
+# demander « question » [défaut] : la réponse dans REPONSE. Une variable et non la
+# sortie : appelée dans $(…), l'arrêt ci-dessous ne quitterait que le sous-shell.
+# Ctrl-D ou un terminal fermé arrêtent tout — une question reposée à un terminal muet
+# tournerait sans fin.
+REPONSE=''
 demander() {
-  local reponse
   printf '%s%s : ' "$1" "${2:+ [$2]}" > /dev/tty
-  read -r reponse < /dev/tty
-  printf '%s\n' "${reponse:-${2:-}}"
+  if ! IFS= read -r REPONSE < /dev/tty; then
+    printf '\n' > /dev/tty
+    echouer "Saisie interrompue. Relancez : sudo klean ${COMMANDE:-}"
+  fi
+  REPONSE="${REPONSE:-${2:-}}"
 }
 
 demander_secret() {
-  local reponse
   printf '%s : ' "$1" > /dev/tty
-  read -rs reponse < /dev/tty
+  if ! IFS= read -rs REPONSE < /dev/tty; then
+    printf '\n' > /dev/tty
+    echouer "Saisie interrompue. Relancez : sudo klean ${COMMANDE:-}"
+  fi
   printf '\n' > /dev/tty
-  printf '%s\n' "$reponse"
+}
+
+# demander_valide validation « question » [défaut] : repose la question, en disant
+# pourquoi, tant que la fonction de validation de fonctions.sh refuse la réponse. La
+# valeur retenue, normalisée, dans REPONSE.
+demander_valide() {
+  local validation="$1" valeur
+  shift
+  while :; do
+    demander "$@"
+    if valeur=$("$validation" "$REPONSE"); then
+      REPONSE="$valeur"
+      return
+    fi
+    printf '  %s\n' "$valeur" > /dev/tty
+  done
+}
+
+# Réussit sur oui, o, yes ou y, en majuscules ou non.
+demander_oui_non() {
+  demander_valide reponse_oui_non "$1 (oui/non)" "$2"
+  [ "$REPONSE" = oui ]
 }
 
 # confirmer « question » MOT : réussit si l'utilisateur tape MOT, exactement.
@@ -386,38 +417,47 @@ restaurer_trousseau() {
 
 # ---- Installer ------------------------------------------------------------------
 
-# Mot de passe provisoire de l'amorçage, gardé le temps de l'afficher une fois.
-MOT_DE_PASSE_PROVISOIRE=''
-
 cmd_installer() {
   exiger_root
   # Sans attente : une installation lancée pendant la sauvegarde de la nuit échoue tout de suite.
   verrouiller
   { : > /dev/tty; } 2> /dev/null ||
     echouer "L'installation pose des questions : lancez-la dans un terminal (par ssh, ajoutez -t : ssh -t serveur '…')."
-  verifier_machine
   if [ -f "$ENV" ]; then
-    dire "Installation existante trouvée dans $REPERTOIRE : elle est reprise, aucun secret n'est régénéré."
+    verifier_machine
+    reprendre_env
+    verifier_dns "$(lire_env "$ENV" KLEAN_DOMAINE)"
   else
+    # Avant verifier_machine : les conteneurs d'une installation qui a perdu son .env
+    # occupent les ports, et le refus parlerait d'autre chose que de la vraie cause.
+    if volume_postgres_existe; then
+      refuser_base_orpheline "son fichier de configuration ($ENV) a disparu"
+    fi
+    verifier_machine
     preparer_env
   fi
   completer_env_version "$REPERTOIRE"
-  verifier_dns "$(lire_env "$ENV" KLEAN_DOMAINE)"
 
   install -d -m 700 "$SAUVEGARDES" "$TROUSSEAU"
   dire "Téléchargement des images…"
-  compose pull
-  compose up -d postgres
+  compose pull ||
+    echouer "Le téléchargement des images de KLEAN a échoué : le serveur est-il bien relié à Internet ? Rien n'est perdu. Relancez dans quelques minutes : sudo klean installer"
+  compose up -d postgres ||
+    echouer "PostgreSQL n'a pas démarré : voir les lignes ci-dessus. Rien n'est perdu. Relancez : sudo klean installer"
   attendre_postgres
-  compose run --rm -T migrer || echouer "La préparation de la base a échoué : voir les lignes ci-dessus, puis relancez sudo klean installer."
-  compose up -d
+  compose run --rm -T migrer ||
+    echouer "La préparation de la base a échoué : voir les lignes ci-dessus. Relancez : sudo klean installer"
+  completer_amorcage
+  compose up -d ||
+    echouer "KLEAN n'a pas démarré : voir les lignes ci-dessus et sudo klean journaux. Relancez : sudo klean installer"
   ln -sf "$REPERTOIRE/klean" /usr/local/bin/klean
   # Nom sans point : cron ignore un fichier de /etc/cron.d qui en porte un. Mode et
   # propriétaire explicites : le umask 077 de ce script donnerait 600, que cron refuse.
   install -m 644 -o root -g root "$REPERTOIRE/klean.cron" /etc/cron.d/klean
 
-  verifier_https || echouer "KLEAN tourne, mais ne répond pas en HTTPS. Corrigez le point ci-dessus, puis relancez : sudo klean installer"
-  retirer_mot_de_passe_amorcage
+  verifier_https ||
+    echouer "L'installation n'est pas terminée. Corrigez le point ci-dessus, puis relancez : sudo klean installer — la reprise ne perd rien."
+  montrer_puis_retirer_mot_de_passe
   afficher_fin
 }
 
@@ -438,45 +478,217 @@ verifier_machine() {
   fi
 }
 
-preparer_env() {
-  local domaine raison email geocodage
-  dire "Installation de KLEAN. Quelques questions, puis tout se fait seul."
-  domaine=$(demander "Nom de domaine de KLEAN, sans https:// (ex. klean.mon-entreprise.fr)")
-  [[ "$domaine" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$ ]] || echouer "« $domaine » n'est pas un nom de domaine."
-  raison=$(demander "Raison sociale de votre entreprise")
-  [ -n "$raison" ] || echouer "La raison sociale est nécessaire."
-  email=$(demander "Adresse électronique de l'administrateur")
-  [[ "$email" == ?*@?*.?* ]] || echouer "« $email » n'est pas une adresse électronique."
-  dire "KLEAN peut trouver lui-même les coordonnées GPS des sites de vos clients. Leurs adresses — rue, code postal, ville — sont alors envoyées à l'API Adresse de l'État. Les domiciles de vos agents ne le sont jamais."
-  geocodage=$(demander "Activer la localisation des sites ? (oui/non)" non)
-
-  : > "$ENV"
-  chmod 600 "$ENV"
-  poser_env "$ENV" KLEAN_VERSION "$(cat "$REPERTOIRE/VERSION")"
-  poser_env "$ENV" KLEAN_IMAGES "$(nom_images)"
-  poser_env "$ENV" KLEAN_DOMAINE "$domaine"
-  poser_env "$ENV" POSTGRES_PASSWORD "$(generer_secret 32)"
-  poser_env "$ENV" KLEAN_JWT_CLE "$(generer_secret 48)"
-  poser_env "$ENV" KLEAN_CODE_INSTALLATION "$(generer_code)"
-  poser_env "$ENV" KLEAN_GEOCODAGE "$([ "$geocodage" = oui ] && printf true || printf false)"
-  # Transition jusqu'au lot A2 : l'amorçage crée l'administrateur avec un mot de passe
-  # provisoire, affiché une fois puis retiré de ce fichier (plan, décision 1).
-  poser_env "$ENV" KLEAN_RAISON_SOCIALE "$raison"
-  poser_env "$ENV" KLEAN_ADMIN_EMAIL "$email"
-  poser_env "$ENV" KLEAN_ADMIN_MOT_DE_PASSE "$(generer_mot_de_passe)"
-  configurer_smtp
+# Le volume de la base, nommé par compose d'après `name: klean`. « Docker ne répond
+# pas » n'est pas « aucun volume » : cette réponse-là ferait tirer un mot de passe que
+# la base existante refuserait.
+volume_postgres_existe() {
+  local volumes
+  volumes=$(docker volume ls -q) ||
+    echouer "Docker ne répond pas : vérifiez qu'il tourne (systemctl status docker), puis relancez : sudo klean installer"
+  grep -qx klean_postgres <<< "$volumes"
 }
 
-configurer_smtp() {
-  local hote
+# Une base existe, mais pas le mot de passe qui l'ouvre. POSTGRES_PASSWORD n'est lu
+# qu'à la création du volume (CLAUDE.md §10) : un nouveau ne vaudrait rien, et chaque
+# relance finirait sur la même API refusée. Rien n'est écrit, et le volume n'est jamais
+# supprimé — il porte peut-être les seules données du client.
+refuser_base_orpheline() {
+  avertir "Une base KLEAN existe déjà sur ce serveur, mais $1. Un nouveau mot de passe ne l'ouvrirait pas."
+  avertir "Rien n'a été modifié, et la base est intacte."
+  echouer "Remettez l'ancien fichier $ENV à sa place (depuis une copie de ce serveur), puis relancez : sudo klean installer. Sans copie, DEPLOIEMENT.md §6, « Le mot de passe de PostgreSQL », explique comment en donner un nouveau à la base."
+}
+
+# ecrire_env clé valeur [clé valeur…] : pose tout dans une copie de .env, puis la met
+# à sa place d'un seul geste. Interrompue, elle laisse l'ancien .env, ou aucun : jamais
+# un .env à moitié écrit, que la reprise prendrait pour complet. Le nom des copies ne
+# ressemble à aucun .env qu'un exploitant garderait à côté : leurs restes partent ici.
+ecrire_env() {
+  local temporaire
+  find "$REPERTOIRE" -maxdepth 1 -type f -name '.env-en-cours.*' -delete
+  temporaire=$(mktemp "$REPERTOIRE/.env-en-cours.XXXXXX")
+  if [ -f "$ENV" ] && ! cat "$ENV" > "$temporaire"; then
+    rm -f "$temporaire"
+    echouer "La configuration n'a pas pu être relue : rien n'a changé."
+  fi
+  while [ "$#" -ge 2 ]; do
+    if ! poser_env "$temporaire" "$1" "$2"; then
+      rm -f "$temporaire"
+      echouer "La configuration n'a pas pu être écrite : rien n'a changé. Relancez : sudo klean installer"
+    fi
+    shift 2
+  done
+  chmod 600 "$temporaire"
+  mv -f "$temporaire" "$ENV"
+}
+
+# Toutes les questions d'abord, SMTP compris ; .env n'est écrit qu'après la dernière
+# réponse, d'un seul geste. Chaque réponse est validée, et la question reposée sur
+# refus : une réponse qui passe ici ne fait échouer ni poser_env ni le démarrage de
+# l'API (plan de l'étape 34, décision 1, et CLAUDE.md §2).
+preparer_env() {
+  local domaine raison email geocodage=false postgres jwt code mot_de_passe
+  dire "Installation de KLEAN. Quelques questions, puis tout se fait seul."
+  dire "Rien n'est enregistré avant la dernière réponse : Ctrl-C à tout moment, et tout reprendra de zéro."
+  demander_valide normaliser_domaine "Nom de domaine de KLEAN (ex. klean.mon-entreprise.fr)"
+  domaine="$REPONSE"
+  # Tout de suite : un domaine mal saisi se corrige en relançant, avant qu'il soit écrit.
+  verifier_dns "$domaine"
+  demander_valide normaliser_raison_sociale "Raison sociale de votre entreprise"
+  raison="$REPONSE"
+  demander_valide adresse_plausible "Adresse électronique de l'administrateur"
+  email="$REPONSE"
+  dire "KLEAN peut trouver lui-même les coordonnées GPS des sites de vos clients. Leurs adresses — rue, code postal, ville — sont alors envoyées à l'API Adresse de l'État. Les domiciles de vos agents ne le sont jamais."
+  if demander_oui_non "Activer la localisation des sites ?" non; then
+    geocodage=true
+  fi
+  demander_smtp
+
+  postgres=$(generer_secret 32)
+  jwt=$(generer_secret 48)
+  code=$(generer_code)
+  mot_de_passe=$(generer_mot_de_passe)
+  # KLEAN_RAISON_SOCIALE, KLEAN_ADMIN_* : transition jusqu'au lot A2. L'amorçage crée
+  # l'administrateur avec un mot de passe provisoire, affiché une fois puis retiré de
+  # ce fichier (plan, décision 1).
+  ecrire_env \
+    KLEAN_VERSION "$(cat "$REPERTOIRE/VERSION")" \
+    KLEAN_IMAGES "$(nom_images)" \
+    KLEAN_DOMAINE "$domaine" \
+    POSTGRES_PASSWORD "$postgres" \
+    KLEAN_JWT_CLE "$jwt" \
+    KLEAN_CODE_INSTALLATION "$code" \
+    KLEAN_GEOCODAGE "$geocodage" \
+    KLEAN_RAISON_SOCIALE "$raison" \
+    KLEAN_ADMIN_EMAIL "$email" \
+    KLEAN_ADMIN_MOT_DE_PASSE "$mot_de_passe" \
+    "${SMTP_ENV[@]}"
+}
+
+# Les réponses SMTP, en paires clé valeur pour ecrire_env : toutes, ou aucune. Une
+# configuration saisie à moitié empêcherait l'API de démarrer (CLAUDE.md §2) — c'est
+# pourquoi l'adresse d'expédition, et le mot de passe d'un identifiant, sont exigés.
+SMTP_ENV=()
+
+demander_smtp() {
+  local hote port expediteur utilisateur mot_de_passe='' valeur
+  SMTP_ENV=()
   dire "Un serveur de courriel permet aux utilisateurs de réinitialiser un mot de passe oublié. Facultatif : sans lui, KLEAN fonctionne, et le changement de mot de passe reste possible depuis l'écran Compte."
-  hote=$(demander "Serveur SMTP (laisser vide pour passer)")
+  demander_valide hote_smtp "Serveur SMTP (laisser vide pour passer)"
+  hote="$REPONSE"
   [ -n "$hote" ] || return 0
-  poser_env "$ENV" KLEAN_SMTP_HOTE "$hote"
-  poser_env "$ENV" KLEAN_SMTP_PORT "$(demander "Port SMTP" 587)"
-  poser_env "$ENV" KLEAN_SMTP_EXPEDITEUR "$(demander "Adresse d'expédition")"
-  poser_env "$ENV" KLEAN_SMTP_UTILISATEUR "$(demander "Identifiant SMTP")"
-  poser_env "$ENV" KLEAN_SMTP_MOT_DE_PASSE "$(demander_secret "Mot de passe SMTP")"
+  demander_valide port_smtp "Port SMTP" 587
+  port="$REPONSE"
+  demander_valide expediteur_smtp "Adresse d'expédition des courriels"
+  expediteur="$REPONSE"
+  demander_valide identifiant_smtp "Identifiant SMTP (laisser vide s'il n'y en a pas)"
+  utilisateur="$REPONSE"
+  if [ -n "$utilisateur" ]; then
+    while :; do
+      demander_secret "Mot de passe SMTP"
+      if valeur=$(mot_de_passe_smtp "$REPONSE"); then
+        mot_de_passe="$valeur"
+        break
+      fi
+      printf '  %s\n' "$valeur" > /dev/tty
+    done
+  fi
+  SMTP_ENV=(KLEAN_SMTP_HOTE "$hote" KLEAN_SMTP_PORT "$port" KLEAN_SMTP_EXPEDITEUR "$expediteur")
+  if [ -n "$utilisateur" ]; then
+    SMTP_ENV+=(KLEAN_SMTP_UTILISATEUR "$utilisateur" KLEAN_SMTP_MOT_DE_PASSE "$mot_de_passe")
+  fi
+}
+
+# Les paires clé valeur que reprendre_env et completer_amorcage écrivent d'un geste.
+A_ECRIRE=()
+
+# Un .env existant est repris. Il peut pourtant être incomplet : une version antérieure
+# de ce script l'écrivait ligne à ligne en posant les questions, et s'arrêtait à la
+# première réponse refusée. Ce qui manque est complété — demandé ou tiré —, et rien de
+# ce qui est enregistré ne change : jamais un POSTGRES_PASSWORD ni une KLEAN_JWT_CLE
+# régénérés par-dessus les existants.
+reprendre_env() {
+  local manquantes cle base=non
+  if volume_postgres_existe; then
+    base=oui
+  fi
+  A_ECRIRE=()
+  manquantes=$(cles_manquantes "$ENV" KLEAN_DOMAINE POSTGRES_PASSWORD KLEAN_JWT_CLE \
+    KLEAN_VERSION KLEAN_IMAGES KLEAN_CODE_INSTALLATION)
+  if [ -z "$manquantes" ]; then
+    dire "Installation existante trouvée dans $REPERTOIRE : elle est reprise, aucun secret n'est régénéré."
+  else
+    avertir "L'installation précédente s'est arrêtée avant d'avoir tout enregistré. Il manque : $(tr '\n' ' ' <<< "$manquantes")"
+    dire "Ce qui manque est complété ; rien de ce qui est déjà enregistré ne change."
+  fi
+  while IFS= read -r cle; do
+    case "$cle" in
+      '') ;;
+      KLEAN_DOMAINE)
+        demander_valide normaliser_domaine "Nom de domaine de KLEAN (ex. klean.mon-entreprise.fr)"
+        A_ECRIRE+=("$cle" "$REPONSE")
+        ;;
+      POSTGRES_PASSWORD)
+        if [ "$base" = oui ]; then
+          refuser_base_orpheline "son mot de passe manque dans $ENV"
+        fi
+        A_ECRIRE+=("$cle" "$(generer_secret 32)")
+        ;;
+      # Sans risque même avec des comptes : les sessions survivent à une nouvelle clé
+      # (DEPLOIEMENT.md §6).
+      KLEAN_JWT_CLE) A_ECRIRE+=("$cle" "$(generer_secret 48)") ;;
+      KLEAN_VERSION) A_ECRIRE+=("$cle" "$(cat "$REPERTOIRE/VERSION")") ;;
+      KLEAN_IMAGES) A_ECRIRE+=("$cle" "$(nom_images)") ;;
+      KLEAN_CODE_INSTALLATION) A_ECRIRE+=("$cle" "$(generer_code)") ;;
+    esac
+  done <<< "$manquantes"
+  # Sans base, aucun compte : l'amorçage aura besoin de ses trois variables, et c'est
+  # le moment de les demander, avant les téléchargements. Avec une base, seul le
+  # comptage dit s'il en faut : completer_amorcage, après les migrations.
+  if [ "$base" = non ]; then
+    questions_amorcage
+  fi
+  if [ "${#A_ECRIRE[@]}" -gt 0 ]; then
+    ecrire_env "${A_ECRIRE[@]}"
+  fi
+}
+
+# Ajoute à A_ECRIRE ce qui manque à l'amorçage : raison sociale et adresse demandées,
+# mot de passe provisoire tiré. À n'appeler que si aucun compte n'existe : ailleurs,
+# l'amorçage ne lit pas ces variables, et un mot de passe tiré serait montré pour un
+# compte qu'il n'ouvre pas.
+questions_amorcage() {
+  local manquantes
+  manquantes=$(cles_manquantes "$ENV" KLEAN_RAISON_SOCIALE KLEAN_ADMIN_EMAIL KLEAN_ADMIN_MOT_DE_PASSE)
+  [ -n "$manquantes" ] || return 0
+  dire "Le compte administrateur n'est pas encore créé, et il manque de quoi le créer : quelques questions encore."
+  if grep -qx KLEAN_RAISON_SOCIALE <<< "$manquantes"; then
+    demander_valide normaliser_raison_sociale "Raison sociale de votre entreprise"
+    A_ECRIRE+=(KLEAN_RAISON_SOCIALE "$REPONSE")
+  fi
+  if grep -qx KLEAN_ADMIN_EMAIL <<< "$manquantes"; then
+    demander_valide adresse_plausible "Adresse électronique de l'administrateur"
+    A_ECRIRE+=(KLEAN_ADMIN_EMAIL "$REPONSE")
+  fi
+  if grep -qx KLEAN_ADMIN_MOT_DE_PASSE <<< "$manquantes"; then
+    A_ECRIRE+=(KLEAN_ADMIN_MOT_DE_PASSE "$(generer_mot_de_passe)")
+  fi
+}
+
+# Le filet de reprendre_env quand une base existait déjà : l'API refuse de démarrer
+# sans les variables de l'amorçage tant qu'aucun compte n'existe. Après les
+# migrations, seul moment où la table des comptes existe à coup sûr.
+completer_amorcage() {
+  local comptes
+  # Une sortie vide n'est pas « zéro compte » (cmd_code).
+  comptes=$(nombre_de_comptes) || comptes=''
+  [[ $comptes =~ ^[0-9]+$ ]] ||
+    echouer "PostgreSQL ne répond pas : impossible de savoir si le compte administrateur existe. Voir : sudo klean etat, puis relancez : sudo klean installer"
+  [ "$comptes" -eq 0 ] || return 0
+  A_ECRIRE=()
+  questions_amorcage
+  if [ "${#A_ECRIRE[@]}" -gt 0 ]; then
+    ecrire_env "${A_ECRIRE[@]}"
+  fi
 }
 
 # Les variables d'env.modele absentes de .env, avec leur défaut. Jamais d'écrasement.
@@ -492,7 +704,7 @@ completer_env_version() {
 }
 
 verifier_dns() {
-  local domaine="$1" resolues locales etrangeres reponse
+  local domaine="$1" resolues locales etrangeres
   locales=$(ip -o addr show scope global | awk '{ print $4 }' | cut -d/ -f1)
   resolues=$(getent ahosts "$domaine" | awk '{ print $1 }' | sort -u || true)
   if [ -z "$resolues" ]; then
@@ -501,48 +713,80 @@ verifier_dns() {
     dire "Le domaine $domaine pointe bien sur ce serveur."
     return
   else
-    avertir "Le domaine $domaine pointe vers $(tr '\n' ' ' <<< "$etrangeres")— pas vers ce serveur ($(tr '\n' ' ' <<< "$locales"))."
-    avertir "Un enregistrement IPv6 (AAAA) oublié suffit à faire échouer le certificat. Après un changement, la propagation peut prendre jusqu'à une heure."
+    avertir "Le domaine $domaine pointe vers $(tr '\n' ' ' <<< "$etrangeres")— pas vers une adresse de ce serveur ($(tr '\n' ' ' <<< "$locales"))."
+    avertir "C'est normal si votre hébergeur place ce serveur derrière une adresse publique à lui, que le serveur ne voit pas : dans ce cas, répondez oui."
+    avertir "Sinon : un enregistrement IPv6 (AAAA) oublié suffit à faire échouer le certificat. Après un changement, la propagation peut prendre jusqu'à une heure."
   fi
-  reponse=$(demander "Continuer quand même ? (oui/non)" non)
-  [ "$reponse" = oui ] || echouer "Installation suspendue. Quand le domaine pointe sur ce serveur : sudo klean installer"
+  demander_oui_non "Continuer quand même ?" non ||
+    echouer "Installation suspendue. Quand le domaine pointe sur ce serveur : sudo klean installer"
 }
 
-# Quelques essais espacés, sans boucler : Let's Encrypt plafonne les échecs.
+# Interrogé en local, sous son vrai nom : le certificat est vérifié comme par un
+# navigateur, sans dépendre du DNS vu d'ici — derrière l'adresse publique d'un
+# hébergeur, un serveur ne se joint souvent pas lui-même.
+#
+# Jusqu'à cinq minutes : Caddy demande le certificat à son démarrage, et Let's Encrypt
+# peut tarder. Interroger KLEAN ne redemande aucun certificat : attendre ne touche pas
+# au plafond d'échecs de Let's Encrypt.
 verifier_https() {
-  local domaine essai
+  local domaine port essai code=000
   domaine=$(lire_env "$ENV" KLEAN_DOMAINE)
-  for essai in 1 2 3 4 5 6; do
-    if curl -fsS --max-time 10 "https://$domaine/api/sante" > /dev/null 2>&1; then
-      return 0
-    fi
-    [ "$essai" -eq 6 ] || sleep 15
+  port=$(lire_env "$ENV" KLEAN_PORT_HTTPS)
+  port="${port:-443}"
+  dire "Attente de KLEAN en HTTPS, le temps d'obtenir le certificat (jusqu'à cinq minutes)…"
+  for essai in $(seq 1 20); do
+    code=$(curl -sS --max-time 10 --resolve "$domaine:$port:127.0.0.1" -o /dev/null \
+      -w '%{http_code}' "https://$domaine:$port/api/sante" 2> /dev/null) || true
+    [[ $code =~ ^[0-9]{3}$ ]] || code=000
+    [ "$code" != 200 ] || return 0
+    [ "$essai" -eq 20 ] || sleep 15
   done
-  avertir "https://$domaine ne répond pas. Dernières lignes de Caddy :"
-  compose logs --tail 30 caddy >&2 || true
-  avertir "Vérifiez que le domaine pointe sur ce serveur, et que le pare-feu du panneau de votre hébergeur ouvre les ports 80 et 443."
+  case "$code" in
+    # Ni connexion ni poignée de main TLS : le certificat manque, presque toujours.
+    000)
+      avertir "https://$domaine ne répond pas : le certificat n'a pas pu être obtenu. Dernières lignes de Caddy :"
+      compose logs --tail 30 caddy >&2 || true
+      avertir "Vérifiez que le domaine pointe sur ce serveur, et que le pare-feu du panneau de votre hébergeur ouvre les ports 80 et 443."
+      ;;
+    502 | 503) avertir "Le certificat est en place, mais l'API ne démarre pas (code $code). Voir : sudo klean journaux" ;;
+    *) avertir "KLEAN répond en HTTPS, mais pas comme prévu (code $code). Voir : sudo klean journaux" ;;
+  esac
   return 1
 }
 
 # L'amorçage ne lit ces variables que si la base n'a aucun compte : une fois le compte
 # créé, le mot de passe n'a plus rien à faire dans .env (SPEC.md, étape 34).
-retirer_mot_de_passe_amorcage() {
-  MOT_DE_PASSE_PROVISOIRE=$(lire_env "$ENV" KLEAN_ADMIN_MOT_DE_PASSE)
-  [ -n "$MOT_DE_PASSE_PROVISOIRE" ] || return 0
-  [ "$(nombre_de_comptes)" != 0 ] || echouer "L'API tourne, mais aucun compte n'a été créé : voir sudo klean journaux."
-  poser_env "$ENV" KLEAN_ADMIN_MOT_DE_PASSE ''
+#
+# ⚠️ Montré, puis retiré, dans cet ordre : dans l'autre, une API qui ne redémarre pas
+# ou une session ssh coupée pendant la recréation le perdaient sans qu'il ait été lu.
+# Une interruption entre les deux le remontre à la relance, sans danger : c'est le même.
+montrer_puis_retirer_mot_de_passe() {
+  local mot_de_passe comptes
+  mot_de_passe=$(lire_env "$ENV" KLEAN_ADMIN_MOT_DE_PASSE)
+  [ -n "$mot_de_passe" ] || return 0
+  # Une sortie vide n'est pas « des comptes existent » (cmd_code).
+  comptes=$(nombre_de_comptes) || comptes=''
+  [[ $comptes =~ ^[0-9]+$ ]] ||
+    echouer "PostgreSQL ne répond pas : impossible de vérifier que le compte administrateur existe. Son mot de passe est gardé. Voir : sudo klean etat, puis relancez : sudo klean installer"
+  [ "$comptes" -gt 0 ] || echouer "L'API tourne, mais aucun compte n'a été créé : voir sudo klean journaux."
+  dire ''
+  dire "Adresse de connexion : $(lire_env "$ENV" KLEAN_ADMIN_EMAIL)"
+  dire "Mot de passe provisoire : $mot_de_passe"
+  dire "Il ne sera plus affiché. La première connexion le fait remplacer, puis équiper la double authentification."
+  while :; do
+    demander "Notez-le maintenant, puis tapez NOTE"
+    [ "$(rogner "${REPONSE^^}")" != NOTE ] || break
+  done
+  poser_env "$ENV" KLEAN_ADMIN_MOT_DE_PASSE '' ||
+    echouer "Le mot de passe provisoire n'a pas pu être retiré de la configuration. Relancez : sudo klean installer"
   # Recréé sans : le conteneur en gardait le mot de passe dans son environnement.
-  compose up -d api
+  compose up -d api ||
+    echouer "Le mot de passe provisoire est retiré de la configuration, mais l'API n'a pas redémarré. Voir : sudo klean journaux, puis relancez : sudo klean installer"
 }
 
 afficher_fin() {
   dire ''
   dire "KLEAN est installé : https://$(lire_env "$ENV" KLEAN_DOMAINE)"
-  if [ -n "$MOT_DE_PASSE_PROVISOIRE" ]; then
-    dire "Adresse de connexion : $(lire_env "$ENV" KLEAN_ADMIN_EMAIL)"
-    dire "Mot de passe provisoire, affiché une seule fois : $MOT_DE_PASSE_PROVISOIRE"
-    dire "La première connexion le fait remplacer, puis équiper la double authentification."
-  fi
   dire "Une sauvegarde se fait chaque nuit, dans $SAUVEGARDES et $TROUSSEAU."
   avertir "Elles restent sur ce serveur : copiez-les ailleurs, chacune de son côté (README, section Sauvegardes)."
   dire "État : sudo klean etat — Mise à jour : sudo klean mettre-a-jour"
