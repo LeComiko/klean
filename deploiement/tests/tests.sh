@@ -61,6 +61,38 @@ mot_de_passe_sans_chiffre_rejete() (
 )
 verifier 'un mot de passe sans chiffre est tiré de nouveau' mot_de_passe_sans_chiffre_rejete
 
+# ---- .env --------------------------------------------------------------------
+
+dossier=$(mktemp -d)
+env="$dossier/.env"
+: > "$env"
+
+poser_env "$env" KLEAN_DOMAINE klean.exemple.fr
+verifier 'une clé absente est ajoutée' egal "$(lire_env "$env" KLEAN_DOMAINE)" klean.exemple.fr
+
+poser_env "$env" KLEAN_DOMAINE autre.exemple.fr
+verifier 'une clé présente est remplacée' egal "$(lire_env "$env" KLEAN_DOMAINE)" autre.exemple.fr
+verifier 'une seule ligne par clé' egal "$(grep -c '^KLEAN_DOMAINE=' "$env")" 1
+
+poser_env "$env" KLEAN_SMTP_MOT_DE_PASSE 'a$b c=d\e'
+verifier 'une valeur spéciale est relue telle quelle' egal "$(lire_env "$env" KLEAN_SMTP_MOT_DE_PASSE)" 'a$b c=d\e'
+verifier 'une valeur spéciale est écrite entre apostrophes' \
+  grep -qx "KLEAN_SMTP_MOT_DE_PASSE='a\$b c=d\\\\e'" "$env"
+
+# Une fonction locale et non `bash -c` : un bash neuf ne connaîtrait pas poser_env.
+refuse_apostrophe() { ! poser_env "$env" X "l'a" 2> /dev/null; }
+verifier 'une apostrophe est refusée' refuse_apostrophe
+
+completer_env "$env" KLEAN_DOMAINE ecrase.exemple.fr
+verifier 'completer_env n’écrase jamais' egal "$(lire_env "$env" KLEAN_DOMAINE)" autre.exemple.fr
+completer_env "$env" KLEAN_GEOCODAGE false
+verifier 'completer_env ajoute ce qui manque' egal "$(lire_env "$env" KLEAN_GEOCODAGE)" false
+
+verifier '.env reste en 600' egal "$(stat -c %a "$env")" 600
+verifier 'une clé absente se lit vide' egal "$(lire_env "$env" ABSENTE)" ''
+
+rm -rf "$dossier"
+
 # ---- Bilan -------------------------------------------------------------------
 
 printf '%s réussis, %s échoués\n' "$reussis" "$echoues"

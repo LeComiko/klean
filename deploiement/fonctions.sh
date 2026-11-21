@@ -62,3 +62,54 @@ generer_mot_de_passe() {
     fi
   done
 }
+
+# La valeur de la clé $2 dans le fichier .env $1, ou une chaîne vide. Les apostrophes
+# qui l'entourent, posées par poser_env, sont retirées.
+lire_env() {
+  local valeur
+  valeur=$(grep -E "^$2=" "$1" 2> /dev/null | tail -n 1 | cut -d= -f2-) || true
+  valeur="${valeur#\'}"
+  valeur="${valeur%\'}"
+  printf '%s\n' "$valeur"
+}
+
+# Pose $2=$3 dans le fichier .env $1 : remplace la ligne de la clé, ou l'ajoute.
+#
+# Une valeur hors de [A-Za-z0-9._@:/+-] est écrite entre apostrophes : docker compose
+# lit alors la valeur littéralement, sans interpréter `$`. Une apostrophe dans la
+# valeur n'a pas d'écriture sûre : refusée.
+#
+# Le fichier est réécrit à côté puis renommé : jamais de .env à moitié écrit.
+poser_env() {
+  local fichier="$1" cle="$2" valeur="$3" ligne temporaire
+  case "$valeur" in
+    *"'"*)
+      printf 'Valeur refusée pour %s : une apostrophe ne peut pas figurer dans .env.\n' "$cle" >&2
+      return 1
+      ;;
+  esac
+  if [[ "$valeur" =~ ^[A-Za-z0-9._@:/+-]*$ ]]; then
+    ligne="$cle=$valeur"
+  else
+    ligne="$cle='$valeur'"
+  fi
+  temporaire=$(mktemp "$fichier.XXXXXX")
+  if grep -qE "^$cle=" "$fichier" 2> /dev/null; then
+    # ENVIRON plutôt que `awk -v` : -v interprète les barres obliques inverses.
+    LIGNE="$ligne" CLE="$cle" awk 'index($0, ENVIRON["CLE"] "=") == 1 { print ENVIRON["LIGNE"]; next } { print }' \
+      "$fichier" > "$temporaire"
+  else
+    { cat "$fichier" 2> /dev/null || true; printf '%s\n' "$ligne"; } > "$temporaire"
+  fi
+  chmod 600 "$temporaire"
+  mv -f "$temporaire" "$fichier"
+}
+
+# Ajoute $2=$3 seulement si la clé $2 est absente. C'est ce qui rend une seconde
+# installation et une mise à jour sûres : un mot de passe PostgreSQL régénéré face à
+# un volume existant rendrait l'instance inaccessible (CLAUDE.md §10).
+completer_env() {
+  if ! grep -qE "^$2=" "$1" 2> /dev/null; then
+    poser_env "$1" "$2" "$3"
+  fi
+}
