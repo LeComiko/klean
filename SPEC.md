@@ -3756,6 +3756,153 @@ puis recouper des identifiants à la main.
 
 ---
 
+# Étape 28 — Le jeu de démonstration installable
+
+Un inconnu qui suit le `README` obtient un KLEAN vide : un administrateur, une entreprise,
+et rien à regarder. Le planning, le remplacement, le stock, *Ma journée*, les anomalies et
+le journal ne se découvrent qu'après avoir tout saisi soi-même. « Suite » le demandait
+« avec le frontend, pas avant » : l'interface existe maintenant écran par écran.
+
+**Ce qui existe, relu le 21 novembre 2026**
+
+- ⚠️ **`backend/Scripts/jeu-de-demonstration.py` ne tourne plus**, et rien ne l'a signalé.
+  Son dernier changement date de l'étape 15. Deux causes, chacune suffisante :
+  - la connexion de l'administrateur rend 202 et attend un code de double authentification
+    depuis l'étape 23 ; le script lit une session qui n'existe pas ;
+  - ses dates sont figées sur la semaine du 7 septembre 2026, déjà passée, alors que le
+    planning s'ouvre sur la semaine en cours.
+
+  Il ignore aussi tout ce qui est venu depuis : jours et heure des prestations, types de
+  prestation et checklists, stock, comptes, passages, anomalies. C'est exactement la
+  dérive que « Suite » redoutait d'un script, et la raison d'en préférer une forme
+  éprouvée.
+- **Les règles vivent à deux endroits.**
+  - Dans les services : la génération et l'éligibilité (`ServiceGeneration`,
+    `AffectationService`), le cycle de remplacement, les mouvements de stock, le passage.
+  - Dans les contrôleurs seulement : la création des clients, sites, contrats, prestations,
+    agents et types, celle des comptes avec leur mot de passe tiré, et le signalement et le
+    traitement des anomalies.
+- **Deux horloges sont substituables, et c'est ce qui rend un historique possible.**
+  `ServiceGeneration` et `ServicePassage` lisent un `TimeProvider`. Le passage refuse une
+  vacation qui n'est pas du jour, et le contrôleur des anomalies date par la même horloge.
+  Rejouer un jour passé, c'est donc lui donner une horloge posée ce jour-là, sans
+  contourner aucune règle. Les mouvements de stock, eux, sont datés par `DateTime.UtcNow` :
+  ils seront tous du jour de l'installation.
+- **Le contexte du tenant se lit sur `HttpContext.User`.** Une commande hors requête doit
+  donc se donner une identité : celle de l'administrateur pour le référentiel, celle de
+  l'agent pour ses pointages. Sous cette identité, les filtres d'EF et la sécurité au niveau
+  des lignes s'appliquent comme à une requête (étape 26).
+- **L'amorçage tourne déjà au démarrage**, dans `Program.cs`, juste après `Build()`.
+
+**Réponses obtenues le 21 novembre 2026**
+
+| Question | Réponse | Ce que cela veut dire dans le code |
+|---|---|---|
+| La forme | **une commande de l'API, éprouvée** | `dotnet run -- demonstration` en développement, `docker compose run --rm api demonstration` en production. Un test la joue à chaque série : un modèle qui change la fait échouer à la compilation ou au test, jamais en silence |
+| Les dates | **autour d'aujourd'hui** | deux semaines d'historique, avec des passages pointés et des anomalies, et quatre semaines à venir, générées depuis les contrats |
+| Le périmètre | **tous les écrans** | référentiel, types et checklists, planning, une absence et son remplacement, stock, passages, anomalies et comptes |
+| Les comptes | **un par rôle, provisoires** | un responsable, un chef d'équipe, un agent lié à sa fiche, un client syndic. Le mot de passe est tiré par le serveur, affiché une fois, et remplacé à la première connexion |
+
+**Ce que je propose**
+
+1. **Une commande, `demonstration`**, lue dans les arguments par `Program.cs` après
+   l'amorçage. Elle installe le jeu puis rend la main, sans démarrer le serveur.
+   - Elle installe dans l'entreprise de l'amorçage, et **refuse** :
+     - si l'instance compte plus d'une entreprise ;
+     - si l'entreprise porte déjà un client ou un agent.
+
+     Elle n'écrase et ne complète jamais rien ; le refus dit pourquoi.
+   - ⚠️ Rien ne l'empêche en production, et c'est voulu : évaluer KLEAN dans Docker est
+     l'usage visé. La garde est l'entreprise vide, pas l'environnement. Les personnes sont
+     fictives, et leurs adresses en `.example`.
+2. **Le jeu traverse les contrôles de l'API, pas seulement ses services.** Penchant : la
+   classe `JeuDeDemonstration` appelle les **contrôleurs eux-mêmes**, construits par
+   l'injection, sous l'identité de l'administrateur.
+   - Chaque DTO passe d'abord par la validation de ses attributs (`Validator`), comme le
+     ferait la liaison.
+   - Ce qui n'y passe pas, et c'est dit : le CSRF, l'autorisation par attribut et la
+     journalisation. Le jeu ne laisse donc aucune ligne au journal d'accès.
+   - L'alternative, écrire par le `DbContext`, contournerait toutes les vérifications des
+     contrôleurs. Le jeu dériverait alors, comme le script.
+3. **Le passé se rejoue avec une horloge posée ce jour-là.**
+   - La génération part de deux semaines en arrière.
+   - Les pointages des jours passés passent par `ServicePassage`, construit avec l'horloge
+     du jour rejoué, et les anomalies par leur contrôleur avec la même.
+
+   Le serveur tranche lui-même la preuve, la checklist et le statut. La plupart des
+   passages sont sur site ; quelques-uns sont hors rayon ou sans position, et sortent
+   `NonCertifiee`.
+4. **Le contenu**, à ajuster au lot A — un ordre de grandeur, pas un engagement :
+   - deux clients, un syndic et une entreprise de bureaux ;
+   - cinq sites à Paris, avec des consignes qui ne nomment personne ;
+   - trois types de prestation, avec leur checklist et leur consommation ;
+   - six agents, dont trois rattachés au chef d'équipe ;
+   - un site passé tous les jours, pour que *Ma journée* ne soit jamais vide, même un
+     dimanche ;
+   - une absence maladie à venir avec son remplacement en recherche, et une autre déjà
+     pourvue ;
+   - le stock : un dépôt, un véhicule, des entrées et des transferts, et un produit sous
+     son seuil ;
+   - deux ou trois anomalies, dont une traitée, **sans photo** : une image de démonstration
+     serait un fichier de plus à verser dans le dépôt ;
+   - les quatre comptes, dont l'agent lié à une fiche qui travaille aujourd'hui.
+5. **La commande rend compte** de ce qu'elle a créé, et des quatre mots de passe
+   provisoires, une seule fois. Ils ne s'écrivent dans aucun fichier.
+6. **L'ancien script est supprimé.** L'historique de git le garde.
+
+**Les tests**
+
+- **La commande joue sur `klean_test`**, dans l'entreprise Alpha, et le test relit par
+  l'API :
+  - le planning de la semaine en cours n'est pas vide, et porte des non pourvues ;
+  - un remplacement est en recherche ;
+  - des passages sont `Terminee` et d'autres `NonCertifiee` ;
+  - des anomalies ouvertes ;
+  - un produit sous son seuil ;
+  - les quatre comptes, provisoires, et l'agent lié à sa fiche.
+
+  La date est fixée par l'horloge de test, et la même date doit toujours donner le même
+  jeu.
+- **Elle refuse une entreprise qui n'est pas vide**, et une instance à plusieurs
+  entreprises. Le second passage est refusé, et ne modifie rien.
+- **Aucun agent inéligible**, ce que la forme garantit déjà ; le test le constate sur les
+  candidats de la vacation non pourvue.
+- **Un sabotage par garde.**
+
+**À trancher au lot A** — des penchants, retenus par défaut sauf avis contraire.
+
+| Question | Penchant |
+|---|---|
+| Contrôleurs ou `DbContext` | **les contrôleurs**, comme au point 2. Si l'un d'eux exige le pipeline au-delà de son `HttpContext`, je m'arrête et je le dis plutôt que de recopier sa logique |
+| Le mot de passe d'un compte | `POST /api/auth/comptes` le tire déjà : la commande l'appelle comme le reste, et rend ce que la réponse porte |
+| La position des pointages | près du site, à une précision crédible ; une adresse de domicile n'est jamais utilisée, ni pour un pointage, ni ailleurs |
+| L'entreprise | renommée en « Démonstration — Propreté », territoire Métropole : on la reconnaît d'un coup d'œil |
+
+**Hors de cette étape, et dit tel quel** :
+- des photos d'anomalie ;
+- un jeu pour une instance à plusieurs entreprises ;
+- un mode qui efface ou réinitialise une base ;
+- un historique des mouvements de stock daté du passé, l'horloge du stock n'étant pas
+  substituable.
+
+**Lots, provisoires**
+
+- **A** — la commande :
+  - sa garde ;
+  - le référentiel ;
+  - la génération avec l'historique ;
+  - l'absence et le remplacement ;
+  - le test et ses sabotages.
+- **B** — le reste du contenu : passages, anomalies, stock et comptes, et leurs tests ; un
+  essai au navigateur, de la connexion de chaque compte à *Ma journée*.
+- **C** — les documents :
+  - le `README`, que l'on suit depuis une base vide ;
+  - `DEPLOIEMENT.md` pour Docker ;
+  - `CLAUDE.md` §4 et §13 ;
+  - la suppression du script et la note de fin.
+
+---
+
 # Suite — non planifié
 
 Par ordre de valeur, à cadrer le moment venu.
@@ -3791,7 +3938,8 @@ d'expérience du moteur, fondé sur l'historique réel.
 aucun prestataire n'existe à substituer. Règle absolue : ne jamais considérer une intervention comme réalisée au seul
 motif qu'elle était planifiée.
 
-**Jeu de démonstration installable.** Le `README` doit permettre à un inconnu de
+~~**Jeu de démonstration installable.**~~ Cadré à l'étape 28, en commande de l'API
+éprouvée par un test, plutôt qu'en script. Le `README` doit permettre à un inconnu de
 faire tourner le projet ; au premier lancement il n'a rien à regarder. Le jeu de
 référence existe en fixture de test — `PlanningTests.Semer()`, 4 agents et
 17 vacations — mais il n'est pas installable dans une base de développement. À
