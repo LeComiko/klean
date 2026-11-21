@@ -595,7 +595,7 @@ ecrire_env() {
 # refus : une réponse qui passe ici ne fait échouer ni poser_env ni le démarrage de
 # l'API (plan de l'étape 34, décision 1, et CLAUDE.md §2).
 preparer_env() {
-  local domaine raison email geocodage=false postgres jwt code mot_de_passe
+  local domaine raison email postgres jwt code mot_de_passe
   dire "Installation de KLEAN. Quelques questions, puis tout se fait seul."
   dire "Rien n'est enregistré avant la dernière réponse : Ctrl-C à tout moment, et tout reprendra de zéro."
   demander_valide normaliser_domaine "Nom de domaine de KLEAN (ex. klean.mon-entreprise.fr)"
@@ -606,10 +606,9 @@ preparer_env() {
   raison="$REPONSE"
   demander_valide adresse_plausible "Adresse électronique de l'administrateur"
   email="$REPONSE"
-  dire "KLEAN peut trouver lui-même les coordonnées GPS des sites de vos clients. Leurs adresses — rue, code postal, ville — sont alors envoyées à l'API Adresse de l'État. Les domiciles de vos agents ne le sont jamais."
-  if demander_oui_non "Activer la localisation des sites ?" non; then
-    geocodage=true
-  fi
+  # La localisation des sites par l'API Adresse ne se demande pas encore : aucune version
+  # ne la lit avant le lot A3, et un « oui » donné aujourd'hui prendrait effet en silence
+  # le jour de cette mise à jour. Elle reste à false, et la question viendra avec elle.
   demander_smtp
 
   postgres=$(generer_secret 32)
@@ -626,7 +625,7 @@ preparer_env() {
     POSTGRES_PASSWORD "$postgres" \
     KLEAN_JWT_CLE "$jwt" \
     KLEAN_CODE_INSTALLATION "$code" \
-    KLEAN_GEOCODAGE "$geocodage" \
+    KLEAN_GEOCODAGE false \
     KLEAN_RAISON_SOCIALE "$raison" \
     KLEAN_ADMIN_EMAIL "$email" \
     KLEAN_ADMIN_MOT_DE_PASSE "$mot_de_passe" \

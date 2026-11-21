@@ -56,8 +56,8 @@ Connecté en root, sur un serveur où `sudo` n'existe pas encore : la même comm
 `| bash` à la fin au lieu de `| sudo bash`.
 
 Elle installe Docker s'il manque, télécharge KLEAN, puis pose ses questions : le nom de
-domaine, la raison sociale de l'entreprise, l'adresse électronique de l'administrateur, la
-localisation des sites, et un serveur de courriel si vous en avez un (facultatif).
+domaine, la raison sociale de l'entreprise, l'adresse électronique de l'administrateur, et un
+serveur de courriel si vous en avez un (facultatif).
 **Toutes les questions sont posées avant la moindre écriture** : un Ctrl-C à ce stade ne
 laisse rien. Le reste se fait seul, jusqu'à l'obtention du certificat HTTPS, qui peut
 prendre quelques minutes.
