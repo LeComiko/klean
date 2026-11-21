@@ -3901,6 +3901,61 @@ le journal ne se découvrent qu'après avoir tout saisi soi-même. « Suite » l
   - `CLAUDE.md` §4 et §13 ;
   - la suppression du script et la note de fin.
 
+**Lot A — fait le 21 novembre 2026**
+
+- **`dotnet run -- demonstration`**, lu par `Program.cs` après l'amorçage. La commande
+  installe, rend compte, et sort sans démarrer le serveur : code 0, ou 1 sur un refus, qui
+  se dit en une ligne.
+  - ⚠️ Les traces SQL du développement ensevelissaient le compte rendu. Un premier filtre,
+    posé sur le préfixe `Microsoft.EntityFrameworkCore`, n'a rien fait :
+    `appsettings.Development.json` règle la catégorie exacte, et la règle la plus précise
+    l'emporte. Le filtre vise maintenant cette catégorie.
+  - Jouée sur `klean_test`, qui compte deux entreprises, la commande refuse sans rien
+    écrire. Ce sont l'argument, le filtre et le code de sortie réels, pas ceux d'un test.
+- **`Demonstration/JeuDeDemonstration.cs` appelle les contrôleurs**, construits par
+  l'injection, sous l'identité de l'administrateur, et valide chaque DTO par ses attributs.
+  Aucun contrôleur n'a demandé plus que son `HttpContext` : le penchant tient.
+- **`Demonstration/HorlogeDecalee.cs`** pose la génération deux semaines en arrière. La
+  route refuse toujours une date passée ; c'est le jour qui a changé.
+- **Le contenu du lot** :
+  - l'entreprise, renommée « Démonstration — Propreté » ;
+  - trois types de prestation, avec leur checklist ;
+  - deux clients et cinq sites, avec leurs contrats ;
+  - six agents, et six prestations avec leurs titulaires ;
+  - 138 vacations du 4 novembre au 16 décembre, pour un jour fixé au 18 novembre ;
+  - un arrêt maladie, dont le remplacement reste en recherche ;
+  - un congé, pourvu par le premier candidat du moteur.
+
+  Le compte de 138 a été refait à la main avant d'être figé : le 11 novembre, férié, manque
+  à chaque prestation qui tombe un mercredi.
+- ⚠️ **L'installation n'est pas atomique.** La génération et le stock ouvrent leur propre
+  transaction, qu'une transaction englobante ferait échouer. Un refus arrête tout et se dit,
+  mais ce qui précède reste écrit. C'est la série qui doit le voir la première.
+- **`JeuDeDemonstrationTests`, 10 cas** :
+  - le compte rendu, figé pour la date ;
+  - l'entreprise renommée ;
+  - la semaine en cours avec des non pourvues ;
+  - deux semaines d'historique et quatre à venir, rien au-delà ;
+  - les deux remplacements, l'absent écarté de ses candidats ;
+  - le second passage refusé sans rien changer ;
+  - Beta intacte ;
+  - la commande refusée sur deux entreprises ;
+  - aucune ligne au journal d'accès ;
+  - la validation des attributs.
+- **Neuf sabotages, tous rouges à la fin** :
+  - les deux gardes ;
+  - l'horloge réelle ;
+  - le congé jamais accepté ;
+  - un motif sur l'arrêt maladie, que le contrôleur refuse ;
+  - le même, avec le refus avalé ;
+  - un courriel illisible ;
+  - la validation retirée.
+
+  ⚠️ **La validation retirée était d'abord restée verte**, même avec un courriel illisible :
+  aucun contrôleur ne revérifie un format d'adresse, donc la validation y est la seule
+  garde. Elle est sortie en `internal`, et un test l'éprouve directement.
+- Série serveur complète : 720 tests verts, 710 + 10, en 7 min 49 s contre 6 min 34 s.
+
 ---
 
 # Suite — non planifié

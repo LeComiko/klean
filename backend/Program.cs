@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Klean.Api.Data;
+using Klean.Api.Demonstration;
 using Klean.Api.Middleware;
 using Klean.Api.Models;
 using Klean.Api.Services;
@@ -384,6 +385,12 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+// Le jeu de démonstration (SPEC.md, étape 28) : une commande, pas un serveur. Les requêtes
+// SQL, tracées en développement, enseveliraient son compte rendu. ⚠️ La catégorie exacte,
+// celle d'appsettings.Development.json : une règle sur un préfixe perd contre elle.
+var demonstration = args.Contains(JeuDeDemonstration.Commande);
+if (demonstration) builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
+
 var app = builder.Build();
 
 // Rôles, puis entreprise et administrateur si aucun utilisateur n'existe.
@@ -396,6 +403,14 @@ using (var portee = app.Services.CreateScope())
     // n'échouerait qu'au premier mot de passe oublié — soit au plus mauvais
     // moment possible (SPEC.md étape 12).
     portee.ServiceProvider.GetRequiredService<IServiceCourriel>();
+}
+
+// Après l'amorçage, qui pose l'entreprise et l'administrateur que le jeu habite ; et avant
+// le pipeline, qu'une commande n'écoute pas.
+if (demonstration)
+{
+    Environment.ExitCode = await JeuDeDemonstration.ExecuterCommandeAsync(app.Services, Console.Out);
+    return;
 }
 
 // ---------------------------------------------------------------------------
