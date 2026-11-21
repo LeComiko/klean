@@ -253,13 +253,38 @@ cmd_code() {
 
 # ---- Restaurer -------------------------------------------------------------------
 
+# Les sauvegardes de la base que `restaurer` accepte, une par ligne.
+lister_sauvegardes() {
+  local liste
+  liste=$(find "$SAUVEGARDES" -maxdepth 1 -type f -name 'klean-*.dump' 2> /dev/null | sort)
+  if [ -n "$liste" ]; then
+    dire "Sauvegardes disponibles :"
+    printf '  %s\n' "$liste"
+  else
+    dire "Aucune sauvegarde dans $SAUVEGARDES."
+  fi
+}
+
+# L'archive de trousseau la plus récente, ou rien : elle contient toutes les clés,
+# anciennes comprises (DEPLOIEMENT.md §4).
+derniere_archive_trousseau() {
+  find "$TROUSSEAU" -maxdepth 1 -type f -name 'trousseau-*.tgz' 2> /dev/null | sort | tail -n 1
+}
+
 cmd_restaurer() {
   exiger_root
   # Sans attente : une restauration lancée pendant une sauvegarde ou une mise à jour
   # échoue tout de suite et dit pourquoi.
   verrouiller
   local sauvegarde="${1:-}"
-  [ -f "$sauvegarde" ] || echouer "Indiquez une sauvegarde : sudo klean restaurer $SAUVEGARDES/klean-AAAA-MM-JJTHHMM.dump"
+  if [ -z "$sauvegarde" ]; then
+    lister_sauvegardes
+    echouer "Indiquez une sauvegarde : sudo klean restaurer $SAUVEGARDES/klean-AAAA-MM-JJTHHMM.dump"
+  fi
+  if [ ! -f "$sauvegarde" ]; then
+    lister_sauvegardes >&2
+    echouer "Fichier introuvable : $sauvegarde."
+  fi
   compose up -d postgres
   attendre_postgres
   # Relue en entier, données comprises (`--list` réussirait sur un fichier tronqué) :
@@ -267,12 +292,19 @@ cmd_restaurer() {
   compose exec -T postgres pg_restore -f /dev/null < "$sauvegarde" ||
     echouer "Cette sauvegarde est illisible. Rien n'a changé."
 
-  avertir "Tout ce qui a été saisi après cette sauvegarde sera perdu, sessions comprises."
-  avertir "Les pseudonymisations et les purges faites depuis seront défaites : rejouez-les ensuite (DEPLOIEMENT.md §7)."
+  avertir "Tout ce qui a été saisi après cette sauvegarde sera perdu."
+  avertir "Les comptes fermés et les mots de passe changés depuis reviennent à leur état d'alors, les pseudonymisations et les purges sont défaites (rejouez-les : DEPLOIEMENT.md §7)."
+  avertir "Toutes les sessions sont fermées : chacun devra se reconnecter."
+  # C'est maintenant qu'il faut le dire : après la destruction, il est trop tard pour
+  # aller chercher la copie du trousseau.
+  if [ -z "$(derniere_archive_trousseau)" ]; then
+    avertir "Aucune archive de trousseau dans $TROUSSEAU : si les clés de cette machine ne sont pas celles de la sauvegarde, chaque compte devra rééquiper son second facteur (DEPLOIEMENT.md §10). Si vous l'avez ailleurs, copiez l'archive avant de continuer."
+  fi
+  avertir "L'état actuel sera d'abord copié dans $SAUVEGARDES (…-avant-restauration.dump, gardé 14 jours)."
   confirmer "Restaurer ${sauvegarde##*/} ?" RESTAURER || echouer "Restauration abandonnée. Rien n'a changé."
 
   restaurer_base "$sauvegarde" migrer
-  dire "Restauration terminée."
+  dire "Restauration terminée. Vérifiez que l'API répond : sudo klean etat"
 }
 
 # Repart d'une base vide, puis restaure : `pg_restore --clean` laisserait en place les
@@ -283,42 +315,73 @@ cmd_restaurer() {
 # une sauvegarde plus ancienne que les images laisserait sinon le schéma en retard.
 # `revenir` ne le demande pas : il remet aussi les images d'avant.
 restaurer_base() {
-  local sauvegarde="$1" migrations="${2:-}"
+  local sauvegarde="$1" migrations="${2:-}" copie temporaire sortie
   compose up -d postgres
   attendre_postgres
   compose stop api
+
+  # La copie de l'état courant, avant de le détruire : une restauration lancée sur la
+  # mauvaise sauvegarde, ou qui échoue, ne doit pas coûter les saisies d'aujourd'hui.
+  # Elle n'appelle pas cmd_sauvegarder : le trousseau s'y lit dans l'API, arrêtée ici.
+  # Même forme que ses fichiers, donc la rotation la garde quatorze jours.
+  install -d -m 700 "$SAUVEGARDES"
+  copie="$SAUVEGARDES/klean-$(date +%Y-%m-%dT%H%M)-avant-restauration.dump"
+  temporaire=$(mktemp "$SAUVEGARDES/.partiel.XXXXXX")
+  if ! compose exec -T postgres pg_dump -U klean -d klean -Fc > "$temporaire" ||
+    ! compose exec -T postgres pg_restore -f /dev/null < "$temporaire"; then
+    rm -f "$temporaire"
+    echouer "La copie de l'état actuel a échoué, donc rien n'a été détruit. L'API est arrêtée : sudo klean etat, puis relancez."
+  fi
+  chmod 600 "$temporaire"
+  mv -f "$temporaire" "$copie"
+  dire "État actuel copié : $copie"
+
+  sortie="Relancez : sudo klean restaurer ${sauvegarde}, ou revenez à l'état d'avant avec : sudo klean restaurer $copie"
   compose exec -T postgres psql -U klean -d postgres -v ON_ERROR_STOP=1 \
     -c 'DROP DATABASE IF EXISTS klean WITH (FORCE)' \
-    -c 'CREATE DATABASE klean OWNER klean'
+    -c 'CREATE DATABASE klean OWNER klean' ||
+    echouer "La base n'a pas pu être recréée ; elle est peut-être absente. L'API est arrêtée. $sortie"
   # Le rôle vit dans la grappe, pas dans la base : sur une machine neuve, il manque, et
   # pg_restore s'arrêterait sur les droits qui le nomment (CLAUDE.md §10).
   compose exec -T postgres psql -U klean -d klean -v ON_ERROR_STOP=1 -c \
-    "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'klean_app') THEN CREATE ROLE klean_app NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT; GRANT klean_app TO CURRENT_USER; END IF; END \$\$;"
-  compose exec -T postgres pg_restore -U klean -d klean --no-owner --exit-on-error < "$sauvegarde" ||
-    echouer "La restauration a échoué en cours de route : la base est incomplète. Relancez sudo klean restaurer avec une autre sauvegarde."
-  restaurer_trousseau_si_vide
+    "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'klean_app') THEN CREATE ROLE klean_app NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT; GRANT klean_app TO CURRENT_USER; END IF; END \$\$;" ||
+    echouer "Le rôle klean_app n'a pas pu être créé : la base est vide et l'API arrêtée. $sortie"
+  # Une seule transaction : un échec laisse une base vide, jamais à moitié remplie.
+  compose exec -T postgres pg_restore -U klean -d klean --no-owner --exit-on-error --single-transaction < "$sauvegarde" ||
+    echouer "La restauration a échoué : la base est vide et l'API arrêtée. $sortie"
+  # Les sessions de la sauvegarde valent encore : sans cette ligne, un jeton de
+  # rafraîchissement d'alors rouvrirait la session d'un compte que la sauvegarde
+  # croyait ouvert.
+  compose exec -T postgres psql -U klean -d klean -v ON_ERROR_STOP=1 -c \
+    'UPDATE "JetonsRafraichissement" SET "DateRevocation" = now() WHERE "DateRevocation" IS NULL;' ||
+    echouer "La base est restaurée, mais les anciennes sessions n'ont pas pu être révoquées ; l'API reste arrêtée. $sortie"
+  restaurer_trousseau
   if [ "$migrations" = migrer ]; then
-    compose run --rm -T migrer || echouer "La base est restaurée, mais sa mise au niveau de la version installée a échoué : voir les lignes ci-dessus."
+    compose run --rm -T migrer ||
+      echouer "La base est restaurée, mais sa mise au niveau de la version installée a échoué ; l'API reste arrêtée. Voir les lignes ci-dessus et : sudo klean journaux. Pour annuler : sudo klean restaurer $copie"
   fi
-  compose up -d
+  compose up -d ||
+    echouer "La base est restaurée, mais les services n'ont pas démarré. Voir : sudo klean etat, puis sudo klean journaux. Pour annuler : sudo klean restaurer $copie"
 }
 
-# Le trousseau perdu avec la machine se restaure **avant** que l'API ne démarre :
-# démarrée, elle pourrait créer une clé neuve, et le test ci-dessous passerait à tort.
-# Un conteneur éphémère monte le même volume. Sans trousseau, chaque compte devrait
-# rééquiper son second facteur (DEPLOIEMENT.md §10).
-restaurer_trousseau_si_vide() {
+# **Toujours fusionné**, jamais « seulement si le volume est vide » : l'API crée une clé
+# dès son démarrage, sans requête, donc sur une machine neuve — où `installer` l'a déjà
+# démarrée — le volume n'est jamais vide, et l'archive de l'ancienne machine ne serait
+# jamais extraite : tous les seconds facteurs deviendraient indéchiffrables, sans message.
+# Chaque key-*.xml a son identifiant : l'archive s'ajoute à la clé de la nouvelle
+# installation, qui reste valable à côté des anciennes.
+#
+# Le conteneur éphémère monte le volume `cles-api` et tourne sous `app`, l'utilisateur de
+# l'API (backend/Dockerfile) : les fichiers extraits lui appartiennent. L'API est arrêtée.
+restaurer_trousseau() {
   local archive
-  if compose run --rm --no-deps -T --entrypoint sh api \
-    -c 'ls /home/app/.aspnet/DataProtection-Keys 2> /dev/null | grep -q "^key-"'; then
-    return
-  fi
-  archive=$(find "$TROUSSEAU" -maxdepth 1 -type f -name 'trousseau-*.tgz' | sort | tail -n 1)
+  archive=$(derniere_archive_trousseau)
   if [ -z "$archive" ]; then
-    avertir "Trousseau absent, et aucune archive : chaque compte devra rééquiper son second facteur (DEPLOIEMENT.md §10)."
+    avertir "Aucune archive de trousseau : si les clés de cette machine ne sont pas celles de la sauvegarde, chaque compte devra rééquiper son second facteur (DEPLOIEMENT.md §10)."
     return
   fi
-  compose run --rm --no-deps -T --entrypoint tar api xzf - -C /home/app/.aspnet < "$archive"
+  compose run --rm --no-deps -T --entrypoint tar api xzf - -C /home/app/.aspnet < "$archive" ||
+    echouer "La base est restaurée, mais pas le trousseau ($archive) ; l'API reste arrêtée. Relancez : sudo klean restaurer <fichier>."
 }
 
 # ---- Aiguillage ------------------------------------------------------------------
