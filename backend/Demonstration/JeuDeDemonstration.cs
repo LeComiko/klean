@@ -25,7 +25,20 @@ public sealed record RapportDemonstration(
     int Vacations,
     int NonPourvues,
     int RemplacementsEnRecherche,
-    int RemplacementsPourvus);
+    int RemplacementsPourvus,
+    int Terminees,
+    int NonCertifiees,
+    int AnomaliesOuvertes,
+    int AnomaliesTraitees,
+    int Produits,
+    int ProduitsSousSeuil,
+    IReadOnlyList<CompteDemonstration> Comptes);
+
+/// <summary>
+/// Un compte créé par le jeu, avec le mot de passe que le serveur a tiré. ⚠️ Il n'existe en
+/// clair que dans ce compte rendu, comme dans la réponse de <c>POST /api/auth/comptes</c>.
+/// </summary>
+public sealed record CompteDemonstration(string Role, string Nom, string Email, string MotDePasseProvisoire);
 
 /// <summary>
 /// Le jeu de démonstration installable (SPEC.md, étape 28) : <c>dotnet run -- demonstration</c>,
@@ -117,14 +130,19 @@ public sealed class JeuDeDemonstration
     }
 
     /// <summary>Les revendications qu'un jeton de ce compte porterait (<see cref="JwtService"/>).</summary>
-    internal static ClaimsPrincipal Identite(Guid entrepriseId, Guid utilisateurId, string role) =>
-        new(new ClaimsIdentity(
-            [
-                new Claim(ClaimTypes.NameIdentifier, utilisateurId.ToString()),
-                new Claim(ClaimTypes.Role, role),
-                new Claim(JwtService.RevendicationEntrepriseId, entrepriseId.ToString())
-            ],
-            authenticationType: "Demonstration"));
+    internal static ClaimsPrincipal Identite(Guid entrepriseId, Guid utilisateurId, string role, Guid? agentId = null)
+    {
+        List<Claim> revendications =
+        [
+            new(ClaimTypes.NameIdentifier, utilisateurId.ToString()),
+            new(ClaimTypes.Role, role),
+            new(JwtService.RevendicationEntrepriseId, entrepriseId.ToString())
+        ];
+
+        if (agentId is not null) revendications.Add(new(JwtService.RevendicationAgentId, agentId.Value.ToString()));
+
+        return new ClaimsPrincipal(new ClaimsIdentity(revendications, authenticationType: "Demonstration"));
+    }
 
     /// <summary>
     /// L'entreprise unique de l'instance, et son premier administrateur actif. Lus au
@@ -164,6 +182,18 @@ public sealed class JeuDeDemonstration
         sortie.WriteLine($"  {r.Vacations} vacations, de {JoursHistorique} jours en arrière à {JoursAVenir} jours devant, "
             + $"dont {r.NonPourvues} sans agent.");
         sortie.WriteLine($"  {r.RemplacementsEnRecherche} remplacement en recherche, {r.RemplacementsPourvus} pourvu.");
+        sortie.WriteLine($"  {r.Terminees} passages certifiés, {r.NonCertifiees} sans preuve ; "
+            + $"{r.AnomaliesOuvertes} anomalies ouvertes, {r.AnomaliesTraitees} traitée.");
+        sortie.WriteLine($"  {r.Produits} produits en stock, dont {r.ProduitsSousSeuil} sous son seuil d'alerte.");
+        sortie.WriteLine();
+        sortie.WriteLine("  Comptes créés. Chaque mot de passe ne s'affiche qu'ici : le transmettre, puis l'oublier.");
+        sortie.WriteLine("  La première connexion le fait remplacer, et le responsable équipera un téléphone.");
+        sortie.WriteLine();
+
+        foreach (var compte in r.Comptes)
+        {
+            sortie.WriteLine($"    {compte.Role,-14} {compte.Email,-38} {compte.MotDePasseProvisoire}");
+        }
     }
 
     /// <summary>Une installation : une portée, une identité, une suite de gestes.</summary>
@@ -174,6 +204,15 @@ public sealed class JeuDeDemonstration
         private readonly Guid _entrepriseId;
         private readonly CancellationToken _annulation;
         private readonly KleanDbContext _db;
+
+        /// <summary>Les points de contrôle de chaque type, dans l'ordre de la checklist.</summary>
+        private readonly Dictionary<string, List<Guid>> _points = [];
+
+        /// <summary>Les sites par leur nom, pour les mouvements de stock qui les visent.</summary>
+        private readonly Dictionary<string, Guid> _sites = [];
+
+        /// <summary>Le dépôt et le véhicule, par leur clé.</summary>
+        private readonly Dictionary<string, Guid> _emplacements = [];
 
         public Installation(IServiceProvider services, HttpContext contexte, Guid entrepriseId, CancellationToken annulation)
         {
@@ -197,8 +236,12 @@ public sealed class JeuDeDemonstration
             await CreerSitesEtPrestationsAsync(clients, types, agents, aujourdhui);
             await GenererAsync(aujourdhui);
             await PoserAbsencesAsync(agents, aujourdhui);
+            var comptes = await CreerComptesAsync(agents, clients);
+            await CreerStockAsync(types);
+            await PointerPassagesAsync(agents[AgentAuCompte], comptes.AgentUtilisateurId, aujourdhui);
+            await ConstaterSansPreuveAsync(aujourdhui);
 
-            return await RapportAsync(aujourdhui);
+            return await RapportAsync(aujourdhui, comptes.Crees);
         }
 
         // ------------------------------------------------------------------ la garde
@@ -250,14 +293,16 @@ public sealed class JeuDeDemonstration
                     DureeParDefautMinutes = duree
                 })), $"le type « {libelle} »");
 
+                _points[cle] = [];
+
                 for (var ordre = 0; ordre < points.Length; ordre++)
                 {
-                    Valeur(await pointsControleur.Creer(Valide(new PointControleCreateDto
+                    _points[cle].Add(Valeur(await pointsControleur.Creer(Valide(new PointControleCreateDto
                     {
                         TypePrestationId = type.Id,
                         Libelle = points[ordre],
                         Ordre = ordre + 1
-                    })), $"le point « {points[ordre]} »");
+                    })), $"le point « {points[ordre]} »").Id);
                 }
 
                 types[cle] = type.Id;
@@ -306,6 +351,7 @@ public sealed class JeuDeDemonstration
             {
                 site.ClientId = clients[client];
                 var creeSite = Valeur(await sites.Creer(Valide(site)), $"le site « {site.Nom} »");
+                _sites[site.Nom] = creeSite.Id;
 
                 // Un contrat en cours depuis un an : la génération ne lit que les contrats actifs
                 // à la date de chaque vacation.
@@ -397,9 +443,225 @@ public sealed class JeuDeDemonstration
             Valeur(await remplacements.Accepter(remplacementId), "l'acceptation du remplaçant");
         }
 
+        // ------------------------------------------------------------------ les comptes
+
+        /// <summary>
+        /// Un compte par rôle, par <c>POST /api/auth/comptes</c> : le serveur tire le mot de passe,
+        /// le marque provisoire, et le rend une fois. Puis l'équipe du chef, par le <c>PUT</c> de
+        /// chaque fiche, qui vérifie le rattachement — même entreprise, rôle <c>ChefEquipe</c>.
+        /// </summary>
+        private async Task<(List<CompteDemonstration> Crees, Guid AgentUtilisateurId)> CreerComptesAsync(
+            Dictionary<string, Guid> agents, Dictionary<string, Guid> clients)
+        {
+            var auth = Controleur<AuthController>();
+            var crees = new List<CompteDemonstration>();
+            var agentUtilisateur = Guid.Empty;
+            var chef = Guid.Empty;
+
+            foreach (var (role, nom, prenom, email) in Comptes)
+            {
+                var cree = Valeur(await auth.CreerCompte(Valide(new CompteCreateDto
+                {
+                    Email = email,
+                    Nom = nom,
+                    Prenom = prenom,
+                    Role = role,
+                    AgentId = role == RolesKlean.Agent ? agents[AgentAuCompte] : null,
+                    ClientId = role == RolesKlean.ClientSyndic ? clients[ClientDuSyndic] : null
+                })), $"le compte {email}");
+
+                crees.Add(new CompteDemonstration(role, $"{prenom} {nom}", email, cree.MotDePasseProvisoire));
+
+                if (role == RolesKlean.Agent) agentUtilisateur = cree.Compte.Id;
+                if (role == RolesKlean.ChefEquipe) chef = cree.Compte.Id;
+            }
+
+            var fiches = Controleur<AgentsController>();
+
+            foreach (var (cle, dto) in Agents.Where(a => EquipeDuChef.Contains(a.Cle)))
+            {
+                dto.ChefEquipeId = chef;
+                Succes(await fiches.Modifier(agents[cle], Valide(dto)), $"le rattachement de {dto.Prenom} {dto.Nom}");
+            }
+
+            return (crees, agentUtilisateur);
+        }
+
+        // ------------------------------------------------------------------ le stock
+
+        /// <summary>
+        /// Produits, lieux, consommations par type, puis des mouvements par le service du stock,
+        /// qui refuse une sortie au-delà du disponible. ⚠️ Datés du jour de l'installation :
+        /// l'horloge du stock n'est pas substituable (SPEC.md, étape 28).
+        /// </summary>
+        private async Task CreerStockAsync(Dictionary<string, Guid> types)
+        {
+            var produits = new Dictionary<string, Guid>();
+            var produitsControleur = Controleur<ProduitsController>();
+
+            foreach (var (cle, dto) in Produits)
+            {
+                produits[cle] = Valeur(await produitsControleur.Creer(Valide(dto)), $"le produit « {dto.Nom} »").Id;
+            }
+
+            var emplacements = Controleur<EmplacementsController>();
+
+            foreach (var (cle, nom, type) in Emplacements)
+            {
+                _emplacements[cle] = Valeur(await emplacements.Creer(Valide(new EmplacementCreateDto
+                {
+                    Nom = nom,
+                    Type = type
+                })), $"l'emplacement « {nom} »").Id;
+            }
+
+            var consommations = Controleur<ConsommationsTypeController>();
+
+            foreach (var (type, produit, quantite) in Consommations)
+            {
+                Valeur(await consommations.Creer(Valide(new ConsommationTypeCreateDto
+                {
+                    TypePrestationId = types[type],
+                    ProduitId = produits[produit],
+                    QuantiteParPassage = quantite
+                })), $"la consommation de {produit} par {type}");
+            }
+
+            var mouvements = Controleur<MouvementsStockController>();
+
+            foreach (var (nature, produit, origine, destination, quantite) in Mouvements)
+            {
+                var dto = new MouvementStockCreateDto { ProduitId = produits[produit], Nature = nature, Quantite = quantite };
+
+                if (origine is not null)
+                {
+                    if (_emplacements.TryGetValue(origine, out var id)) dto.OrigineEmplacementId = id;
+                    else dto.OrigineSiteId = _sites[origine];
+                }
+
+                if (destination is not null)
+                {
+                    if (_emplacements.TryGetValue(destination, out var id)) dto.DestinationEmplacementId = id;
+                    else dto.DestinationSiteId = _sites[destination];
+                }
+
+                Valeur(await mouvements.Enregistrer(Valide(dto), _annulation), $"le mouvement {nature} de {produit}");
+            }
+        }
+
+        // ------------------------------------------------------------------ les passages
+
+        private enum Preuve { SurSite, SansPosition, HorsRayon }
+
+        /// <summary>
+        /// Les passages des jours passés de l'agent qui a un compte, par <c>demarrer</c> et
+        /// <c>terminer</c>, sous son identité, avec une horloge posée à l'heure du geste. Le
+        /// serveur tranche la preuve, la checklist et le statut ; le jeu ne donne qu'une position.
+        ///
+        /// ⚠️ <b>Seul cet agent pointe</b>, parce que seul l'agent affecté le peut, par son compte.
+        /// Inventer une identité aux autres fabriquerait des auteurs qui n'existent pas : leurs
+        /// vacations passées sont constatées sans preuve, par <see cref="ConstaterSansPreuveAsync"/>.
+        ///
+        /// ⚠️ Une position près du site, jamais celle d'un domicile : elle n'est d'ailleurs pas
+        /// gardée, le serveur n'en retient que la distance (CLAUDE.md §9 ter).
+        /// </summary>
+        private async Task PointerPassagesAsync(Guid agentId, Guid utilisateurId, DateOnly aujourdhui)
+        {
+            var avant = Utc(aujourdhui);
+            var vacations = await _db.Interventions.AsNoTracking()
+                .Where(i => i.AgentId == agentId && i.DatePrevue < avant && i.Statut == StatutIntervention.Planifiee)
+                .OrderBy(i => i.DatePrevue)
+                .Select(i => new { i.Id, i.DatePrevue, i.HeurePrevue })
+                .ToListAsync(_annulation);
+
+            var site = Sites.Single(s => s.Site.Nom == SitePointe).Site;
+            var fuseau = Territoires.Fuseau(Territoire.Metropole);
+            var agent = Identite(_entrepriseId, utilisateurId, RolesKlean.Agent, agentId);
+
+            for (var rang = 0; rang < vacations.Count; rang++)
+            {
+                var vacation = vacations[rang];
+                var jour = DateOnly.FromDateTime(vacation.DatePrevue);
+                var debut = Instant(jour, vacation.HeurePrevue + TimeSpan.FromMinutes(2), fuseau);
+                var fin = Instant(jour, vacation.HeurePrevue + TimeSpan.FromMinutes(86), fuseau);
+                var preuve = rang == RangSansPosition ? Preuve.SansPosition
+                    : rang == RangHorsRayon ? Preuve.HorsRayon
+                    : Preuve.SurSite;
+                var aTraiter = new List<Guid>();
+
+                using (Comme(agent))
+                {
+                    var demarrage = Controleur<InterventionsController>(ServicePassageA(debut));
+                    Valeur(await demarrage.Demarrer(vacation.Id, new PointageCreateDto
+                    {
+                        Position = preuve == Preuve.SansPosition ? null : Pres(site)
+                    }, _annulation), $"le début du passage du {jour:dd/MM}");
+
+                    foreach (var (_, description, traitee) in AnomaliesSignalees.Where(a => a.Rang == rang))
+                    {
+                        var anomalies = Controleur<AnomaliesController>(HorlogeA(debut.AddMinutes(25)));
+                        var signalee = Valeur(await anomalies.Signaler(Valide(new AnomalieCreateDto
+                        {
+                            InterventionId = vacation.Id,
+                            Description = description
+                        })), $"l'anomalie du {jour:dd/MM}");
+
+                        if (traitee) aTraiter.Add(signalee.Id);
+                    }
+
+                    var points = rang == RangPointOublie ? _points[TypePointe].SkipLast(1).ToList() : _points[TypePointe];
+                    var terminaison = Controleur<InterventionsController>(ServicePassageA(fin));
+                    Valeur(await terminaison.Terminer(vacation.Id, new TerminaisonDto
+                    {
+                        Position = preuve == Preuve.HorsRayon ? Loin(site) : Pres(site),
+                        PointsFaits = points
+                    }, _annulation), $"la fin du passage du {jour:dd/MM}");
+                }
+
+                // Traitée le lendemain, par l'administrateur : c'est un rôle interne qui traite.
+                foreach (var id in aTraiter)
+                {
+                    var traitement = Controleur<AnomaliesController>(HorlogeA(fin.AddDays(1).AddHours(2)));
+                    Valeur(await traitement.Traiter(id), "le traitement d'une anomalie");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Les vacations passées des agents sans compte : « fait, sans preuve », le recours que
+        /// l'API laisse à un chef dont l'agent n'a pas de téléphone (CLAUDE.md §9 ter), par le
+        /// <c>PUT</c>, qui revérifie l'éligibilité. Une vacation passée sans agent reste ce
+        /// qu'elle est : jamais pourvue.
+        /// </summary>
+        private async Task ConstaterSansPreuveAsync(DateOnly aujourdhui)
+        {
+            var avant = Utc(aujourdhui);
+            var passees = await _db.Interventions.AsNoTracking()
+                .Where(i => i.DatePrevue < avant && i.Statut == StatutIntervention.Planifiee && i.AgentId != null)
+                .Select(i => new { i.Id, i.PrestationId, i.AgentId, i.DatePrevue, i.HeurePrevue })
+                .ToListAsync(_annulation);
+
+            var controleur = Controleur<InterventionsController>();
+
+            foreach (var vacation in passees)
+            {
+                Succes(await controleur.Modifier(vacation.Id, Valide(new InterventionCreateDto
+                {
+                    PrestationId = vacation.PrestationId,
+                    AgentId = vacation.AgentId,
+                    DatePrevue = vacation.DatePrevue,
+                    HeurePrevue = vacation.HeurePrevue,
+                    Statut = nameof(StatutIntervention.NonCertifiee)
+                })), $"la vacation du {vacation.DatePrevue:dd/MM}");
+            }
+        }
+
+        private ServicePassage ServicePassageA(DateTimeOffset instant) =>
+            ActivatorUtilities.CreateInstance<ServicePassage>(_services, HorlogeA(instant));
+
         // ------------------------------------------------------------------ le compte rendu
 
-        private async Task<RapportDemonstration> RapportAsync(DateOnly aujourdhui)
+        private async Task<RapportDemonstration> RapportAsync(DateOnly aujourdhui, IReadOnlyList<CompteDemonstration> comptes)
         {
             var nonPourvues = await _db.Interventions.CountAsync(
                 i => i.AgentId == null && i.Statut == StatutIntervention.Planifiee, _annulation);
@@ -414,7 +676,17 @@ public sealed class JeuDeDemonstration
                 await _db.Interventions.CountAsync(_annulation),
                 nonPourvues,
                 await _db.Remplacements.CountAsync(r => r.Statut == StatutRemplacement.Recherche, _annulation),
-                await _db.Remplacements.CountAsync(r => r.Statut == StatutRemplacement.Accepte, _annulation));
+                await _db.Remplacements.CountAsync(r => r.Statut == StatutRemplacement.Accepte, _annulation),
+                await _db.Interventions.CountAsync(i => i.Statut == StatutIntervention.Terminee, _annulation),
+                await _db.Interventions.CountAsync(i => i.Statut == StatutIntervention.NonCertifiee, _annulation),
+                await _db.Anomalies.CountAsync(a => a.Statut == StatutAnomalie.Ouverte, _annulation),
+                await _db.Anomalies.CountAsync(a => a.Statut == StatutAnomalie.Traitee, _annulation),
+                await _db.Produits.CountAsync(_annulation),
+                // Tous lieux confondus, comme le seuil se lit (CLAUDE.md §9 bis).
+                await _db.Produits.CountAsync(
+                    p => _db.Stocks.Where(s => s.ProduitId == p.Id).Sum(s => (decimal?)s.Quantite) < p.SeuilAlerte,
+                    _annulation),
+                comptes);
         }
 
         // ------------------------------------------------------------------ l'appel d'un contrôleur
@@ -429,6 +701,37 @@ public sealed class JeuDeDemonstration
             var controleur = ActivatorUtilities.CreateInstance<T>(_services, arguments);
             controleur.ControllerContext = new ControllerContext { HttpContext = _contexte };
             return controleur;
+        }
+
+        /// <summary>
+        /// Des gestes sous une autre identité — celle de l'agent qui pointe —, jusqu'à la fin du
+        /// <c>using</c>. Le tenant relit <c>HttpContext.User</c> à chaque requête : c'est lui qui
+        /// change, sur le même <c>HttpContext</c>, que l'accesseur garde d'un bout à l'autre.
+        ///
+        /// ⚠️ <b>Jamais en remplaçant le <c>HttpContext</c> de l'accesseur.</b> Il le range dans
+        /// un <c>AsyncLocal</c>, et <b>vide</b> le porteur du précédent avant d'en poser un autre.
+        /// Remplacé dans une méthode <c>async</c>, le nouveau ne survit pas au retour, et l'ancien
+        /// a été vidé en passant : l'appelant se retrouve sans identité, donc sans entreprise, et
+        /// <c>klean_app</c> ne voit plus rien. Le symptôme a d'abord été une mise à jour qui ne
+        /// touchait aucune ligne, puis un compte rendu à zéro, un étage plus haut.
+        /// </summary>
+        private Bascule Comme(ClaimsPrincipal identite)
+        {
+            var avant = _contexte.User;
+            _contexte.User = identite;
+            return new Bascule(_contexte, avant);
+        }
+
+        private sealed class Bascule(HttpContext contexte, ClaimsPrincipal retour) : IDisposable
+        {
+            public void Dispose() => contexte.User = retour;
+        }
+
+        /// <summary>Une horloge posée à cet instant, qui avance avec la vraie.</summary>
+        private HorlogeDecalee HorlogeA(DateTimeOffset instant)
+        {
+            var reelle = _services.GetRequiredService<TimeProvider>();
+            return new HorlogeDecalee(reelle, instant - reelle.GetUtcNow());
         }
 
         /// <summary>
@@ -498,6 +801,19 @@ public sealed class JeuDeDemonstration
         while (!jours.Contains(jour.DayOfWeek)) jour = jour.AddDays(1);
         return jour;
     }
+
+    /// <summary>Une heure locale du territoire, en instant.</summary>
+    private static DateTimeOffset Instant(DateOnly jour, TimeSpan heure, TimeZoneInfo fuseau) =>
+        new(TimeZoneInfo.ConvertTimeToUtc(
+            DateTime.SpecifyKind(jour.ToDateTime(TimeOnly.FromTimeSpan(heure)), DateTimeKind.Unspecified), fuseau));
+
+    /// <summary>Une trentaine de mètres du site, à une précision de téléphone en ville.</summary>
+    private static PositionDto Pres(SiteCreateDto site) =>
+        new() { Latitude = site.Latitude + 0.0003, Longitude = site.Longitude, PrecisionMetres = 12 };
+
+    /// <summary>Six à sept cents mètres : hors du rayon de deux cents, même en accordant la marge.</summary>
+    private static PositionDto Loin(SiteCreateDto site) =>
+        new() { Latitude = site.Latitude + 0.006, Longitude = site.Longitude, PrecisionMetres = 15 };
 
     // ---------------------------------------------------------------------------
     // Les données. Séparées du code pour qu'elles se relisent comme un planning.
@@ -632,5 +948,90 @@ public sealed class JeuDeDemonstration
                 ("Bureaux", "Bureaux du soir", 90, Semaine, new TimeSpan(18, 30, 0), "Bernard"),
                 ("Vitrerie", "Vitrerie", 60, ["Samedi"], new TimeSpan(9, 0, 0), null),
             ]),
+    ];
+
+    // ---------------------------------------------------------------------------
+    // Lot B : comptes, stock, passages.
+    // ---------------------------------------------------------------------------
+
+    /// <summary>L'agent dont le compte ouvre <i>Ma journée</i>, passé tous les jours à République.</summary>
+    private const string AgentAuCompte = "Nguyen";
+
+    private const string SitePointe = "Bureaux République";
+    private const string TypePointe = "Bureaux";
+    private const string ClientDuSyndic = "Bellevue";
+
+    /// <summary>L'équipe du chef : la vue d'un chef d'équipe n'en montre pas d'autre (CLAUDE.md §7).</summary>
+    private static readonly string[] EquipeDuChef = ["Nguyen", "Bernard", "Lefevre"];
+
+    /// <summary>Rang, dans les passages passés de l'agent, de ceux qui ne sont pas certifiés.</summary>
+    private const int RangSansPosition = 3;
+    private const int RangHorsRayon = 8;
+
+    /// <summary>Le passage dont un point de checklist reste décoché : un compte rendu, pas une condition.</summary>
+    private const int RangPointOublie = 6;
+
+    /// <summary>(rang du passage, description, traitée le lendemain). Aucune ne nomme personne.</summary>
+    private static readonly (int Rang, string Description, bool Traitee)[] AnomaliesSignalees =
+    [
+        (5, "Fuite sous l'évier de la kitchenette, flaque au sol.", true),
+        (10, "Néon grillé dans le couloir du premier étage.", false),
+        (11, "Distributeur de savon cassé dans les sanitaires.", false),
+    ];
+
+    /// <summary>(rôle, nom, prénom, courriel). Le compte de l'agent reprend le courriel de sa fiche.</summary>
+    private static readonly (string Role, string Nom, string Prenom, string Email)[] Comptes =
+    [
+        (RolesKlean.Responsable, "Laurent", "Sophie", "s.laurent@demo-proprete.example"),
+        (RolesKlean.ChefEquipe, "Petit", "Marc", "m.petit@demo-proprete.example"),
+        (RolesKlean.Agent, "Nguyen", "Linh", "l.nguyen@demo-proprete.example"),
+        (RolesKlean.ClientSyndic, "Garnier", "Hélène", "h.garnier@bellevue-gestion.example"),
+    ];
+
+    private static (string Cle, ProduitCreateDto Dto)[] Produits =>
+    [
+        ("Detergent", new ProduitCreateDto { Nom = "Détergent sols", Reference = "DS-5L", Unite = "L", SeuilAlerte = 10 }),
+        ("Desinfectant", new ProduitCreateDto { Nom = "Désinfectant surfaces", Reference = "DF-1L", Unite = "L", SeuilAlerte = 5 }),
+        ("Vitres", new ProduitCreateDto { Nom = "Nettoyant vitres", Reference = "NV-750", Unite = "L", SeuilAlerte = 4 }),
+        ("Sacs", new ProduitCreateDto { Nom = "Sacs poubelle 100 L", Unite = "rouleau", SeuilAlerte = 20 }),
+        ("Papier", new ProduitCreateDto { Nom = "Papier toilette", Unite = "colis", SeuilAlerte = 6 }),
+    ];
+
+    /// <summary>Un véhicule se nomme par sa plaque, jamais par son conducteur (CLAUDE.md §7 bis).</summary>
+    private static readonly (string Cle, string Nom, string Type)[] Emplacements =
+    [
+        ("Depot", "Dépôt central", nameof(TypeEmplacement.Depot)),
+        ("Vehicule", "Utilitaire AB-123-CD", nameof(TypeEmplacement.Vehicule)),
+    ];
+
+    private static readonly (string Type, string Produit, decimal Quantite)[] Consommations =
+    [
+        ("Communes", "Detergent", 0.5m),
+        ("Communes", "Desinfectant", 0.2m),
+        ("Communes", "Sacs", 1m),
+        ("Bureaux", "Desinfectant", 0.3m),
+        ("Bureaux", "Sacs", 0.5m),
+        ("Bureaux", "Papier", 0.25m),
+        ("Vitrerie", "Vitres", 0.4m),
+    ];
+
+    /// <summary>
+    /// (nature, produit, origine, destination, quantité) ; un lieu est la clé d'un emplacement ou
+    /// le nom d'un site. ⚠️ Le nettoyant vitres entre à 3 L pour un seuil de 4 : le produit sous
+    /// son seuil que l'écran du stock doit signaler. L'inventaire du détergent laisse un écart.
+    /// </summary>
+    private static readonly (string Nature, string Produit, string? Origine, string? Destination, decimal Quantite)[] Mouvements =
+    [
+        (nameof(NatureMouvement.Entree), "Detergent", null, "Depot", 40m),
+        (nameof(NatureMouvement.Entree), "Desinfectant", null, "Depot", 20m),
+        (nameof(NatureMouvement.Entree), "Vitres", null, "Depot", 3m),
+        (nameof(NatureMouvement.Entree), "Sacs", null, "Depot", 100m),
+        (nameof(NatureMouvement.Entree), "Papier", null, "Depot", 30m),
+        (nameof(NatureMouvement.Transfert), "Desinfectant", "Depot", "Vehicule", 6m),
+        (nameof(NatureMouvement.Transfert), "Sacs", "Depot", "Vehicule", 20m),
+        (nameof(NatureMouvement.Transfert), "Papier", "Depot", "Bureaux République", 8m),
+        (nameof(NatureMouvement.Transfert), "Sacs", "Depot", "Bureaux République", 10m),
+        (nameof(NatureMouvement.Sortie), "Papier", "Bureaux République", null, 2m),
+        (nameof(NatureMouvement.Inventaire), "Detergent", null, "Depot", 38m),
     ];
 }

@@ -3956,6 +3956,79 @@ le journal ne se découvrent qu'après avoir tout saisi soi-même. « Suite » l
   garde. Elle est sortie en `internal`, et un test l'éprouve directement.
 - Série serveur complète : 720 tests verts, 710 + 10, en 7 min 49 s contre 6 min 34 s.
 
+**Lot B — le code, fait le 21 novembre 2026**
+
+- **Les comptes**, par `POST /api/auth/comptes` : un responsable, un chef d'équipe, l'agent
+  Nguyen lié à sa fiche, un client syndic lié à Bellevue Gestion. Le compte rendu porte les
+  quatre mots de passe provisoires, une fois. L'équipe du chef — Nguyen, Bernard, Lefèvre —
+  est posée par le `PUT` de chaque fiche, qui vérifie le rattachement.
+- **Le stock** :
+  - cinq produits, un dépôt et un véhicule, nommé par sa plaque ;
+  - sept consommations par type ;
+  - onze mouvements, par le service du stock, dont des transferts vers un site, une sortie
+    et un inventaire qui laisse un écart de −2 ;
+  - le nettoyant vitres, entré à 3 L pour un seuil de 4, est le produit sous son seuil.
+- **Les passages**, par `demarrer` et `terminer`, sous l'identité de l'agent, avec une
+  horloge posée à l'heure de chaque geste :
+  - les treize jours passés de Nguyen, dont un sans position et un hors rayon : 11
+    `Terminee`, 2 `NonCertifiee`, tranchés par le serveur ;
+  - un point de checklist décoché un jour ;
+  - trois anomalies signalées pendant un passage, dont une traitée le lendemain par
+    l'administrateur ;
+  - la vacation du jour reste à démarrer depuis *Ma journée*.
+- ⚠️ **Seul Nguyen pointe, et ce n'était pas écrit au cadrage.** Le service n'accepte que
+  l'agent affecté, par son compte. Inventer une identité aux cinq autres fabriquerait des
+  auteurs qui n'existent pas. Leurs vingt-sept vacations passées sont donc constatées
+  `NonCertifiee` par l'administrateur — « fait, sans preuve », le recours que l'API laisse.
+  Les deux samedis passés sans agent restent jamais pourvus.
+- ⚠️ **Un piège, rencontré deux fois avant d'être compris : ne jamais remplacer le
+  `HttpContext` de l'accesseur dans une méthode `async`.** Il le range dans un
+  `AsyncLocal`, et vide le porteur du précédent avant d'en poser un autre.
+  - Basculé vers l'agent dans une méthode `async`, le nouveau ne survivait pas au retour,
+    et l'ancien avait été vidé. L'administrateur n'avait plus d'entreprise, `klean_app` ne
+    voyait plus rien, et le traitement d'une anomalie ne touchait aucune ligne, en
+    `DbUpdateConcurrencyException`.
+  - La même mise à jour, rejouée en SQL sous `klean_app`, passait.
+  - Une première correction par un `using` synchrone a déplacé le défaut d'un étage, vers un
+    compte rendu à zéro.
+  - La bonne garde un seul `HttpContext` d'un bout à l'autre, et ne change que son `User`.
+- **`JeuDeDemonstrationTests`, 15 cas**, cinq de plus :
+  - les comptes, dont le mot de passe affiché ouvre bien l'étape de changement ;
+  - l'équipe du chef ;
+  - les pointages et la checklist ;
+  - les anomalies ;
+  - le stock.
+
+  Les comptes du rapport ont été faits à la main avant d'être figés, et le serveur les a
+  retrouvés : 11 et 29, 26 pointages, 52 points, 3 anomalies, 1 produit sous son seuil.
+- **Sept sabotages, tous rouges** :
+  - l'identité de l'administrateur jamais rendue ;
+  - l'agent qui pointe sous l'identité de l'administrateur, refusé par le service : la
+    règle est bien traversée ;
+  - le hors rayon pointé près du site ;
+  - l'équipe jamais rattachée ;
+  - les autres vacations jamais constatées ;
+  - l'anomalie jamais traitée ;
+  - l'inventaire retiré.
+- Série serveur complète : 725 tests verts, 720 + 5, en 8 min 11 s.
+- **Essai au navigateur, sur une base jetable `klean_demo`**, créée et migrée avec accord,
+  supprimée ensuite :
+  - l'administrateur de l'amorçage a reçu un mot de passe de test, jamais affiché ;
+  - `dotnet run -- demonstration` installe le jeu et sort avec le code 0, sur la vraie date,
+    samedi 21 novembre : 136 vacations, dont 7 sans agent ;
+  - **l'agent** : le mot de passe affiché ouvre l'étape de changement, puis *Ma journée* sur
+    la vacation du jour, à 06:30, Bureaux République, « À faire » ;
+  - **le chef d'équipe** arrive sur le planning de son équipe seule — Bernard, Lefèvre,
+    Nguyen —, avec les passages de la semaine `Terminee` ou `NonCertifiee`, puis voit les
+    deux anomalies ouvertes, signalées à 06:57 ;
+  - **le syndic** ne voit que son client, Bellevue Gestion ;
+  - aucune erreur en console.
+
+  L'administrateur et le responsable exigent un second facteur, et n'ont pas été ouverts.
+- ⚠️ **Un défaut d'affichage antérieur à ce lot**, que le jeu rend visible : les blocs du
+  planning montrent le statut brut du serveur, « NonCertifiee » et « Terminee ». Non
+  corrigé ici, ce n'est pas le périmètre.
+
 ---
 
 # Suite — non planifié

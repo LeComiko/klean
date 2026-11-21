@@ -55,6 +55,14 @@ public class JeuDeDemonstrationTests : IAsyncLifetime
         // l'incluant : Bellevue 30, Haussmann 18, Daumesnil 12, République 42, Bastille
         // 30 le soir et 6 samedis sans titulaire — les six non pourvues.
         Assert.Equal((138, 6), (rapport.Vacations, rapport.NonPourvues));
+
+        // Lot B. Nguyen pointe ses treize jours passés, dont deux sans preuve suffisante ; les
+        // vingt-sept des autres agents sont constatées sans preuve — Diallo 9, Costa 5,
+        // Moreau 4, Bernard 9. Le nettoyant vitres, entré à 3 L pour un seuil de 4.
+        Assert.Equal((11, 29), (rapport.Terminees, rapport.NonCertifiees));
+        Assert.Equal((2, 1), (rapport.AnomaliesOuvertes, rapport.AnomaliesTraitees));
+        Assert.Equal((5, 1), (rapport.Produits, rapport.ProduitsSousSeuil));
+        Assert.Equal(4, rapport.Comptes.Count);
     }
 
     [Fact]
@@ -187,6 +195,121 @@ public class JeuDeDemonstrationTests : IAsyncLifetime
         // celle-là ni aucune autre : la lecture que voici est la première, et ne contient
         // jamais sa propre ligne.
         Assert.Empty(await _client.ListerAsync<JournalAccesDto>("/api/journal-acces?taille=200"));
+    }
+
+    /// <summary>
+    /// Un compte par rôle, provisoire : le mot de passe rendu une fois est celui que le serveur
+    /// attend, et la première connexion exige d'en changer. L'agent est lié à sa fiche, le
+    /// syndic à son client.
+    /// </summary>
+    [Fact]
+    public async Task Un_compte_par_role_provisoire_et_dont_le_mot_de_passe_ouvre_la_premiere_connexion()
+    {
+        var rapport = await InstallerAsync();
+
+        var comptes = await _client.GetFromJsonAsync<List<CompteDto>>("/api/auth/comptes");
+        var agents = await _client.ListerAsync<AgentDto>("/api/agents?taille=200");
+        var clients = await _client.ListerAsync<ClientDto>("/api/clients?taille=200");
+
+        Assert.Equal(
+            [RolesKlean.Agent, RolesKlean.ChefEquipe, RolesKlean.ClientSyndic, RolesKlean.Responsable],
+            rapport.Comptes.Select(c => c.Role).Order());
+        Assert.Equal(4, rapport.Comptes.Select(c => c.MotDePasseProvisoire).Distinct().Count());
+
+        foreach (var cree in rapport.Comptes)
+        {
+            var compte = Assert.Single(comptes!, c => c.Email == cree.Email);
+            Assert.True(compte.MotDePasseProvisoire);
+            Assert.Equal(cree.Role, compte.Role);
+        }
+
+        var agent = Assert.Single(comptes!, c => c.Role == RolesKlean.Agent);
+        Assert.Equal(Assert.Single(agents, a => a.Nom == "Nguyen").Id, agent.AgentId);
+
+        var syndic = Assert.Single(comptes!, c => c.Role == RolesKlean.ClientSyndic);
+        Assert.Equal(Assert.Single(clients, c => c.Nom == "Bellevue Gestion").Id, syndic.ClientId);
+
+        // Le mot de passe affiché est le bon : le serveur demande d'en choisir un autre.
+        var connexion = await _fixture.ClientAnonyme().PostAsJsonAsync("/api/auth/connexion",
+            new ConnexionDto { Email = agent.Email, MotDePasse = rapport.Comptes.Single(c => c.Role == RolesKlean.Agent).MotDePasseProvisoire });
+
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, connexion.StatusCode);
+        Assert.Equal("ChangementMotDePasse", (await connexion.Content.ReadFromJsonAsync<EtapeConnexionDto>())!.Etape);
+    }
+
+    [Fact]
+    public async Task Le_chef_d_equipe_encadre_trois_agents_et_eux_seuls()
+    {
+        await InstallerAsync();
+
+        var chef = Assert.Single((await _client.GetFromJsonAsync<List<CompteDto>>("/api/auth/comptes"))!,
+            c => c.Role == RolesKlean.ChefEquipe);
+        var agents = await _client.ListerAsync<AgentDto>("/api/agents?taille=200");
+
+        Assert.Equal(["Bernard", "Lefèvre", "Nguyen"],
+            agents.Where(a => a.ChefEquipeId == chef.Id).Select(a => a.Nom).Order());
+        Assert.Equal(3, agents.Count(a => a.ChefEquipeId is null));
+    }
+
+    /// <summary>
+    /// Les pointages des jours passés, tranchés par le serveur : le jeu n'a donné qu'une
+    /// position, et la vacation du jour reste à démarrer depuis <i>Ma journée</i>.
+    /// </summary>
+    [Fact]
+    public async Task Les_passages_passes_sont_pointes_par_le_serveur_et_celui_du_jour_reste_a_faire()
+    {
+        await InstallerAsync();
+
+        await _fixture.AvecServicesAsync(async services =>
+        {
+            var db = services.GetRequiredService<KleanDbContext>();
+            var nguyen = await db.Agents.Where(a => a.EntrepriseId == _fixture.EntrepriseAlpha && a.Nom == "Nguyen")
+                .Select(a => a.Id).SingleAsync();
+
+            var preuves = await db.Pointages.Where(p => p.EntrepriseId == _fixture.EntrepriseAlpha)
+                .GroupBy(p => p.Preuve).Select(g => new { g.Key, Nombre = g.Count() }).ToListAsync();
+            Assert.Equal(
+                [(PreuvePointage.SurSite, 24), (PreuvePointage.HorsRayon, 1), (PreuvePointage.NonLocalisee, 1)],
+                preuves.OrderBy(p => p.Key).Select(p => (p.Key, p.Nombre)));
+
+            var controles = await db.ControlesEffectues.Where(c => c.EntrepriseId == _fixture.EntrepriseAlpha).ToListAsync();
+            Assert.Equal(52, controles.Count);
+            Assert.Single(controles, c => !c.Fait);
+
+            var aujourdhui = DateTime.SpecifyKind(Aujourdhui.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+            var duJour = await db.Interventions.SingleAsync(i => i.AgentId == nguyen && i.DatePrevue == aujourdhui);
+            Assert.Equal(StatutIntervention.Planifiee, duJour.Statut);
+        });
+    }
+
+    [Fact]
+    public async Task Trois_anomalies_dont_une_traitee_le_lendemain_par_l_administrateur()
+    {
+        await InstallerAsync();
+
+        var anomalies = await _client.ListerAsync<AnomalieDto>("/api/anomalies?taille=200");
+
+        Assert.Equal(3, anomalies.Count);
+        var traitee = Assert.Single(anomalies, a => a.Statut == "Traitee");
+        Assert.NotNull(traitee.TraiteeParId);
+        Assert.Equal(traitee.DateSignalement.Date.AddDays(1), traitee.DateTraitement!.Value.Date);
+        Assert.All(anomalies, a => Assert.Equal("Bureaux République", a.Site));
+    }
+
+    [Fact]
+    public async Task Le_nettoyant_vitres_est_sous_son_seuil_et_l_inventaire_laisse_un_ecart()
+    {
+        await InstallerAsync();
+
+        var produits = await _client.ListerAsync<ProduitDto>("/api/produits?taille=200");
+        var stocks = await _client.ListerAsync<StockDto>("/api/stocks?taille=200");
+        var mouvements = await _client.ListerAsync<MouvementStockDto>("/api/mouvements-stock?taille=200");
+
+        var vitres = Assert.Single(produits, p => p.Nom == "Nettoyant vitres");
+        Assert.Equal(3m, stocks.Where(s => s.ProduitId == vitres.Id).Sum(s => s.Quantite));
+
+        var inventaire = Assert.Single(mouvements, m => m.Nature == "Inventaire");
+        Assert.Equal(-2m, inventaire.Ecart);
     }
 
     /// <summary>
