@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# La commande d'exploitation de KLEAN (SPEC.md, étape 34, lot A1), installée dans
+# /opt/klean et appelée par /usr/local/bin/klean.
+#
+# ⚠️ Tout le corps est dans des fonctions, et `principal` n'est appelée qu'à la
+# dernière ligne. `mettre-a-jour` remplace ce fichier pendant qu'il tourne, et bash
+# lit un script au fil de l'exécution : le remplacement se fait par `mv`, qui laisse
+# l'ancien fichier au processus en cours, et une fonction déjà lue ne se relit pas.
+set -Eeuo pipefail
+umask 077
+
+REPERTOIRE="${KLEAN_REPERTOIRE:-/opt/klean}"
+
+# shellcheck source-path=SCRIPTDIR source=fonctions.sh
+. "$REPERTOIRE/fonctions.sh"
+
+principal() {
+  printf 'klean : commande en cours d’écriture.\n'
+}
+
+principal "$@"

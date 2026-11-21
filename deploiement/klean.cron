@@ -1,0 +1,5 @@
+# Sauvegarde quotidienne de KLEAN (SPEC.md, étape 34). Installé par `klean installer`
+# dans /etc/cron.d/klean ; remplacé à chaque mise à jour.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+30 3 * * * root /usr/local/bin/klean sauvegarder > /var/log/klean-sauvegarde.log 2>&1

@@ -168,6 +168,35 @@ verifier 'une liste vide ne fait pas quitter klean' liste_vide_sans_echec
 refuse_prefixe() { ! adresses_etrangeres '51.75.1.2' '51.75.1.20' > /dev/null; }
 verifier 'une adresse n’est pas reconnue par son préfixe' refuse_prefixe
 
+# ---- Publication -------------------------------------------------------------
+
+sortie=$(mktemp -d)
+"$ici/../publier.sh" 1.2.3 LeComiko/klean "$sortie" > /dev/null
+contenu=$(mktemp -d)
+tar xzf "$sortie/klean-1.2.3.tar.gz" -C "$contenu"
+
+archive_complete() {
+  local f
+  for f in docker-compose.yml klean fonctions.sh klean.cron env.modele VERSION; do
+    [ -f "$contenu/$f" ] || { printf '       manque %s\n' "$f"; return 1; }
+  done
+}
+verifier 'l’archive contient les six fichiers' archive_complete
+verifier 'VERSION porte la version' egal "$(cat "$contenu/VERSION")" 1.2.3
+sans_build() { ! grep -qE '^[[:space:]]+build:' "$contenu/docker-compose.yml"; }
+verifier 'le compose publié ne construit rien' sans_build
+verifier 'le dépôt est écrit dans fonctions.sh' grep -q "KLEAN_DEPOT_GITHUB:-LeComiko/klean" "$contenu/fonctions.sh"
+sans_marque() { ! grep -q '@DEPOT@\|@VERSION@' "$sortie/installer.sh" "$contenu/fonctions.sh"; }
+verifier 'aucune marque ne reste' sans_marque
+empreintes() { (cd "$sortie" && sha256sum -c --status klean-1.2.3.tar.gz.sha256 installer.sh.sha256); }
+verifier 'les empreintes sont justes' empreintes
+klean_executable() { [ -x "$contenu/klean" ]; }
+verifier 'klean est exécutable dans l’archive' klean_executable
+refuse_version() { ! "$ici/../publier.sh" 1.2 a/b "$sortie" 2> /dev/null; }
+verifier 'une version mal formée est refusée' refuse_version
+
+rm -rf "$sortie" "$contenu"
+
 # ---- Bilan -------------------------------------------------------------------
 
 printf '%s réussis, %s échoués\n' "$reussis" "$echoues"
