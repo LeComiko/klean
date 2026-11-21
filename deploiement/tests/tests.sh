@@ -257,10 +257,15 @@ verifier 'VERSION porte la version' egal "$(cat "$contenu/VERSION")" 1.2.3
 sans_build() { ! grep -qE '^[[:space:]]+build:' "$contenu/docker-compose.yml"; }
 verifier 'le compose publié ne construit rien' sans_build
 verifier 'le dépôt est écrit dans fonctions.sh' grep -q "KLEAN_DEPOT_GITHUB:-LeComiko/klean" "$contenu/fonctions.sh"
-sans_marque() { ! grep -q '@DEPOT@\|@VERSION@' "$sortie/installer.sh" "$contenu/fonctions.sh"; }
+sans_marque() { ! grep -q '@DEPOT@\|@VERSION@\|@EMPREINTE@' "$sortie/installer.sh" "$contenu/fonctions.sh"; }
 verifier 'aucune marque ne reste' sans_marque
 empreintes() { (cd "$sortie" && sha256sum -c --status klean-1.2.3.tar.gz.sha256 installer.sh.sha256); }
 verifier 'les empreintes sont justes' empreintes
+empreinte_gravee() {
+  egal "$(sed -n "s/^EMPREINTE_ARCHIVE='\\(.*\\)'$/\\1/p" "$sortie/installer.sh")" \
+    "$(sha256sum "$sortie/klean-1.2.3.tar.gz" | cut -d' ' -f1)"
+}
+verifier 'l’installateur porte l’empreinte de l’archive' empreinte_gravee
 klean_executable() { [ -x "$contenu/klean" ]; }
 verifier 'klean est exécutable dans l’archive' klean_executable
 refuse_version() { ! "$ici/../publier.sh" 1.2 a/b "$sortie" 2> /dev/null; }
