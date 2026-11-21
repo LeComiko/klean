@@ -109,6 +109,58 @@ verifier 'une clé absente se lit vide' egal "$(lire_env "$env" ABSENTE)" ''
 
 rm -rf "$dossier"
 
+# ---- Versions et adresses ----------------------------------------------------
+
+verifier 'version lue sur une URL de version' \
+  egal "$(version_depuis_url https://github.com/a/b/releases/tag/v1.2.3)" 1.2.3
+version_absente() { ! version_depuis_url https://github.com/a/b/releases > /dev/null; }
+verifier 'une URL sans version est refusée' version_absente
+
+KLEAN_DEPOT_GITHUB=LeComiko/klean
+verifier 'URL de l’archive' egal "$(url_archive 1.2.3)" \
+  https://github.com/LeComiko/klean/releases/download/v1.2.3/klean-1.2.3.tar.gz
+verifier 'URL de la dernière version' egal "$(url_derniere_version)" \
+  https://github.com/LeComiko/klean/releases/latest
+verifier 'le propriétaire passe en minuscules dans le nom des images' \
+  egal "$(nom_images)" ghcr.io/lecomiko/klean
+
+# ---- Machine -----------------------------------------------------------------
+
+verifier 'Debian amd64 accepté' systeme_pris_en_charge debian amd64
+verifier 'Ubuntu amd64 accepté' systeme_pris_en_charge ubuntu amd64
+refuse_arm() { ! systeme_pris_en_charge debian arm64; }
+verifier 'arm64 refusé' refuse_arm
+refuse_fedora() { ! systeme_pris_en_charge fedora amd64; }
+verifier 'Fedora refusé' refuse_fedora
+verifier '1 Go suffit' memoire_suffisante 1000000
+refuse_memoire() { ! memoire_suffisante 500000; }
+verifier '512 Mo ne suffisent pas' refuse_memoire
+
+# ---- DNS ---------------------------------------------------------------------
+
+machine=$'51.75.1.2\n2001:41d0::1'
+verifier 'toutes les adresses du domaine sont sur la machine' \
+  adresses_etrangeres $'51.75.1.2\n2001:41d0::1' "$machine"
+etrangere() { [ "$(adresses_etrangeres $'51.75.1.2\n2001:db8::9' "$machine")" = 2001:db8::9 ]; }
+verifier 'une adresse IPv6 étrangère est nommée' etrangere
+refuse_vide() { ! adresses_etrangeres '' "$machine"; }
+verifier 'un domaine qui ne résout pas est refusé' refuse_vide
+
+# ---- Rotation ----------------------------------------------------------------
+
+liste=$'/s/klean-2026-10-01T0330.dump\n/s/klean-2026-11-10T0330.dump\n/s/klean-2026-11-20T0330-avant-1.2.0.dump'
+verifier 'seules les sauvegardes antérieures à la limite partent' \
+  egal "$(sauvegardes_a_supprimer "$liste" 2026-11-07)" /s/klean-2026-10-01T0330.dump
+tout_vieux=$'/s/klean-2026-01-01T0330.dump\n/s/klean-2026-01-02T0330.dump'
+verifier 'la plus récente reste même hors délai' \
+  egal "$(sauvegardes_a_supprimer "$tout_vieux" 2026-11-07)" /s/klean-2026-01-01T0330.dump
+verifier 'le trousseau suit la même règle' \
+  egal "$(sauvegardes_a_supprimer $'/t/trousseau-2026-01-01T0330.tgz\n/t/trousseau-2026-11-20T0330.tgz' 2026-11-07)" \
+  /t/trousseau-2026-01-01T0330.tgz
+
+refuse_prefixe() { ! adresses_etrangeres '51.75.1.2' '51.75.1.20' > /dev/null; }
+verifier 'une adresse n’est pas reconnue par son préfixe' refuse_prefixe
+
 # ---- Bilan -------------------------------------------------------------------
 
 printf '%s réussis, %s échoués\n' "$reussis" "$echoues"

@@ -130,3 +130,81 @@ completer_env() {
     poser_env "$1" "$2" "$3"
   fi
 }
+
+# La version d'une URL de version GitHub : …/releases/tag/v1.2.3 donne 1.2.3. Échoue
+# sur toute autre forme : la redirection de `releases/latest` sans version publiée
+# mène à …/releases.
+version_depuis_url() {
+  local fin="${1##*/}"
+  fin="${fin#v}"
+  if [[ "$fin" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    printf '%s\n' "$fin"
+  else
+    return 1
+  fi
+}
+
+url_archive() {
+  printf 'https://github.com/%s/releases/download/v%s/klean-%s.tar.gz\n' "$KLEAN_DEPOT_GITHUB" "$1" "$1"
+}
+
+# Lue par sa redirection, sans l'API de GitHub : ni clé, ni plafond de débit.
+url_derniere_version() {
+  printf 'https://github.com/%s/releases/latest\n' "$KLEAN_DEPOT_GITHUB"
+}
+
+# Le préfixe des images. ghcr.io exige un propriétaire en minuscules.
+nom_images() {
+  printf 'ghcr.io/%s/klean\n' "$(printf '%s' "${KLEAN_DEPOT_GITHUB%%/*}" | tr '[:upper:]' '[:lower:]')"
+}
+
+# $1 : l'ID de /etc/os-release ; $2 : l'architecture selon dpkg. Les images ne sont
+# publiées qu'en amd64 en V1 (SPEC.md, étape 34).
+systeme_pris_en_charge() {
+  case "$1" in debian | ubuntu) ;; *) return 1 ;; esac
+  [ "$2" = amd64 ]
+}
+
+# $1 : MemTotal de /proc/meminfo, en kio. 1 Go, moins la part que le noyau se réserve.
+memoire_suffisante() {
+  [ "$1" -ge 900000 ]
+}
+
+# $1 : les adresses du domaine, une par ligne ; $2 : celles de la machine. Écrit les
+# adresses du domaine absentes de la machine. Réussit si toutes y sont ; échoue si une
+# manque, ou si le domaine n'a aucune adresse.
+#
+# A et AAAA ensemble : Let's Encrypt préfère IPv6, et une AAAA oubliée vers une autre
+# machine fait échouer le certificat sans rien dire.
+adresses_etrangeres() {
+  local domaine="$1" machine="$2" adresse etrangeres=0
+  [ -n "$domaine" ] || return 1
+  while IFS= read -r adresse; do
+    [ -n "$adresse" ] || continue
+    if ! printf '%s\n' "$machine" | grep -qxF "$adresse"; then
+      printf '%s\n' "$adresse"
+      etrangeres=1
+    fi
+  done <<< "$domaine"
+  return "$etrangeres"
+}
+
+# Les sauvegardes à supprimer. $1 : les fichiers, un par ligne, nommés
+# <préfixe>-AAAA-MM-JJTHHMM[…] ; $2 : la date limite AAAA-MM-JJ, strictement avant
+# laquelle une sauvegarde part. Ne rend jamais la plus récente : la rotation ne
+# supprime pas la dernière copie, même hors délai.
+sauvegardes_a_supprimer() {
+  local fichiers dernier fichier nom date
+  fichiers=$(printf '%s\n' "$1" | grep -v '^$' | sort)
+  dernier=$(printf '%s\n' "$fichiers" | tail -n 1)
+  while IFS= read -r fichier; do
+    [ -n "$fichier" ] && [ "$fichier" != "$dernier" ] || continue
+    nom="${fichier##*/}"
+    date="${nom#*-}"
+    date="${date:0:10}"
+    if [[ "$date" < "$2" ]]; then
+      printf '%s\n' "$fichier"
+    fi
+  done <<< "$fichiers"
+}
+
