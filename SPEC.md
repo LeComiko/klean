@@ -4102,8 +4102,11 @@ passe à la ligne dans un bloc étroit, ce qui a été accepté.
   - un libellé retiré ;
   - un libellé égal à son nom brut.
 - `npm test`, `npm run lint`, `npm run verifier` et `npm run build` sont verts.
-- ⚠️ **Pas d'essai au navigateur.** Le passage à la ligne de « Terminé, non certifié »
-  n'a pas été vu dans un bloc réel.
+- **Essai au navigateur, le même jour**, sur une vacation `NonCertifiee` de la base de
+  développement. À 1470 px le libellé tient sur une ligne. À 1024 px il passe à la ligne
+  comme prévu, mais il prenait la place de la durée, écrite « 1 » puis « h » sur deux
+  lignes. **Corrigé** dans `BlocVacation.css` : la durée ne rétrécit plus et ne se coupe
+  plus. Aucun test ne garde cette règle de CSS : elle se vérifie à l'œil.
 
 ---
 

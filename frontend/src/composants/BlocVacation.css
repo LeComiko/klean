@@ -39,6 +39,14 @@
   color: var(--texte-2);
 }
 
+/* La durée ne se coupe jamais : « Terminé, non certifié » est long, et dans un bloc
+   étroit il prenait la place de la durée, écrite « 1 » puis « h » sur deux lignes.
+   C'est le statut qui passe à la ligne. */
+.bloc-vacation__duree {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .bloc-vacation__statut {
   padding: 0 var(--espace-1);
   background: var(--surface);
