@@ -13,6 +13,15 @@
 # ⚠️ Les migrations ne s'appliquent JAMAIS au démarrage de l'API. Une mise à jour
 # d'image ne change pas le schéma sans geste humain : `docker compose run --rm
 # migrer`, après avoir lu les notes de version et fait une sauvegarde.
+#
+# Installé par `installer.sh`, ce fichier vient d'une version publiée, sans
+# instruction de construction : les images sont téléchargées depuis ghcr.io,
+# désignées par KLEAN_IMAGES et KLEAN_VERSION (SPEC.md, étape 34). Ici, dans le
+# dépôt, il construit encore.
+#
+# ⚠️ Ne jamais écrire le mot-clé de construction suivi de deux-points dans un
+# commentaire de ce fichier : la série du déploiement le cherche dans le compose
+# publié.
 
 name: klean
 
@@ -63,7 +72,7 @@ services:
 
   api:
     build: ./backend
-    image: klean-api:local
+    image: ${KLEAN_IMAGES:-klean}-api:${KLEAN_VERSION:-local}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -111,7 +120,7 @@ services:
   #     docker compose run --rm migrer                      # tout appliquer
   #     docker compose run --rm migrer NomDeLaMigration     # revenir à celle-ci
   migrer:
-    image: klean-api:local
+    image: ${KLEAN_IMAGES:-klean}-api:${KLEAN_VERSION:-local}
     profiles: [outils]
     depends_on:
       postgres:
@@ -126,7 +135,7 @@ services:
 
   caddy:
     build: ./frontend
-    image: klean-caddy:local
+    image: ${KLEAN_IMAGES:-klean}-caddy:${KLEAN_VERSION:-local}
     restart: unless-stopped
     depends_on: [api]
     environment:
