@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fabrique les fichiers d'une version publiée (SPEC.md, étape 34, lot A1) :
-#   klean-<version>.tar.gz          docker-compose.yml sans build:, klean, fonctions.sh,
-#                                   klean.cron, env.modele, VERSION
+#   klean-<version>.tar.gz          docker-compose.yml sans build:, fonctions.sh, klean,
+#                                   klean.cron, env.modele, FICHIERS, VERSION
 #   installer.sh                    @DEPOT@ et @VERSION@ remplacés, et @EMPREINTE@ par
 #                                   l'empreinte de l'archive : l'installateur n'accepte
 #                                   qu'elle
@@ -19,6 +19,11 @@ sortie="${3:-}"
 [ -n "$sortie" ] || { printf 'Dossier de sortie manquant.\n' >&2; exit 1; }
 
 racine=$(cd "$(dirname "$0")/.." && pwd)
+# Les fichiers d'une version, VERSION en dernier. Écrits aussi dans le manifeste
+# FICHIERS de l'archive : c'est lui que lit le `klean` de la version installée pour
+# mettre celle-ci en place, et non sa propre liste, figée dans le code qui tourne — un
+# fichier ajouté par une version future ne serait sinon jamais posé.
+fichiers='docker-compose.yml fonctions.sh klean klean.cron env.modele FICHIERS VERSION'
 travail=$(mktemp -d)
 trap 'rm -rf "$travail"' EXIT
 mkdir -p "$sortie"
@@ -30,6 +35,8 @@ sed "s|@DEPOT@|$depot|g" "$racine/deploiement/fonctions.sh" > "$travail/fonction
 cp "$racine/deploiement/klean" "$racine/deploiement/klean.cron" "$racine/deploiement/env.modele" "$travail/"
 chmod 755 "$travail/klean"
 printf '%s\n' "$version" > "$travail/VERSION"
+# shellcheck disable=SC2086  # liste de noms simples, découpée exprès
+printf '%s\n' $fichiers > "$travail/FICHIERS"
 
 # Une marque restée dans un fichier publié pointerait le serveur vers un dépôt nommé
 # « @DEPOT@ » : refusé ici, avant que l'archive existe, plutôt que découvert à la
@@ -42,8 +49,8 @@ fi
 # Reproductible : ni date, ni propriétaire, ni ordre de lecture du disque dans
 # l'archive — deux publications du même commit donnent la même empreinte, qu'un tiers
 # peut refaire. GNU tar, celui du CI et de la série.
-tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner -cf - -C "$travail" \
-  docker-compose.yml klean fonctions.sh klean.cron env.modele VERSION |
+# shellcheck disable=SC2086  # idem
+tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner -cf - -C "$travail" $fichiers |
   gzip -n > "$sortie/klean-$version.tar.gz"
 
 # L'archive d'abord, puis l'installateur qui porte son empreinte.

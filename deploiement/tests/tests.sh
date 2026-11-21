@@ -216,6 +216,17 @@ verifier 'une seconde ligne est refusée' empreinte_refusee "$hex  klean-1.2.3.t
 verifier 'un fichier vide est refusé' empreinte_refusee ''
 verifier 'une page HTML est refusée' empreinte_refusee '<html>Not Found</html>'
 
+verifier 'le manifeste est lu, un nom par ligne' \
+  egal "$(manifeste_valide $'klean\nnouveau.sh\nVERSION' | tr '\n' ' ')" 'klean nouveau.sh VERSION '
+manifeste_refuse() { ! manifeste_valide "$1" > /dev/null; }
+verifier 'un chemin dans le manifeste est refusé' manifeste_refuse $'../etc/passwd\nVERSION'
+verifier 'une barre oblique dans le manifeste est refusée' manifeste_refuse $'sous/klean\nVERSION'
+verifier 'un nom à point initial est refusé' manifeste_refuse $'.env\nVERSION'
+verifier 'deux points dans un nom sont refusés' manifeste_refuse $'a..b\nVERSION'
+verifier 'une ligne vide est refusée' manifeste_refuse $'klean\n\nVERSION'
+verifier 'VERSION doit venir en dernier' manifeste_refuse $'VERSION\nklean'
+verifier 'un manifeste vide est refusé' manifeste_refuse ''
+
 KLEAN_DEPOT_GITHUB=LeComiko/klean
 verifier 'URL de l’archive' egal "$(url_archive 1.2.3)" \
   https://github.com/LeComiko/klean/releases/download/v1.2.3/klean-1.2.3.tar.gz
@@ -261,6 +272,14 @@ verifier 'une sauvegarde datée de la limite reste' \
   egal "$(sauvegardes_a_supprimer $'/s/klean-2026-11-07T0330.dump\n/s/klean-2026-11-20T0330.dump' 2026-11-07)" ''
 verifier 'un nom étranger ne passe pas pour la plus récente' \
   egal "$(sauvegardes_a_supprimer $'/s/klean-2026-01-01T0330.dump\n/s/zzz' 2026-11-07)" ''
+# `klean` nomme ses sauvegardes à la seconde depuis la tâche 9 : …THHMMSS suit le motif,
+# et se trie avec les noms à la minute d'avant.
+a_la_seconde=$'/s/klean-2026-10-01T033015.dump\n/s/klean-2026-11-20T0330-avant-0.2.0.dump\n/s/klean-2026-11-20T120005-avant-restauration.dump'
+verifier 'une sauvegarde nommée à la seconde suit la rotation' \
+  egal "$(sauvegardes_a_supprimer "$a_la_seconde" 2026-11-07)" /s/klean-2026-10-01T033015.dump
+verifier 'la plus récente nommée à la seconde reste même hors délai' \
+  egal "$(sauvegardes_a_supprimer $'/s/klean-2026-01-01T0330.dump\n/s/klean-2026-01-02T033059.dump' 2026-11-07)" \
+  /s/klean-2026-01-01T0330.dump
 # Un appel nu, sous `set -e` comme dans `klean` : une liste vide ne doit pas le faire quitter.
 liste_vide_sans_echec() { bash -c 'set -euo pipefail; . "$1"; sauvegardes_a_supprimer "" 2026-11-07; echo fin' _ "$ici/../fonctions.sh" | grep -qx fin; }
 verifier 'une liste vide ne fait pas quitter klean' liste_vide_sans_echec
@@ -277,11 +296,20 @@ tar xzf "$sortie/klean-1.2.3.tar.gz" -C "$contenu"
 
 archive_complete() {
   local f
-  for f in docker-compose.yml klean fonctions.sh klean.cron env.modele VERSION; do
+  for f in docker-compose.yml fonctions.sh klean klean.cron env.modele FICHIERS VERSION; do
     [ -f "$contenu/$f" ] || { printf '       manque %s\n' "$f"; return 1; }
   done
 }
-verifier 'l’archive contient les six fichiers' archive_complete
+verifier 'l’archive contient les sept fichiers' archive_complete
+verifier 'le manifeste nomme exactement les fichiers de l’archive' \
+  egal "$(tar tzf "$sortie/klean-1.2.3.tar.gz" | sort | tr '\n' ' ')" "$(sort "$contenu/FICHIERS" | tr '\n' ' ')"
+manifeste_publie_valide() { manifeste_valide "$(cat "$contenu/FICHIERS")" > /dev/null; }
+verifier 'le manifeste publié est valide, VERSION en dernier' manifeste_publie_valide
+# installer.sh copie sa propre liste : elle doit être celle du manifeste de son archive.
+installateur_suit_le_manifeste() {
+  egal "$(sed -n "s/^FICHIERS='\(.*\)'$/\1/p" "$sortie/installer.sh")" "$(tr '\n' ' ' < "$contenu/FICHIERS" | sed 's/ $//')"
+}
+verifier 'installer.sh copie les fichiers du manifeste, dans son ordre' installateur_suit_le_manifeste
 verifier 'VERSION porte la version' egal "$(cat "$contenu/VERSION")" 1.2.3
 sans_build() { ! grep -qE '^[[:space:]]+build:' "$contenu/docker-compose.yml"; }
 verifier 'le compose publié ne construit rien' sans_build
@@ -307,7 +335,8 @@ verifier 'une version mal formée est refusée' refuse_version
 refuse_depot() { ! "$ici/../publier.sh" 1.2.3 a "$sortie" 2> /dev/null; }
 verifier 'un dépôt mal formé est refusé' refuse_depot
 
-# La même version, publiée de nouveau une seconde plus tard, donne la même archive.
+# La même version, publiée de nouveau une seconde plus tard, donne la même archive —
+# manifeste compris.
 seconde=$(mktemp -d)
 sleep 1
 "$ici/../publier.sh" 1.2.3 LeComiko/klean "$seconde" > /dev/null

@@ -327,6 +327,24 @@ empreinte_publiee() {
   printf '%s\n' "${BASH_REMATCH[1]}"
 }
 
+# Les fichiers d'une version, d'après le contenu $1 de son manifeste FICHIERS (écrit par
+# publier.sh) : un nom par ligne, VERSION en dernier. Rendus un par ligne, ou un échec
+# si une seule ligne n'est pas un simple nom de fichier — ni `/`, ni `..`, ni nom
+# commençant par un point : copiés dans /opt/klean par root, ils ne doivent rien
+# atteindre d'autre, ni .env.
+manifeste_valide() {
+  local ligne derniere='' liste=''
+  [ -n "$1" ] || return 1
+  while IFS= read -r ligne; do
+    [[ "$ligne" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]*$ ]] || return 1
+    [[ "$ligne" != *..* ]] || return 1
+    liste+="$ligne"$'\n'
+    derniere="$ligne"
+  done <<< "$1"
+  [ "$derniere" = VERSION ] || return 1
+  printf '%s' "$liste"
+}
+
 url_archive() {
   printf 'https://github.com/%s/releases/download/v%s/klean-%s.tar.gz\n' "$KLEAN_DEPOT_GITHUB" "$1" "$1"
 }

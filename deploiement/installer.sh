@@ -18,8 +18,10 @@ VERSION_KLEAN='@VERSION@'
 # de plus que l'archive elle-même — qui peut changer l'une peut changer l'autre.
 EMPREINTE_ARCHIVE='@EMPREINTE@'
 REPERTOIRE=/opt/klean
-# VERSION en dernier : c'est lui qui dit qu'une copie est complète.
-FICHIERS='docker-compose.yml klean fonctions.sh klean.cron env.modele VERSION'
+# VERSION en dernier : c'est lui qui dit qu'une copie est complète. La liste du
+# manifeste FICHIERS de l'archive de cette même version — la série du déploiement vérifie
+# qu'elles concordent : l'installateur et l'archive sont publiés ensemble.
+FICHIERS='docker-compose.yml fonctions.sh klean klean.cron env.modele FICHIERS VERSION'
 
 echouer() {
   printf '✗ %s\n' "$*" >&2
