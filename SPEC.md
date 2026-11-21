@@ -4288,6 +4288,306 @@ codes, ont été écartées.
 
 ---
 
+# Étape 34 — Installer KLEAN sans être informaticien
+
+Une étude de onze logiciels du marché, le 21 novembre 2026, a confirmé la place de KLEAN :
+ils coûtent de 30 € à plus de 1 000 $ par mois, et aucun ne classe les remplaçants par
+score. La priorité retenue est l'**adoption**, et la réponse qui la cadre est que **le
+patron installe KLEAN lui-même**. Or le parcours actuel s'adresse à un administrateur
+système. Cette étape le rend praticable par un patron ; le portail client et le contrôle
+qualité viendront ensuite, en partie (*Suite*).
+
+Le cadrage a été relu le 21 novembre 2026 par quatre relecteurs — exploitation, sécurité,
+.NET, RGPD —, et corrigé en conséquence. Ce qui a changé par rapport à la première version
+est marqué *(relecture)*.
+
+**Ce qui existe, relu le 21 novembre 2026**
+
+- **L'installation de `DEPLOIEMENT.md` demande cinq gestes d'informaticien** : cloner le
+  dépôt ; remplir à la main douze variables de `.env`, dont un mot de passe PostgreSQL et
+  une clé de session à générer soi-même ; construire les images sur le serveur ; migrer
+  puis démarrer, dans cet ordre ; sauvegarder et mettre à jour en recopiant la
+  documentation. La restauration existe en documentation seulement, et suppose de recréer
+  le rôle `klean_app` d'abord (§10, `pg_dump` ne sauvegarde pas les rôles).
+- **Aucune image n'est publiée**, et le dépôt n'a pas de remote. `.github/workflows/ci.yml`
+  existe, donc la cible est GitHub. Le CI construit en amd64.
+- **L'amorçage exige ses trois variables, sinon l'API ne démarre pas** (`AmorcageService`).
+  Le mot de passe de l'administrateur est donc écrit en clair dans `.env`. L'amorçage n'est
+  pas transactionnel : un échec entre l'entreprise et le compte laisse une entreprise
+  orpheline.
+- **Une requête anonyme passe sous `klean_app` avec une entreprise vide**
+  (`BasculeRoleApplicatif`) : `Entreprises` y paraît vide, et toute écriture y est refusée.
+  `klean_app` a le droit d'insérer dans toutes les tables ; la politique d'`Entreprises`
+  porte sur son `Id`. `AspNetUsers` est hors de la RLS.
+- **Un site exige une latitude et une longitude** (`SiteCreateDto`, deux `double` non
+  nullables : une valeur absente vaut 0 et passe le `[Range]`). L'écran les fait taper à la
+  main : aucun géocodage n'existe. `RGPD.md` §3 affirme « aucun appel sortant hors SMTP ».
+- **Aucun import.** Clients, sites **et agents** ne s'écrivent que par l'administrateur
+  (`POST` des trois contrôleurs). Une partie des règles vit dans les contrôleurs et non dans
+  les DTOs — le type de client lu par `Enum.TryParse`, l'existence du client d'un site —,
+  et la validation de modèle répond en anglais (§10).
+- **Aucun index unique** sur le nom d'un client, l'adresse électronique d'un agent ou le nom
+  d'un site ; l'adresse électronique d'un agent est facultative.
+- **La taille du corps est plafonnée à 1 Mo pour toute requête**, avant le routage
+  (`LimiteCorpsRequete`, réglable par `Http:TailleMaxCorpsOctets`). Le délai d'une requête
+  est de 30 s, sauf politique propre.
+- **Le trousseau de la Data Protection se sauvegarde aussi souvent que la base, mais
+  jamais avec elle** (§6) : les deux ensemble livrent toutes les clés du second facteur.
+
+**Réponses obtenues le 21 novembre 2026**
+
+| Question | Réponse | Ce que cela veut dire |
+|---|---|---|
+| Qui installe | **le patron lui-même** | aucune étape ne doit supposer d'ouvrir un fichier ni de connaître Docker |
+| Le chemin | **un script en une commande, puis un assistant dans le navigateur** | sur un serveur neuf Debian ou Ubuntu ; le paquet YunoHost est écarté pour l'instant |
+| Le VPS OVH de l'auteur | **banc d'essai du script** | remis à neuf pour chaque essai ; aucune démonstration publique dans cette étape |
+| Ce qu'on importe | **agents, clients et sites** | contrats et prestations restent à l'écran |
+| Le format | **`.xlsx`** | lu sans dépendance ; *(relecture)* le CSV est abandonné : un fichier ne porte pas trois feuilles, et l'encodage d'Excel en français en ferait un piège |
+| Les coordonnées des sites | **géocodées par l'API Adresse de l'État** | *(relecture)* **sur choix explicite de l'exploitant**, jamais par défaut ; les adresses des **sites** seulement |
+
+**Décidé à la relecture, à confirmer**
+
+- **Images amd64 seulement en V1.** Le script refuse une machine arm64 en le disant. Le
+  multi-architecture demanderait un bundle de migration par architecture et une émulation
+  lente en CI : à reprendre si un patron le demande.
+- **Pas de copie hors de la machine en V1.** Les sauvegardes restent sur le serveur, et
+  `klean etat` le dit tant qu'aucune copie n'en sort. Un VPS perdu perd tout : le `README`
+  le dit en gras.
+
+**Ce que je propose — trois lots, chacun livrable seul**
+
+**Lot A1 — Installer et tenir à jour**
+
+1. **Une version publiée, c'est trois choses à la même étiquette `vX.Y.Z`** :
+   - deux images, l'API et Caddy avec le frontend, sur `ghcr.io`, construites par le CI au
+     `push` d'une étiquette `v*` (permission `packages: write`) ;
+   - une archive de version : `docker-compose.yml`, le script `klean`, et le fichier
+     `VERSION`. Le serveur ne clone pas le dépôt : `/opt/klean` contient cette archive,
+     jamais plus ;
+   - l'empreinte SHA-256 de l'installateur et de l'archive, publiée avec elles.
+
+   ⚠️ Un paquet `ghcr.io` est **privé à sa création**, même pour un dépôt public : chaque
+   image se rend publique une fois, à la main, sinon le téléchargement anonyme échoue. Et le
+   dépôt doit être public sur GitHub — ce que l'AGPL demande déjà.
+2. **`installer.sh`**, lancé d'une commande copiée depuis le `README`, toujours depuis une
+   **étiquette**, jamais `main`. Le `README` montre aussi « télécharger, vérifier
+   l'empreinte, lire, lancer ». Le corps du script est une fonction appelée à la dernière
+   ligne : un téléchargement tronqué n'exécute rien.
+   - **Vérifie** : root, Debian ou Ubuntu en amd64, 1 Go de mémoire au moins, ports 80 et
+     443 libres, sous-réseau du compose libre. Sinon il s'arrête en disant quoi faire.
+   - **Ne détruit jamais une installation** : un `.env` existant est relu, jamais réécrit.
+     Une seconde exécution reprend où la première s'est arrêtée, sans régénérer un seul
+     secret — un nouveau mot de passe PostgreSQL face à un volume existant rendrait
+     l'instance inaccessible (§10).
+   - **Installe Docker** s'il manque, depuis le dépôt officiel de Docker.
+   - **Demande le domaine**, et compare ses adresses **A et AAAA** à celles de la machine,
+     sans interroger de service tiers. En cas d'écart, il le dit, propose d'attendre la
+     propagation, et demande s'il faut continuer.
+   - **Pose deux questions facultatives** : le SMTP, et le **géocodage des adresses de
+     sites**, en une phrase qui dit ce qui part et vers qui. Sans réponse : non.
+   - **Génère les secrets** — mot de passe PostgreSQL, clé de session, code d'installation
+     — sous `umask 077` ; `/opt/klean` en 700, `.env` en 600, à root.
+   - **Télécharge, migre, démarre**, puis vérifie que `https://domaine` répond, avec
+     quelques tentatives espacées, sans boucler : Let's Encrypt plafonne les échecs. En
+     échec, il affiche les journaux de Caddy et rappelle le pare-feu du panneau de
+     l'hébergeur.
+   - **N'affiche le code d'installation qu'une fois le certificat obtenu** : sa saisie ne
+     passe jamais en clair.
+3. **`klean`, une commande installée avec le reste** :
+   - `klean mettre-a-jour [version]` : télécharge la nouvelle archive et ses images pendant
+     que l'ancienne version tourne, **puis** sauvegarde, migre, redémarre. Sans version, la
+     dernière publiée, lue sur la redirection `releases/latest` de GitHub, sans l'API. La
+     version précédente est notée ; **si la migration échoue**, la commande le dit et
+     affiche `klean revenir`.
+   - `klean revenir` : la version précédente, et la restauration de la sauvegarde prise
+     juste avant la mise à jour. Pas de migration descendante : c'est plus sûr pour un
+     patron que la procédure de `DEPLOIEMENT.md` §5.
+   - `klean sauvegarder`, `klean restaurer <sauvegarde>` — qui recrée `klean_app`, arrête
+     l'API, restaure la base puis le trousseau, et avertit que **les pseudonymisations
+     faites depuis la sauvegarde sont défaites** —, `klean etat`, `klean journaux`, et
+     `klean code`, qui réaffiche le code d'installation tant qu'aucun compte n'existe.
+   - Une archive plus récente peut apporter une variable nouvelle : `klean` la complète
+     dans `.env` sans toucher aux secrets existants.
+4. **Une sauvegarde quotidienne**, par `/etc/cron.d` et chemins absolus, quatorze jours de
+   rotation — sauvegardes de mise à jour comprises.
+   - **La base** dans `/var/backups/klean`, **le trousseau** dans `/var/lib/klean-trousseau`,
+     seulement quand il change : deux racines, pour qu'aucune copie « du dossier des
+     sauvegardes » ne les emporte ensemble. Dossiers en 700, fichiers en 600, à root.
+   - **Une sauvegarde ne compte qu'une fois vérifiée** : écrite dans un fichier temporaire,
+     relue par `pg_restore --list`, puis renommée. La rotation ne supprime jamais la
+     dernière bonne copie.
+   - **`klean etat` alerte** quand la dernière sauvegarde réussie a plus de 48 h, et quand le
+     disque manque de place.
+5. **Éprouvé sur le VPS OVH remis à neuf** : installation, seconde exécution, mise à jour
+   d'une version à la suivante, retour arrière, restauration. Le domaine d'essai étant
+   réutilisé, des cookies d'un essai précédent peuvent rester dans le navigateur : à
+   effacer entre deux essais. `DEPLOIEMENT.md` garde le parcours manuel.
+
+**Lot A2 — Le premier lancement**
+
+1. **Deux routes anonymes**, plafonnées en débit par adresse **et** globalement.
+   - `GET /api/installation` rend `{ installee }`, et rien d'autre.
+   - `POST /api/installation` reçoit le code, l'entreprise — raison sociale, SIRET,
+     territoire — et l'administrateur — adresse, nom, prénom, mot de passe.
+2. **Le code d'installation est la garde.** Entre le démarrage et la première visite,
+   quiconque trouverait l'adresse — les journaux de transparence des certificats la
+   publient en quelques minutes — pourrait sinon s'emparer de l'entreprise.
+   - Vingt caractères base32 sans caractères ambigus, environ 100 bits, tirés par le
+     script ; jamais `$`, que docker compose interprète.
+   - La saisie est normalisée — casse, espaces, tirets — puis comparée par empreinte
+     SHA-256, en temps constant.
+   - L'API **refuse de démarrer** avec un code de moins de vingt caractères : configuré à
+     moitié.
+   - Inutile dès qu'un compte existe : la route répond alors 409.
+3. **Sous la RLS, jamais au-dessus.** La route **n'appelle pas** `DesactiverFiltrage` : une
+   route anonyme ne tourne jamais en propriétaire des tables.
+   - L'`Id` de l'entreprise est tiré avant d'ouvrir la connexion, et posé comme entreprise
+     de la requête : la connexion passe sous `klean_app` avec ce réglage, et la politique
+     d'`Entreprises` accepte l'insertion.
+   - Dans une transaction : verrou consultatif constant, dans la forme à deux entiers et un
+     espace propre ; **puis** relecture de `AspNetUsers`, hors RLS — un compte existe :
+     409 ; puis l'entreprise et l'administrateur.
+   - La création est extraite d'`AmorcageService` dans une méthode commune, jamais recopiée.
+   - Un test lit `current_user` pendant le `POST` : `klean_app`.
+4. **Le `POST` n'ouvre aucune session**, aucun cookie : la connexion qui suit fait équiper
+   le second facteur, par le parcours de l'étape 23. Le mot de passe est choisi par le
+   patron, donc pas provisoire.
+5. **Quatre écrans** : le code, l'entreprise, l'administrateur, puis **ce que l'exploitant
+   doit savoir** — il est responsable de traitement ; la note aux agents de `RGPD.md` §7 se
+   remet avant l'import et avant *Ma journée* ; les durées de conservation sont à valider ;
+   le géocodage est actif ou non, et comment le changer. Tant qu'aucun compte n'existe,
+   l'application ouvre l'assistant au lieu de la connexion.
+6. **L'amorçage par variables reste**, pour le développement et les tests. Au démarrage,
+   sans aucun compte :
+   - variables d'amorçage présentes : comme aujourd'hui, mais en transaction ;
+   - code d'installation seul : l'API démarre et attend l'assistant ;
+   - **ni l'un ni l'autre : l'API refuse de démarrer**, en nommant les deux sorties.
+   Une entreprise orpheline d'un ancien amorçage échoué donne 409 avec la marche à suivre,
+   jamais un 500 sur l'unicité du SIRET.
+
+**Lot A3 — L'import et le géocodage**
+
+1. **Administrateur seul**, comme les trois `POST` qu'il remplace ; un test par rôle refusé.
+2. **Un modèle à télécharger** : un classeur `.xlsx` de trois feuilles, *Clients*, *Sites*,
+   *Agents*, avec une ligne d'exemple chacune, produit par l'API.
+   - Les colonnes code postal et téléphone sont **au format texte** : « 01000 » et « 06… »
+     saisis comme nombres perdraient leur zéro.
+   - Les sites désignent leur client **par son nom**, colonne *Client* : un client du
+     classeur, ou un client déjà en base, cherché dans l'entreprise. Deux clients du même
+     nom : erreur, jamais la première correspondance.
+   - Le type de client s'écrit en mots (« Syndic », « Copropriété »), lu par une table de
+     libellés, jamais par `Enum.TryParse`.
+   - Colonnes facultatives *Latitude* et *Longitude* sur les sites, qui l'emportent sur le
+     géocodage — et deviennent obligatoires s'il est désactivé. Lues comme des valeurs
+     **nullables** : une cellule vide n'est jamais un zéro.
+   - Pas de colonne chef d'équipe ; `Actif` vaut vrai.
+3. **Le dépôt, en deux temps, sans rien garder entre les deux.** Le classeur part en corps
+   brut (`api.postBrut`), sous le plafond d'1 Mo.
+   - **Analyser** lit, valide, géocode, et rend le rapport ; rien n'est écrit, et le
+     fichier n'est **jamais persisté**.
+   - **Valider** reçoit le même classeur, refait l'analyse, puis écrit — en entier ou pas du
+     tout.
+   - Au plus 500 lignes par feuille.
+4. **Le rapport** donne pour chaque ligne refusée la feuille, la ligne, la colonne et la
+   raison, **en français** — des messages propres à l'import, jamais ceux de la validation
+   de modèle. Il ne recopie **ni nom, ni prénom, ni adresse électronique** : il désigne les
+   lignes par leur numéro, et reste hors du filet de `JournalAccesTests`.
+5. **Les règles ne sont écrites qu'une fois.** Celles qui vivent dans les contrôleurs — type
+   de client, rattachement d'un site — en sont extraites en fonctions partagées, appelées
+   par le contrôleur et par l'import.
+6. **Les doublons**, cherchés dans les tables filtrées de l'entreprise, jamais dans
+   `AspNetUsers` :
+   - client : même nom ; site : même client et même nom ; agent : même adresse
+     électronique, ou, sans elle, mêmes nom, prénom et date d'embauche ;
+   - identique à une ligne en base : « déjà présente, ignorée » ; présente mais
+     différente : « présente, différente — non mise à jour » ;
+   - deux lignes identiques dans le classeur : erreur.
+7. **L'écriture** : géocodage d'abord, **puis** la transaction — aucun appel réseau sous un
+   verrou. Verrou consultatif par entreprise, clients puis sites puis agents, le
+   `CancellationToken` de l'action passé à chaque appel.
+8. **Un `.xlsx` est un zip, donc une bombe possible, et du XML.**
+   - Décompression dans un flux qui compte les octets réellement produits : la taille
+     déclarée par le fichier ne vaut rien. Plafonds sur les entrées, les chaînes partagées,
+     les lignes et la longueur d'une cellule.
+   - Lecture XML en flux, `DtdProcessing.Prohibit`, `XmlResolver` nul, taille plafonnée.
+   - Feuilles résolues par leur nom (`workbook.xml` et ses relations), cellules par leur
+     référence, chaînes partagées et chaînes en ligne, dates reconnues par leur style et
+     par `date1904`.
+   - Les formules ne sont jamais lues, seulement les valeurs ; l'écrivain n'émet **que des
+     chaînes**, jamais de formule — règle pour tout export futur qui le réutiliserait.
+   - Les **colonnes inconnues sont ignorées**, nommées dans le rapport par leur seul
+     en-tête, jamais lues : un export de paie peut porter un numéro de sécurité sociale.
+9. **Le géocodage**, côté serveur : la politique de sécurité du contenu du navigateur n'est
+   pas touchée.
+   - **Ce qui part : la voie, le code postal et la commune** d'un site — ni son nom, ni ses
+     consignes, ni rien de la feuille *Agents*. Aucun en-tête n'identifie l'instance ;
+     `User-Agent` générique.
+   - Un client HTTP nommé ; **la substitution se fait par son `HttpMessageHandler`**, sans
+     interface de service nouvelle (§11).
+   - Adresse du service en réglage, `https` exigé au démarrage, pas de redirection suivie,
+     réponse plafonnée, coordonnées revalidées par `[Range]`. Par lot pour un classeur, avec
+     un délai par appel et un total sous les 30 s de la requête.
+   - **Une adresse trouvée avec doute** (score bas) est « à vérifier », avec la ville
+     trouvée. **Introuvable, ou service injoignable** : erreur sur la ligne, jamais un site
+     en (0, 0).
+   - Le journal technique ne doit pas recopier l'URL qui porte l'adresse : la catégorie
+     `System.Net.Http.HttpClient` est réglée en conséquence, et c'est vérifié sur le chemin
+     réel.
+   - ⚠️ **L'API Adresse migre vers la Géoplateforme de l'IGN** : adresse exacte, limites
+     d'usage, conditions et durée de conservation de ses journaux se vérifient au moment
+     d'écrire le code.
+10. **« Localiser » sur le formulaire d'un site**, administrateur seul, plafonné par compte :
+    la route géocode les champs d'adresse d'un site, pas une chaîne libre. ⚠️ Le serveur ne
+    distingue pas une adresse de site d'un domicile : c'est dit à l'écran et dans
+    `RGPD.md`.
+11. **L'écran d'import rappelle la note aux agents** de `RGPD.md` §7 : importer, c'est
+    collecter sans passer par la personne (article 14). Il dit aussi que les agents
+    importés n'ont pas de coordonnées, donc la note de distance neutre (§8).
+
+**Documents**
+
+- `RGPD.md` :
+  - §1 : la qualification du service de géocodage, destinataire ou sous-traitant, tranchée
+    sur ses conditions ;
+  - T6 : le géocodage comme moyen de localiser les sites ; l'adresse d'un client personne
+    physique peut être une donnée personnelle ;
+  - §3 et §4 : la quatrième sortie, ce qui part, désactivée par défaut ; le téléchargement
+    des images et des versions depuis GitHub, qui ne porte aucune donnée ;
+  - §5 : les sauvegardes, quatorze jours — une donnée effacée y survit d'autant ;
+  - §11 : les choix de l'exploitant à l'installation.
+- `README.md` et `DEPLOIEMENT.md` : le chemin du script d'abord, le parcours manuel
+  ensuite ; les sauvegardes à copier ailleurs, séparément, et ce qu'elles contiennent.
+- `CLAUDE.md` : les nouvelles routes anonymes, le code d'installation, l'interdiction de
+  `DesactiverFiltrage` sur une requête HTTP.
+
+**Tests**
+
+- **A2** : code faux, code court au démarrage ; seconde installation en 409 ; deux
+  simultanées, une seule passe ; rien d'écrit si Identity refuse l'administrateur ;
+  `current_user` vaut `klean_app` ; aucun `Set-Cookie` ; les trois cas du démarrage sans
+  compte ; l'entreprise orpheline en 409.
+- **A3** :
+  - de vrais classeurs fabriqués par la série, **et au moins un produit par LibreOffice**,
+    versé en fixture : un lecteur et un écrivain écrits ensemble partagent leurs défauts ;
+  - erreurs ligne par ligne, en français ; doublons du classeur et de la base ; client
+    ambigu ; zéro de tête conservé ; cellule de coordonnées vide ;
+  - tout ou rien, éprouvé par un sabotage ; jamais d'écriture dans une autre entreprise ;
+    un test par rôle refusé ;
+  - bombe zip, « billion laughs », formule, colonne inconnue : refusés ou ignorés ;
+  - géocodage substitué : douteux, introuvable, injoignable, trop lent ; rien de la feuille
+    *Agents* dans la requête sortante.
+- **A1** : le script ne s'éprouve pas dans la série. Il s'éprouve sur le VPS, d'un serveur
+  vierge, et chaque essai est consigné ici.
+
+**Hors de cette étape**
+
+- Le paquet YunoHost, une démonstration publique, les images arm64.
+- La copie des sauvegardes hors de la machine.
+- Le géocodage des domiciles des agents ; l'import des contrats et des prestations.
+- La partie retenue de B — portail client, contrôle qualité, rapport PDF — à choisir
+  avant de la cadrer.
+---
+
 # Suite — non planifié
 
 Par ordre de valeur, à cadrer le moment venu.
