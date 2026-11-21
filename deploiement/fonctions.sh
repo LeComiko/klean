@@ -193,12 +193,18 @@ adresses_etrangeres() {
 # <préfixe>-AAAA-MM-JJTHHMM[…] ; $2 : la date limite AAAA-MM-JJ, strictement avant
 # laquelle une sauvegarde part. Ne rend jamais la plus récente : la rotation ne
 # supprime pas la dernière copie, même hors délai.
+#
+# Un nom qui ne suit pas ce motif n'est ni rendu ni compté : trié après les autres, il
+# passerait pour la plus récente et laisserait partir la vraie. Une liste vide rend
+# une sortie vide, sans échec — un grep sans résultat ferait quitter `klean`, sous
+# pipefail.
 sauvegardes_a_supprimer() {
   local fichiers dernier fichier nom date
-  fichiers=$(printf '%s\n' "$1" | grep -v '^$' | sort)
+  fichiers=$(printf '%s\n' "$1" | { grep -E '(^|/)[^/-]+-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{4}[^/]*$' || true; } | sort)
+  [ -n "$fichiers" ] || return 0
   dernier=$(printf '%s\n' "$fichiers" | tail -n 1)
   while IFS= read -r fichier; do
-    [ -n "$fichier" ] && [ "$fichier" != "$dernier" ] || continue
+    [ "$fichier" != "$dernier" ] || continue
     nom="${fichier##*/}"
     date="${nom#*-}"
     date="${date:0:10}"

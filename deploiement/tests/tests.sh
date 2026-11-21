@@ -157,6 +157,13 @@ verifier 'la plus récente reste même hors délai' \
 verifier 'le trousseau suit la même règle' \
   egal "$(sauvegardes_a_supprimer $'/t/trousseau-2026-01-01T0330.tgz\n/t/trousseau-2026-11-20T0330.tgz' 2026-11-07)" \
   /t/trousseau-2026-01-01T0330.tgz
+verifier 'une sauvegarde datée de la limite reste' \
+  egal "$(sauvegardes_a_supprimer $'/s/klean-2026-11-07T0330.dump\n/s/klean-2026-11-20T0330.dump' 2026-11-07)" ''
+verifier 'un nom étranger ne passe pas pour la plus récente' \
+  egal "$(sauvegardes_a_supprimer $'/s/klean-2026-01-01T0330.dump\n/s/zzz' 2026-11-07)" ''
+# Un appel nu, sous `set -e` comme dans `klean` : une liste vide ne doit pas le faire quitter.
+liste_vide_sans_echec() { bash -c 'set -euo pipefail; . "$1"; sauvegardes_a_supprimer "" 2026-11-07; echo fin' _ "$ici/../fonctions.sh" | grep -qx fin; }
+verifier 'une liste vide ne fait pas quitter klean' liste_vide_sans_echec
 
 refuse_prefixe() { ! adresses_etrangeres '51.75.1.2' '51.75.1.20' > /dev/null; }
 verifier 'une adresse n’est pas reconnue par son préfixe' refuse_prefixe
