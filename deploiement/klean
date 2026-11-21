@@ -2,20 +2,218 @@
 # La commande d'exploitation de KLEAN (SPEC.md, étape 34, lot A1), installée dans
 # /opt/klean et appelée par /usr/local/bin/klean.
 #
+#   sudo klean installer               première installation, ou reprise
+#   sudo klean mettre-a-jour [1.2.3]   sans version : la dernière publiée
+#   sudo klean revenir                 la version précédente, et la base d'avant (14 jours)
+#   sudo klean sauvegarder             ce que fait la tâche de chaque nuit
+#   sudo klean restaurer <sauvegarde>
+#   sudo klean etat | journaux | code
+#
 # ⚠️ Tout le corps est dans des fonctions, et `principal` n'est appelée qu'à la
 # dernière ligne. `mettre-a-jour` remplace ce fichier pendant qu'il tourne, et bash
 # lit un script au fil de l'exécution : le remplacement se fait par `mv`, qui laisse
 # l'ancien fichier au processus en cours, et une fonction déjà lue ne se relit pas.
+# shellcheck disable=SC2329,SC2034  # outils définis avant leurs appelants ; DERNIERE_SAUVEGARDE lue par mettre-a-jour
 set -Eeuo pipefail
 umask 077
 
 REPERTOIRE="${KLEAN_REPERTOIRE:-/opt/klean}"
+ENV="$REPERTOIRE/.env"
+# Deux racines, et non deux dossiers frères : une copie « du dossier des sauvegardes »
+# ne doit jamais emporter la base et le trousseau ensemble (CLAUDE.md §6).
+SAUVEGARDES="${KLEAN_SAUVEGARDES:-/var/backups/klean}"
+TROUSSEAU="${KLEAN_TROUSSEAU:-/var/lib/klean-trousseau}"
+JOURS_CONSERVATION=14
 
 # shellcheck source-path=SCRIPTDIR source=fonctions.sh
 . "$REPERTOIRE/fonctions.sh"
 
+# ---- Outils ----------------------------------------------------------------------
+
+dire() { printf '%s\n' "$*"; }
+avertir() { printf '⚠️  %s\n' "$*" >&2; }
+echouer() {
+  printf '✗ %s\n' "$*" >&2
+  exit 1
+}
+
+compose() {
+  docker compose --project-directory "$REPERTOIRE" --env-file "$ENV" \
+    -f "$REPERTOIRE/docker-compose.yml" "$@"
+}
+
+exiger_root() {
+  [ "$(id -u)" -eq 0 ] || echouer "Cette commande se lance en root : sudo klean ${COMMANDE:-}"
+}
+
+# Les questions se lisent sur le terminal, jamais sur l'entrée standard : lancé par
+# `curl … | sudo bash`, l'entrée standard est le script lui-même.
+demander() {
+  local reponse
+  printf '%s%s : ' "$1" "${2:+ [$2]}" > /dev/tty
+  read -r reponse < /dev/tty
+  printf '%s\n' "${reponse:-${2:-}}"
+}
+
+demander_secret() {
+  local reponse
+  printf '%s : ' "$1" > /dev/tty
+  read -rs reponse < /dev/tty
+  printf '\n' > /dev/tty
+  printf '%s\n' "$reponse"
+}
+
+# confirmer « question » MOT : réussit si l'utilisateur tape MOT, exactement.
+confirmer() {
+  local reponse
+  printf '%s\nTapez %s pour continuer : ' "$1" "$2" > /dev/tty
+  read -r reponse < /dev/tty
+  [ "$reponse" = "$2" ]
+}
+
+attendre_postgres() {
+  for _ in $(seq 1 30); do
+    if compose exec -T postgres pg_isready -U klean -d klean > /dev/null 2>&1; then
+      return
+    fi
+    sleep 2
+  done
+  echouer "PostgreSQL ne répond pas après une minute. Voir : sudo klean journaux"
+}
+
+nombre_de_comptes() {
+  compose exec -T postgres psql -U klean -d klean -tAc 'SELECT count(*) FROM "AspNetUsers"'
+}
+
+# ---- Sauvegarder -------------------------------------------------------------------
+
+# Chemin de la dernière sauvegarde de la base écrite par cmd_sauvegarder.
+DERNIERE_SAUVEGARDE=''
+
+cmd_sauvegarder() {
+  exiger_root
+  local suffixe="${1:-}" horodatage nom temporaire
+  horodatage=$(date +%Y-%m-%dT%H%M)
+  install -d -m 700 "$SAUVEGARDES" "$TROUSSEAU"
+  nom="$SAUVEGARDES/klean-$horodatage${suffixe:+-$suffixe}.dump"
+  temporaire="$nom.partiel"
+
+  # Écrite à côté, relue, puis renommée : un pg_dump interrompu laisserait sinon un
+  # fichier vide, et la rotation supprimerait les bonnes copies à sa place.
+  if ! compose exec -T postgres pg_dump -U klean -d klean -Fc > "$temporaire"; then
+    rm -f "$temporaire"
+    echouer "La sauvegarde de la base a échoué. Les sauvegardes précédentes sont intactes."
+  fi
+  if ! compose exec -T postgres pg_restore --list < "$temporaire" > /dev/null; then
+    rm -f "$temporaire"
+    echouer "La sauvegarde de la base est illisible : elle n'est pas gardée."
+  fi
+  chmod 600 "$temporaire"
+  mv -f "$temporaire" "$nom"
+  DERNIERE_SAUVEGARDE="$nom"
+
+  sauvegarder_trousseau "$horodatage"
+  tourner "$SAUVEGARDES" 'klean-*.dump'
+  tourner "$TROUSSEAU" 'trousseau-*.tgz'
+  date +%s > "$SAUVEGARDES/.derniere-reussie"
+  dire "Sauvegarde : $nom"
+}
+
+# Le trousseau ne change presque jamais : une archive n'est gardée que s'il a changé.
+# La plus récente contient toutes les clés, anciennes comprises (DEPLOIEMENT.md §4).
+sauvegarder_trousseau() {
+  local horodatage="$1" temporaire empreinte precedente
+  temporaire=$(mktemp "$TROUSSEAU/.partiel.XXXXXX")
+  if ! compose exec -T api tar czf - -C /home/app/.aspnet DataProtection-Keys > "$temporaire"; then
+    rm -f "$temporaire"
+    echouer "La sauvegarde du trousseau a échoué."
+  fi
+  # Une instance où personne ne s'est encore connecté n'a aucune clé : ce n'est pas une
+  # panne, et la sauvegarde de la base ne doit pas échouer pour autant.
+  if ! tar tzf "$temporaire" | grep -q 'key-.*\.xml$'; then
+    rm -f "$temporaire"
+    avertir "Le trousseau ne contient encore aucune clé : rien à sauvegarder de ce côté."
+    return
+  fi
+  empreinte=$(tar xzf "$temporaire" -O | sha256sum | cut -d' ' -f1)
+  precedente=$(cat "$TROUSSEAU/.empreinte" 2> /dev/null || true)
+  if [ "$empreinte" = "$precedente" ]; then
+    rm -f "$temporaire"
+    return
+  fi
+  chmod 600 "$temporaire"
+  mv -f "$temporaire" "$TROUSSEAU/trousseau-$horodatage.tgz"
+  printf '%s\n' "$empreinte" > "$TROUSSEAU/.empreinte"
+}
+
+tourner() {
+  local dossier="$1" motif="$2" limite fichier
+  limite=$(date -d "-$JOURS_CONSERVATION days" +%F)
+  sauvegardes_a_supprimer "$(find "$dossier" -maxdepth 1 -type f -name "$motif")" "$limite" |
+    while IFS= read -r fichier; do
+      [ -z "$fichier" ] || rm -f -- "$fichier"
+    done
+}
+
+# ---- État, journaux, code ----------------------------------------------------------
+
+cmd_etat() {
+  exiger_root
+  local derniere heures libre
+  dire "KLEAN $(lire_env "$ENV" KLEAN_VERSION) — https://$(lire_env "$ENV" KLEAN_DOMAINE)"
+  compose ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'
+
+  derniere=$(cat "$SAUVEGARDES/.derniere-reussie" 2> /dev/null || printf '0')
+  heures=$((($(date +%s) - derniere) / 3600))
+  if [ "$derniere" -eq 0 ]; then
+    avertir "Aucune sauvegarde réussie. Lancez : sudo klean sauvegarder"
+  elif [ "$heures" -gt 48 ]; then
+    avertir "Dernière sauvegarde réussie il y a $heures heures. Voir /var/log/klean-sauvegarde.log, puis : sudo klean sauvegarder"
+  else
+    dire "Dernière sauvegarde réussie il y a $heures heure(s)."
+  fi
+
+  libre=$(df -Pk "$SAUVEGARDES" | awk 'NR == 2 { print $4 }')
+  if [ "$libre" -lt 1048576 ]; then
+    avertir "Moins d'un gigaoctet libre sur le disque des sauvegardes."
+  fi
+  avertir "Aucune copie hors de ce serveur : s'il est perdu, les sauvegardes le sont avec lui. Copiez $SAUVEGARDES et $TROUSSEAU ailleurs, séparément (README, section Sauvegardes)."
+}
+
+cmd_journaux() {
+  exiger_root
+  compose logs --tail "${1:-200}" api caddy
+}
+
+cmd_code() {
+  exiger_root
+  if [ "$(nombre_de_comptes)" != 0 ]; then
+    dire "KLEAN est déjà installé : le code d'installation ne sert plus."
+    return
+  fi
+  dire "Code d'installation : $(lire_env "$ENV" KLEAN_CODE_INSTALLATION)"
+}
+
+# ---- Aiguillage ------------------------------------------------------------------
+
+aide() {
+  sed -n '3,11p' "$0" | sed 's/^# \{0,1\}//'
+}
+
 principal() {
-  printf 'klean : commande en cours d’écriture.\n'
+  # Lancé par `curl … | sudo bash`, l'entrée standard est le tube du téléchargement :
+  # coupée, pour qu'aucun `docker compose` ne la lise. Les questions passent par
+  # /dev/tty, et chaque restauration redirige la sienne explicitement.
+  exec < /dev/null
+  COMMANDE="${1:-aide}"
+  shift || true
+  case "$COMMANDE" in
+    sauvegarder) cmd_sauvegarder "$@" ;;
+    etat) cmd_etat ;;
+    journaux) cmd_journaux "$@" ;;
+    code) cmd_code ;;
+    *) aide ;;
+  esac
 }
 
 principal "$@"
