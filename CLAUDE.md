@@ -112,8 +112,10 @@ KLEAN/
 │   ├── Middleware/      VerificationCsrf, EnTetesSecurite, LimiteCorpsRequete,
 │   │                    IdentifiantCorrelation
 │   ├── Filtres/         JournaliserAcces — filtre d'action MVC, pas un middleware
+│   ├── Demonstration/   JeuDeDemonstration — la commande `demonstration`, qui traverse
+│   │                    les contrôleurs —, HorlogeDecalee, pour rejouer le passé
 │   ├── Migrations/
-│   └── Scripts/         jeu de démonstration, contrat-ecrans-reference.py,
+│   └── Scripts/         contrat-ecrans-reference.py,
 │                        et les cinq SQL de conservation — purge-journal-acces,
 │                        purge-jetons-rafraichissement, purge-pointages,
 │                        conservation-donnees-metier, degradation-absences-maladie
@@ -1651,6 +1653,23 @@ montré — l'ancien code remis, le test restait vert —, puis une sonde dans l
 Avant d'affirmer un défaut, le mesurer **sur le chemin réel** ; et un sabotage qui reste
 vert peut dire que le défaut n'existe pas.
 
+**Changer d'identité hors requête : le `User`, jamais le `HttpContext` de l'accesseur.**
+`IHttpContextAccessor` range le contexte dans un `AsyncLocal`. Quand on en pose un autre,
+il vide le porteur du précédent. Le jeu de démonstration de l'étape 28 joue chaque geste
+sous l'identité de son auteur : l'administrateur, puis l'agent qui pointe, puis de nouveau
+l'administrateur. Il le faisait d'abord en posant un `HttpContext` neuf dans une méthode
+`async`. Au retour, le contexte de l'appelant était vide, donc `TenantContext` ne lisait
+plus d'entreprise, et `klean_app` ne voyait plus rien (§7). Le symptôme ne désignait pas
+la cause : une `DbUpdateConcurrencyException` sur une anomalie à traiter, puis un compte
+rendu à zéro. La parade est de garder un seul `HttpContext` pour toute l'opération et de
+ne changer que son `User`, rendu dans un `Dispose`.
+
+**Un filtre de traces sur un préfixe perd contre une catégorie exacte.** La commande de
+démonstration fait taire les requêtes SQL. `AddFilter("Microsoft.EntityFrameworkCore", …)`
+restait sans effet en développement, parce qu'`appsettings.Development.json` règle
+`Microsoft.EntityFrameworkCore.Database.Command`, et que la règle la plus précise gagne.
+Le filtre doit viser la catégorie exacte que règle la configuration.
+
 **EF ne retire pas d'un filtre global la branche d'un paramètre nul.** Un filtre écrit
 `Axe == null || EXISTS (…)` ne devient pas `TRUE` quand l'axe est nul : EF émet
 `(@p OR EXISTS …)` pour tout le monde, et la sous-requête reste dans le SQL. J'avais
@@ -2062,6 +2081,10 @@ cd frontend && npm run preview        # https://localhost:4173, CSP de productio
 cd backend
 dotnet ef migrations add NomDeLaMigration
 dotnet ef database update
+
+# Jeu de démonstration — instance neuve seulement, mots de passe affichés une fois
+cd backend && dotnet run -- demonstration
+docker compose run --rm api demonstration
 
 # Production, depuis la racine — marche complète dans DEPLOIEMENT.md
 docker compose build

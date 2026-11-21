@@ -96,7 +96,72 @@ verrouille quinze minutes après cinq échecs de connexion.
 En production, utiliser des variables d'environnement, par exemple
 `ConnectionStrings__Klean` et `Jwt__Cle`.
 
-### 4. Backend
+### 4. Tables
+
+L'API ne crée pas ses tables, en développement pas plus qu'en production. Sur une
+base vide, elle s'arrête au démarrage sur `relation "AspNetRoles" does not exist`.
+Les migrations demandent l'outil `dotnet-ef`, à installer une fois :
+
+```bash
+dotnet tool install --global dotnet-ef --version 10.0.12
+```
+
+Sous macOS avec Homebrew, indiquez-lui où trouver le runtime. Sans cela, il échoue en
+annonçant un runtime manquant alors que le runtime est installé :
+
+```bash
+export DOTNET_ROOT=/opt/homebrew/opt/dotnet/libexec
+```
+
+Puis, toujours depuis `backend/` :
+
+```bash
+dotnet ef database update
+```
+
+La migration lit la même chaîne de connexion que l'API, dans les *user secrets*.
+
+### 5. Un jeu de démonstration, facultatif
+
+Pour voir KLEAN rempli, sans rien saisir :
+
+```bash
+dotnet run -- demonstration
+```
+
+La commande démarre comme l'API : elle crée l'entreprise et l'administrateur de
+l'étape 3 s'ils n'existent pas encore. Elle remplit ensuite cette entreprise, puis elle
+s'arrête sans servir de requête.
+
+Le jeu se construit autour du jour de l'installation, et il contient :
+- deux clients, cinq sites, six agents ;
+- les vacations de deux semaines en arrière à quatre semaines devant ;
+- un remplacement en recherche et un remplacement pourvu ;
+- des passages pointés, avec trois anomalies ;
+- un stock, dont un produit sous son seuil.
+
+Elle crée aussi un compte par rôle : responsable, chef d'équipe, agent et client
+syndic. Leurs mots de passe s'affichent **une seule fois**, dans la sortie de la
+commande. Chacun est provisoire : la première connexion le fait remplacer.
+
+Trois choses à savoir :
+
+- **Elle ne s'installe que dans une instance neuve** : une seule entreprise, sans
+  client ni agent. Sinon elle refuse en disant pourquoi, sort avec le code 1 et
+  n'écrit rien. Elle ne complète jamais des données existantes, même les siennes :
+  pour recommencer, partez d'une base neuve.
+- **Elle n'est pas atomique.** Si une règle refuse un geste en cours de route, la
+  commande s'arrête et le dit, mais ce qui précède reste écrit. Ce refus est prévu
+  pour apparaître dans la série de tests (`JeuDeDemonstrationTests`), qui joue la
+  commande à chaque passage, et pas chez vous.
+- **Elle ne laisse aucune ligne au journal d'accès.** Elle passe par les contrôleurs de
+  l'API, donc par leurs règles, mais pas par la journalisation ni par l'autorisation par
+  attribut.
+
+Lancez-la avant `dotnet watch run`, ou arrêtez celui-ci pendant la commande : les deux
+construisent le même exécutable (voir `CLAUDE.md` §10).
+
+### 6. Backend
 
 ```bash
 cd backend
@@ -108,7 +173,7 @@ L'API écoute sur <http://localhost:5137>. En développement, Swagger est
 exposé sur <http://localhost:5137/swagger> et un point de contrôle répond
 sur `/api/sante`.
 
-### 5. Certificat de développement
+### 7. Certificat de développement
 
 Le serveur de développement du frontend sert la page en **https**, et il a
 besoin d'un certificat pour cela. Le plus simple est de réutiliser celui de
@@ -131,7 +196,7 @@ navigation fonctionne, et le premier rechargement de page déconnecte.
 Sans certificat, `npm run dev` démarre quand même, en clair, avec un
 avertissement. Sous Chrome ou Firefox c'est utilisable ; sous Safari, non.
 
-### 6. Frontend
+### 8. Frontend
 
 Dans un second terminal :
 
@@ -222,29 +287,16 @@ sur chaque poussée.
 
 ## Migrations
 
-L'outil `dotnet-ef` est requis :
-
-```bash
-dotnet tool install --global dotnet-ef --version 10.0.12
-```
-
-Sous macOS avec Homebrew, il faut lui indiquer où trouver le runtime, sinon il
-échoue en annonçant un runtime manquant alors qu'il est installé :
-
-```bash
-export DOTNET_ROOT=/opt/homebrew/opt/dotnet/libexec
-```
-
-Puis, depuis `backend/` :
+L'outil `dotnet-ef` s'installe comme à l'étape 4 de l'installation. Ensuite, depuis
+`backend/` :
 
 ```bash
 dotnet ef migrations add NomDeLaMigration
 dotnet ef database update
 ```
 
-La migration `InitialCreate` crée les onze tables métier. Les cinq colonnes
-d'énumération sont de type `text` : la validation des valeurs est applicative,
-pas contrainte par la base.
+Les colonnes d'énumération sont de type `text`. La validation des valeurs est faite
+par l'application, pas par une contrainte de la base.
 
 ## Architecture
 

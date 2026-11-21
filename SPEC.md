@@ -4029,6 +4029,50 @@ le journal ne se découvrent qu'après avoir tout saisi soi-même. « Suite » l
   planning montrent le statut brut du serveur, « NonCertifiee » et « Terminee ». Non
   corrigé ici, ce n'est pas le périmètre.
 
+**Lot C — fait le 21 novembre 2026.** L'étape 28 est close.
+
+- ⚠️ **Le `README` ne menait pas un inconnu jusqu'à une API qui démarre.** Son
+  installation créait la base, puis lançait `dotnet watch run`, sans jamais migrer. La
+  migration n'apparaissait que plus bas, dans *Migrations*, après les tests. Rejoué sur une
+  base neuve, l'API s'arrête sur `relation "AspNetRoles" does not exist`. La migration
+  devient l'étape 4 de l'installation, avec l'installation de `dotnet-ef` et la variable
+  `DOTNET_ROOT`. *Migrations* y renvoie, et ne dit plus « onze tables ».
+- **`README` §5, le jeu de démonstration** : la commande, ce qu'elle installe, les mots de
+  passe affichés une fois, l'instance neuve, la non-atomicité, l'absence au journal. On la
+  lance avant `dotnet watch run`, qui construit le même exécutable.
+- **`DEPLOIEMENT.md` §2.5** : `docker compose run --rm api demonstration`, avec quatre
+  avertissements :
+  - les mots de passe disparaissent avec le conteneur ;
+  - la commande ne s'installe que dans une instance neuve ;
+  - elle n'a pas sa place sur l'instance des vraies données ;
+  - elle n'est pas atomique.
+
+  Pour recommencer, on retire `klean_postgres` seul, jamais avec `down -v`, qui emporterait
+  le trousseau et les certificats.
+- **`CLAUDE.md`** :
+  - §4 : `Demonstration/` dans l'arborescence, et le script retiré de `Scripts/` ;
+  - §13 : les deux commandes ;
+  - §10 : deux pièges, l'identité changée par le `HttpContext` de l'accesseur, et le
+    filtre de traces sur un préfixe.
+- **`backend/Scripts/jeu-de-demonstration.py` est supprimé.** Les mentions de l'étape 16
+  bis et du cadrage restent : ce sont de l'historique.
+- **Les deux parcours ont été joués tels qu'écrits, avec accord, puis retirés** :
+  - **le `README`**, sur une base jetable `klean_essai`. Les identifiants passaient par des
+    variables d'environnement, à la place des *user secrets* que le `README` fait écrire :
+    c'est le seul écart. Sans migration, l'erreur ci-dessus. Après
+    `dotnet ef database update`, `dotnet run -- demonstration` sort avec le code 0 :
+    136 vacations, dont 7 sans agent, et les quatre comptes. Un second passage est refusé
+    avec le code 1, et le journal d'accès compte 0 ligne.
+  - **Docker**, sous un projet compose à part (`-p klean-essai`), avec une image étiquetée
+    `klean-api:essai-lot-c` et un `.env` jetable :
+    - la migration par `docker compose run --rm migrer` ;
+    - puis `docker compose run --rm api demonstration` : le même compte rendu, code 0 ;
+    - un second passage refusé, code 1.
+
+    La seule ligne parasite est l'avertissement SMTP en JSON, et `DEPLOIEMENT.md` la
+    signale. `klean-api:local` et les autres conteneurs de la machine n'ont pas été
+    touchés.
+
 ---
 
 # Suite — non planifié

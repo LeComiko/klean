@@ -113,6 +113,57 @@ aux lettres.
 ouvre *Ma journée*, qui relève sa position à chaque passage : les salariés doivent en
 avoir été informés avant, et le CSE consulté s'il existe.
 
+### 2.5 Une instance de démonstration, facultative
+
+Cette étape sert à montrer KLEAN rempli : à un client, à une équipe, avant de choisir.
+Jouez-la juste après la section 2.2, avant toute saisie :
+
+```bash
+docker compose run --rm api demonstration
+```
+
+La commande remplit l'entreprise de `.env` avec :
+- deux clients, cinq sites et six agents fictifs ;
+- six semaines de vacations autour du jour même ;
+- des remplacements, des passages pointés avec leurs anomalies, et un stock.
+
+Elle crée aussi un compte par rôle : responsable, chef d'équipe, agent et client syndic.
+Elle sort ensuite, et l'API qui tourne n'en est pas affectée.
+
+Une ligne de journal en JSON la précède quand le SMTP n'est pas configuré. Elle est sans
+conséquence.
+
+⚠️ **Les mots de passe de ces comptes s'affichent une fois, dans la sortie de la
+commande, et nulle part ailleurs.** Avec `--rm`, le conteneur et son journal
+disparaissent à la sortie. Notez-les avant de fermer le terminal. Chacun est provisoire :
+la première connexion le fait remplacer, et le compte responsable équipe un téléphone,
+comme l'administrateur.
+
+⚠️ **Elle ne s'installe que dans une instance neuve** : une seule entreprise, sans client
+ni agent. Sinon, elle refuse en disant pourquoi, sort avec le code 1 et n'écrit rien. Elle
+ne complète jamais des données existantes, même les siennes. Pour recommencer, videz la
+base seule, puis reprenez la section 2.2 :
+
+```bash
+docker compose down
+docker volume rm klean_postgres     # la base, et rien d'autre
+```
+
+Évitez `down -v` : il emporte aussi le trousseau `cles-api` et les certificats de Caddy,
+et Let's Encrypt plafonne les émissions par domaine.
+
+Elle n'a pas sa place sur l'instance qui recevra vos vraies données. Des agents fictifs
+mêlés à vos salariés fausseraient le planning, le remplacement et le registre de
+`RGPD.md`.
+
+⚠️ **Elle n'est pas atomique.** Si une règle de KLEAN refuse un de ses gestes en cours
+de route, elle s'arrête et le dit, mais ce qui précède reste écrit. Le cas n'est pas
+censé arriver : la série de tests joue la commande à chaque passage. S'il arrive quand
+même, signalez-le, et repartez d'un volume vide.
+
+La commande ne laisse aucune ligne au journal d'accès. Elle passe par les règles de
+l'API, mais pas par sa journalisation.
+
 ---
 
 ## 3. Mettre à jour
