@@ -131,7 +131,12 @@ verrouiller() {
   [ -z "${KLEAN_VERROUILLE:-}" ] || return 0
   local attente="${1:-0}" options=(-n)
   [ "$attente" -eq 0 ] || options=(-w "$attente")
-  exec 9> "$VERROU"
+  # Hérité d'un `exec klean …` qui le tenait déjà : le reprendre sans rouvrir le fichier.
+  # Rouvrir fermerait le descripteur, donc le verrou, et la sauvegarde de la nuit en
+  # attente pourrait s'en emparer entre les deux.
+  if [ "$(readlink "/proc/$$/fd/9" 2> /dev/null)" != "$VERROU" ]; then
+    exec 9> "$VERROU"
+  fi
   flock "${options[@]}" 9 ||
     echouer "Une autre commande klean est en cours (la sauvegarde de la nuit ?). Réessayez dans quelques minutes."
   KLEAN_VERROUILLE=1
@@ -443,18 +448,25 @@ restaurer_base() {
 # Chaque key-*.xml a son identifiant : l'archive s'ajoute à la clé de la nouvelle
 # installation, qui reste valable à côté des anciennes.
 #
+# **Toutes** les archives, de la plus ancienne à la plus récente, pas la dernière par son
+# nom : sur un serveur neuf, une sauvegarde qui a tourné avant la restauration — la tâche
+# de la nuit, ou celle que `etat` demande — a écrit une archive datée d'aujourd'hui, qui
+# ne porte que la clé neuve ; celle de l'ancienne machine, plus ancienne, ne serait
+# jamais lue. Fusionner deux fois une même clé ne change rien.
+#
 # Le conteneur éphémère monte le volume `cles-api` et tourne sous `app`, l'utilisateur de
 # l'API (backend/Dockerfile) : les fichiers extraits lui appartiennent. L'API est arrêtée.
 # $1 : la phrase qui dit comment reprendre.
 restaurer_trousseau() {
   local archive
-  archive=$(derniere_archive_trousseau)
-  if [ -z "$archive" ]; then
+  if [ -z "$(derniere_archive_trousseau)" ]; then
     avertir "Aucune archive de trousseau : si les clés de cette machine ne sont pas celles de la sauvegarde, chaque compte devra rééquiper son second facteur (DEPLOIEMENT.md §10)."
     return
   fi
-  compose run --rm --no-deps -T --entrypoint tar api xzf - -C /home/app/.aspnet < "$archive" ||
-    echouer "La base est restaurée, mais pas le trousseau ($archive) ; l'API reste arrêtée. $1"
+  while IFS= read -r archive; do
+    compose run --rm --no-deps -T --entrypoint tar api xzf - -C /home/app/.aspnet < "$archive" ||
+      echouer "La base est restaurée, mais pas le trousseau ($archive) ; l'API reste arrêtée. $1"
+  done < <(find "$TROUSSEAU" -maxdepth 1 -type f -name 'trousseau-*.tgz' | sort)
 }
 
 # ---- Installer ------------------------------------------------------------------
@@ -469,6 +481,14 @@ cmd_installer() {
   { : > /dev/tty; } 2> /dev/null ||
     echouer "L'installation pose des questions : lancez-la dans un terminal (par ssh, ajoutez -t : ssh -t serveur '…')."
   if [ -f "$ENV" ]; then
+    # Une mise à jour ou un retour inachevé ne se termine que par sa propre commande :
+    # installer migrerait une base peut-être vide, et y créerait un nouvel administrateur.
+    if [ -n "$(lire_env "$ENV" KLEAN_RETOUR_EN_COURS)" ]; then
+      echouer "Un retour à la version précédente n'a pas abouti. Terminez-le : sudo klean revenir"
+    fi
+    if [ -n "$(lire_env "$ENV" KLEAN_MAJ_EN_COURS)" ]; then
+      echouer "Une mise à jour n'a pas abouti. Terminez-la : sudo klean mettre-a-jour, ou annulez-la : sudo klean revenir"
+    fi
     verifier_machine
     reprendre_env
     # Une seule fois : reprendre_env vient peut-être de demander le domaine, et de le
@@ -518,8 +538,8 @@ verifier_machine() {
   memoire_suffisante "$memoire" || echouer "Il faut 1 Go de mémoire au moins (trouvé : $((memoire / 1024)) Mo)."
   # À la reprise, nos propres conteneurs occupent les ports et le réseau.
   [ -f "$ENV" ] && return
-  if ss -ltnH '( sport = :80 or sport = :443 )' | grep -q .; then
-    echouer "Les ports 80 ou 443 sont déjà pris sur ce serveur (ss -ltnp les montre). KLEAN en a besoin pour son certificat."
+  if ss -ltunH '( sport = :80 or sport = :443 )' | grep -q .; then
+    echouer "Les ports 80 ou 443 sont déjà pris sur ce serveur (ss -ltunp les montre). KLEAN en a besoin pour son certificat."
   fi
   if ip -4 route | grep -q '^172\.28\.0\.'; then
     echouer "Le réseau 172.28.0.0/24 est déjà utilisé sur ce serveur : voir DEPLOIEMENT.md, réseau du compose."
@@ -884,6 +904,17 @@ afficher_fin() {
 #     défaut dans env.modele, posé avant le téléchargement des images.
 #   - Les quatre variables ci-dessus : après le remplacement des fichiers, c'est le
 #     `klean` de N+1 qui reprend une mise à jour ratée et qui conduit `revenir`.
+#   - La sonde : GET https://<KLEAN_DOMAINE>:<KLEAN_PORT_HTTPS>/api/sante répond 200 à
+#     travers Caddy. N la lit après la bascule ; renommée, chaque mise à jour réussie
+#     finirait par « ne répond pas… sudo klean revenir » — défaire une version saine.
+#   - klean.cron dans l'archive et dans le manifeste : il est réinstallé à chaque version.
+#   - env.modele : des lignes CLÉ=valeur, sans apostrophe ni guillemets, `#` pour un
+#     commentaire, `@SECRET@` pour 32 octets hexadécimaux et rien d'autre ; une valeur que
+#     poser_env refuse ferait échouer toute mise à jour, avant même l'arrêt.
+#   - PostgreSQL reste en version majeure 16 : N ne sait pas faire de pg_upgrade, et un
+#     postgres:17 face au volume existant ne démarrerait pas.
+#   - Le compose reste lisible par le plugin docker compose de l'installation : rien ne
+#     le met à jour de lui-même.
 
 # Les fichiers d'un dossier de version sans manifeste FICHIERS, dans l'ordre de leur mise
 # en place : fonctions.sh avant klean, qui le lit ; VERSION en dernier, comme dans

@@ -81,8 +81,8 @@ jobs:
           VERSION: ${{ steps.noms.outputs.version }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            --draft --verify-tag --latest \
+            --draft --verify-tag \
             --title "KLEAN $VERSION" --generate-notes \
             "dist/klean-$VERSION.tar.gz" "dist/klean-$VERSION.tar.gz.sha256" \
             dist/installer.sh dist/installer.sh.sha256
-          gh release edit "$GITHUB_REF_NAME" --draft=false
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest

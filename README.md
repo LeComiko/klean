@@ -52,6 +52,9 @@ Sur le serveur :
 curl -fsSL https://github.com/LeComiko/klean/releases/latest/download/installer.sh | sudo bash
 ```
 
+Connecté en root, sur un serveur où `sudo` n'existe pas encore : la même commande, avec
+`| bash` à la fin au lieu de `| sudo bash`.
+
 Elle installe Docker s'il manque, télécharge KLEAN, puis pose ses questions : le nom de
 domaine, la raison sociale de l'entreprise, l'adresse électronique de l'administrateur, la
 localisation des sites, et un serveur de courriel si vous en avez un (facultatif).
@@ -131,6 +134,17 @@ sudo rsync -a /var/lib/klean-trousseau/ utilisateur@une-troisieme-machine:trouss
 
 `sudo klean etat` signale l'absence de sauvegarde récente, et le rappelle. La restauration
 est décrite dans `DEPLOIEMENT.md` §4.
+
+**Reprendre sur un nouveau serveur**, après la perte de l'ancien :
+
+1. installer KLEAN sur le nouveau serveur, comme ci-dessus ;
+2. y recopier la sauvegarde de la base dans `/var/backups/klean`, et les archives du
+   trousseau (`trousseau-*.tgz`) dans `/var/lib/klean-trousseau`, en root et en mode 600 ;
+3. `sudo klean restaurer /var/backups/klean/klean-….dump`.
+
+Toutes les archives du trousseau présentes sont fusionnées, y compris la clé neuve du
+nouveau serveur : chacun se reconnecte avec son mot de passe et sa double
+authentification d'avant.
 
 ---
 
