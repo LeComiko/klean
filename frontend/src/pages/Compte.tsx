@@ -5,6 +5,7 @@ import { activerSecondFacteur, lireEtatSecondFacteur, preparerSecondFacteur, reg
 import { useAuth } from '../auth/contexte'
 import { refusLocal } from '../auth/motDePasse'
 import { saisieDe } from '../auth/secondFacteur'
+import { ChoixApparence } from '../composants/ChoixApparence'
 import { CodesRecuperation } from '../composants/CodesRecuperation'
 import { EnTetePage } from '../composants/EnTetePage'
 import { EquipementSecondFacteur } from '../composants/EquipementSecondFacteur'
@@ -138,6 +139,15 @@ export function Compte() {
             endpoint ne permet de les changer soi-même, et c'est volontaire&nbsp;: le nom
             qui figure sur un planning n'est pas une préférence personnelle.
           </p>
+        </section>
+
+        {/* Une préférence de ce navigateur, pas du compte : elle n'appelle aucune route
+            (SPEC.md, étape 32). */}
+        <section className="compte__carte" aria-labelledby="compte-apparence">
+          <h2 className="compte__titre" id="compte-apparence">
+            Apparence
+          </h2>
+          <ChoixApparence idTitre="compte-apparence" />
         </section>
 
         <section className="compte__carte" aria-labelledby="compte-mot-de-passe">

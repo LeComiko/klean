@@ -152,24 +152,49 @@ for (const interdit of interdits) {
 
 titre('Contrastes WCAG AA, thèmes clair et sombre')
 
-/** Les deux thèmes, lus dans tokens.css : la table ne peut pas divariguer du CSS. */
-function lireTheme(source) {
-  const table = {}
+/**
+ * Les deux thèmes, lus dans tokens.css : la table ne peut pas diverger du CSS. Une
+ * couleur simple vaut pour les deux thèmes ; `light-dark(clair, sombre)` en donne une
+ * à chacun (étape 32).
+ */
+function lireThemes(source) {
+  const clair = {}
+  const sombre = {}
 
-  for (const trouve of source.matchAll(/(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})\s*;/g)) {
-    table[trouve[1]] = trouve[2]
+  for (const t of source.matchAll(/(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})\s*;/g)) {
+    clair[t[1]] = t[2]
+    sombre[t[1]] = t[2]
   }
 
-  return table
+  const bivalente = /(--[a-z0-9-]+)\s*:\s*light-dark\(\s*(#[0-9a-fA-F]{6})\s*,\s*(#[0-9a-fA-F]{6})\s*\)\s*;/g
+
+  for (const t of source.matchAll(bivalente)) {
+    clair[t[1]] = t[2]
+    sombre[t[1]] = t[3]
+  }
+
+  return { clair, sombre }
 }
 
-const blocSombre = /@media\s*\(prefers-color-scheme:\s*dark\)\s*\{([\s\S]*?)\n\}/.exec(jetons)
+const blocFort = /@media\s*\(prefers-contrast:\s*more\)\s*\{([\s\S]*?)\n\}/.exec(jetons)
 
-if (blocSombre === null) {
-  verdict(false, 'le bloc prefers-color-scheme: dark est présent dans tokens.css')
-} else {
-  const clair = lireTheme(jetons.slice(0, jetons.indexOf(blocSombre[0])))
-  const sombre = { ...clair, ...lireTheme(blocSombre[1]) }
+// Le choix d'apparence de *Mon compte* (étape 32) ne tient que si `color-scheme`
+// décide de tout : un bloc `prefers-color-scheme` qui redéfinirait des couleurs
+// suivrait le système en ignorant le choix, sans aucune erreur.
+verdict(/color-scheme:\s*light dark\s*;/.test(jetons), 'la racine déclare color-scheme: light dark')
+verdict(/:root\[data-theme='clair'\]\s*\{\s*color-scheme:\s*light\s*;\s*\}/.test(jetons),
+  "data-theme='clair' force le thème clair")
+verdict(/:root\[data-theme='sombre'\]\s*\{\s*color-scheme:\s*dark\s*;\s*\}/.test(jetons),
+  "data-theme='sombre' force le thème sombre")
+{
+  const suiveurs = css.filter(({ contenu }) => /prefers-color-scheme/.test(contenu.replace(/\/\*[\s\S]*?\*\//g, '')))
+  verdict(suiveurs.length === 0, 'aucune règle prefers-color-scheme, qui ignorerait le choix',
+    suiveurs.map(({ relatif }) => relatif).join(' '))
+}
+
+{
+  // Le thème standard : tout tokens.css, hors du bloc de contraste élevé.
+  const { clair, sombre } = lireThemes(blocFort === null ? jetons : jetons.replace(blocFort[0], ''))
 
   /**
    * Les paires réellement peintes par les feuilles de style. Écrites à la main
@@ -204,41 +229,35 @@ if (blocSombre === null) {
     ['contour de focus : alerte / surface', '--alerte', '--surface', SeuilNonTextuel],
   ]
 
-  // Le contraste élevé (étape 31) : deux blocs, le clair puis le sombre, qui doivent
-  // redéfinir les mêmes jetons — en sombre les deux s'appliquent, et un jeton oublié
-  // dans le second garderait sa valeur claire sur fond sombre.
-  const blocFortClair = /@media\s*\(prefers-contrast:\s*more\)\s*\{([\s\S]*?)\n\}/.exec(jetons)
-  const blocFortSombre =
-    /@media\s*\(prefers-contrast:\s*more\)\s*and\s*\(prefers-color-scheme:\s*dark\)\s*\{([\s\S]*?)\n\}/
-      .exec(jetons)
+  // Le contraste élevé (étape 31) : un bloc, chaque jeton en `light-dark`. Une couleur
+  // simple y vaudrait pour les deux thèmes, donc une valeur claire sur fond sombre.
   const themes = [['clair', clair], ['sombre', sombre]]
 
-  if (blocFortClair === null || blocFortSombre === null) {
-    verdict(false, 'les deux blocs prefers-contrast: more sont présents dans tokens.css')
+  if (blocFort === null) {
+    verdict(false, 'le bloc prefers-contrast: more est présent dans tokens.css')
   } else {
-    const fortClair = lireTheme(blocFortClair[1])
-    const fortSombre = lireTheme(blocFortSombre[1])
-    const nomsClair = Object.keys(fortClair).sort().join(' ')
-    const nomsSombre = Object.keys(fortSombre).sort().join(' ')
+    const simples = [...blocFort[1].matchAll(/(--[a-z0-9-]+)\s*:\s*#[0-9a-fA-F]{6}\s*;/g)]
+      .map((t) => t[1])
 
-    verdict(nomsClair === nomsSombre, 'contraste élevé : les mêmes jetons en clair et en sombre',
-      nomsClair === nomsSombre ? nomsClair : `clair « ${nomsClair} » · sombre « ${nomsSombre} »`)
+    verdict(simples.length === 0, 'contraste élevé : chaque jeton porte ses deux valeurs',
+      simples.join(' '))
 
-    const clairFort = { ...clair, ...fortClair }
-    const sombreFort = { ...sombre, ...fortClair, ...fortSombre }
+    const fort = lireThemes(blocFort[1])
+    const clairFort = { ...clair, ...fort.clair }
+    const sombreFort = { ...sombre, ...fort.sombre }
     themes.push(['clair fort', clairFort], ['sombre fort', sombreFort])
 
     // Ce que le réglage promet, et que le thème standard ne tient pas exprès : des
     // bordures au seuil non textuel, et un texte secondaire plus contrasté qu'avant.
-    for (const [nom, standard, fort] of [['clair', clair, clairFort], ['sombre', sombre, sombreFort]]) {
+    for (const [nom, standard, renforce] of [['clair', clair, clairFort], ['sombre', sombre, sombreFort]]) {
       for (const bordure of ['--border', '--border-fort']) {
-        const ratio = contraste(fort[bordure], fort['--surface'])
+        const ratio = contraste(renforce[bordure], renforce['--surface'])
         verdict(ratio >= SeuilNonTextuel, `${nom} fort · ${bordure.slice(2)} / surface`,
           `${ratio.toFixed(2)}:1 (seuil ${SeuilNonTextuel.toFixed(1)})`)
       }
 
       const avant = contraste(standard['--texte-2'], standard['--surface'])
-      const apres = contraste(fort['--texte-2'], fort['--surface'])
+      const apres = contraste(renforce['--texte-2'], renforce['--surface'])
       verdict(apres > avant, `${nom} fort · texte-2 / surface plus contrasté qu'en standard`,
         `${avant.toFixed(2)}:1 → ${apres.toFixed(2)}:1`)
     }

@@ -307,6 +307,13 @@ historisée — `Pointages` garde une distance, jamais des coordonnées (T7) —
 en arrière-plan, aucun accusé de lecture de consigne, aucun cookie de mesure d'audience,
 aucune télémétrie, aucun appel sortant hors SMTP depuis la correction du §9.1.
 
+**Une seule valeur est rangée dans le navigateur**, depuis l'étape 32 : `klean.apparence`,
+dans le stockage local — le thème choisi dans *Mon compte*, « automatique », « clair » ou
+« sombre ». Elle n'est jamais envoyée au serveur, n'est rattachée à aucun compte et ne
+désigne personne. Elle relève de la personnalisation de l'interface demandée par
+l'utilisateur, que la CNIL range parmi les traceurs exemptés de consentement ; à
+confirmer avec le reste de ce document.
+
 **Le journal technique de l'API**, depuis l'étape 18 : une ligne par requête, sur la
 sortie standard. Elle porte la méthode, le chemin, le statut, la durée et un
 identifiant de corrélation — **ni adresse IP, ni identité de l'appelant, ni corps de

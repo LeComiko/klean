@@ -88,13 +88,29 @@
 }
 
 :root {
+  /* ---- Thèmes clair et sombre (étape 32) ----
+     Chaque couleur qui change de thème s'écrit une seule fois,
+     `light-dark(clair, sombre)`, et `color-scheme` décide laquelle s'applique. Par
+     défaut, le système : `light dark`. Le choix fait dans *Mon compte* pose
+     `data-theme` sur la racine, et force l'un ou l'autre (règles plus bas).
+
+     Avant l'étape 32, le sombre était un bloc `prefers-color-scheme: dark` qui
+     redéfinissait quinze jetons. Forcer un thème aurait demandé de le recopier,
+     et deux copies d'une palette finissent par diverger. `color-scheme` fait en
+     plus suivre le thème aux contrôles natifs : sélecteur de date, barres de
+     défilement.
+
+     Une couleur écrite sans `light-dark` vaut pour les deux thèmes : le blanc de
+     `--sur-brand`, et le QR code. */
+  color-scheme: light dark;
+
   /* ---- Marque ------------------------------------------------------------
      Ardoise chaude, pas un bleu : elle remplit des dizaines de blocs de
      planning sans fatiguer, et laisse la seule couleur saturée du système à
      l'information qui doit sauter aux yeux. */
-  --brand: #3f4a54;
-  --brand-strong: #2c353d;
-  --brand-tint: #e8ebee;
+  --brand: light-dark(#3f4a54, #5e6e7a);
+  --brand-strong: light-dark(#2c353d, #49555f);
+  --brand-tint: light-dark(#e8ebee, #1e252a);
 
   /* Texte posé SUR un fond de marque. Hors du tableau de §12, et nécessaire :
      --surface ne peut pas jouer ce rôle, il vaut #191A18 en thème sombre — le
@@ -105,31 +121,31 @@
   /* ---- Signaux ----------------------------------------------------------
      --alerte est la terre cuite, réservée au « non pourvu » et au focus. La
      dépenser ailleurs la banaliserait. */
-  --alerte: #9c4221;
-  --retard: #8a5a00;
-  --realise: #2f6b45;
+  --alerte: light-dark(#9c4221, #e07a55);
+  --retard: light-dark(#8a5a00, #d9a33a);
+  --realise: light-dark(#2f6b45, #6bb283);
 
   /* ---- Fonds et bordures ---- */
-  --canvas: #f6f5f2;
-  --surface: #ffffff;
-  --surface-2: #fbfaf8;
-  --border: #e3e0d9;
-  --border-fort: #cfcbc2;
+  --canvas: light-dark(#f6f5f2, #101110);
+  --surface: light-dark(#ffffff, #191a18);
+  --surface-2: light-dark(#fbfaf8, #212320);
+  --border: light-dark(#e3e0d9, #2e302b);
+  --border-fort: light-dark(#cfcbc2, #454841);
 
   /* ---- Texte ---- */
-  --texte: #1b1a17;
-  --texte-2: #6e6b64;
+  --texte: light-dark(#1b1a17, #edece7);
+  --texte-2: light-dark(#6e6b64, #a3a099);
   /* Pas de troisième niveau : voir §12. Aucune valeur ne tient AA sans se
      confondre avec --texte-2. Un troisième niveau passe par la graisse. */
 
   /* ---- Motif ----
      Redondance non colorée : un bloc hachuré reste lisible en noir et blanc,
      et par un daltonien. */
-  --hachure: #d8d4cc;
+  --hachure: light-dark(#d8d4cc, #454841);
 
   /* ---- QR code ----
-     Noir sur blanc, dans les deux thèmes, et c'est délibéré : le bloc sombre ne
-     les redéfinit pas. Un QR code inversé — clair sur sombre — n'est pas lu par
+     Noir sur blanc, dans les deux thèmes, et c'est délibéré : ils ne sont pas
+     écrits en `light-dark`. Un QR code inversé — clair sur sombre — n'est pas lu par
      toutes les applications d'authentification, et c'est le seul dessin du
      produit qu'une machine doit lire plutôt qu'un humain (étape 23). */
   --qr-fond: #ffffff;
@@ -222,64 +238,36 @@
   --focus-decalage: 2px;
 }
 
-/* ---- Thème sombre ----
-   Même système, mêmes noms : aucun composant ne sait de quel thème il relève.
-   Ce fichier est l'unique endroit du projet où ces couleurs sont redéfinies : ici,
-   et dans les deux blocs de contraste élevé qui suivent. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --brand: #5e6e7a;
-    --brand-strong: #49555f;
-    --brand-tint: #1e252a;
-
-    /* Blanc dans les deux thèmes : c'est la seule valeur qui tienne AA au-dessus
-       de #5E6E7A (5,27:1) comme de #3F4A54 (9,06:1). */
-    --sur-brand: #ffffff;
-
-    --alerte: #e07a55;
-    --retard: #d9a33a;
-    --realise: #6bb283;
-
-    --canvas: #101110;
-    --surface: #191a18;
-    --surface-2: #212320;
-    --border: #2e302b;
-    --border-fort: #454841;
-
-    --texte: #edece7;
-    --texte-2: #a3a099;
-
-    /* §12 ne donne pas de hachure sombre : la bordure forte joue ce rôle,
-       elle a le même contraste relatif sur fond sombre. */
-    --hachure: #454841;
-  }
+/* Le choix de *Mon compte* (`apparence/apparence.ts`). Sans attribut, le système
+   décide. Les deux valeurs sont lues par la série `apparence.test.ts` : un
+   attribut posé par le script et absent d'ici ne changerait rien, sans erreur. */
+:root[data-theme='clair'] {
+  color-scheme: light;
 }
 
-/* ---- Contraste élevé (étape 31) ----
+:root[data-theme='sombre'] {
+  color-scheme: dark;
+}
+
+
+/* ---- Contraste élevé (étape 31, en `light-dark` depuis l'étape 32) ----
    Le réglage « augmenter le contraste » du système. Le thème standard tient déjà AA
    partout : ceci n'est pas une correction, c'est la réponse à une demande. Elle
    rapproche le texte secondaire du texte principal et donne aux bordures le seuil
    non textuel de 3:1, que les bordures standard, volontairement discrètes, ne
    tiennent pas.
 
-   Deux blocs, et le second doit redéfinir **exactement** les jetons du premier : en
-   sombre, les deux s'appliquent, et un jeton oublié dans le second garderait sa
-   valeur claire sur fond sombre. `npm run verifier` compare les deux listes et
-   mesure les quatre thèmes. Aucun autre jeton n'est touché : la marque et
-   l'alerte ne changent pas de sens. */
+   Chaque jeton y porte ses deux valeurs, en `light-dark` : une couleur simple
+   vaudrait pour les deux thèmes, et une valeur claire tomberait sur fond sombre.
+   `npm run verifier` le refuse, et mesure les quatre thèmes. Aucun autre jeton
+   n'est touché : la marque et l'alerte ne changent pas de sens. Le contraste
+   élevé suit le thème choisi dans *Mon compte*, `light-dark` lisant
+   `color-scheme`. */
 @media (prefers-contrast: more) {
   :root {
-    --texte-2: #4a4741;
-    --border: #8f8b82;
-    --border-fort: #6e6b64;
-  }
-}
-
-@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
-  :root {
-    --texte-2: #cfccc5;
-    --border: #6b6e66;
-    --border-fort: #8a8d84;
+    --texte-2: light-dark(#4a4741, #cfccc5);
+    --border: light-dark(#8f8b82, #6b6e66);
+    --border-fort: light-dark(#6e6b64, #8a8d84);
   }
 }
 

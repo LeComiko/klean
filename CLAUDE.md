@@ -131,6 +131,7 @@ KLEAN/
     │                    qui lit csp.ts pour Caddy au lieu de la recopier
     └── src/
         ├── api/         wrappers fetch typés, client.ts, ressources.ts, + leurs séries
+        ├── apparence/   apparence.ts — le thème choisi dans Mon compte, rangé dans le navigateur
         ├── auth/        AuthContext, RouteProtegee, motDePasse.ts
         ├── comptes/     comptes.ts — l'état, les gestes et la création d'un compte
         ├── composants/  un .tsx + un .css par composant
@@ -1928,7 +1929,7 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   l'heure affichée en UTC ne rougissent qu'à Paris. Elle lit aussi les deux énumérations
   dans `backend/Models/AccesJournalise.cs` : un geste ajouté sans libellé la fait rougir.
 - **Un QR code se dessine noir sur blanc dans les deux thèmes.** `--qr-fond` et
-  `--qr-module` ne sont pas redéfinis par le bloc sombre, et c'est délibéré : un QR
+  `--qr-module` ne sont pas écrits en `light-dark()`, et c'est délibéré : un QR
   inversé n'est pas lu par toutes les applications. C'est le seul dessin du produit
   qu'une machine lit plutôt qu'un humain.
 - **Un écran de compte n'est pas une section.** `layout/sections.ts` déclare
@@ -1991,6 +1992,14 @@ seule couleur saturée du système — la **terre cuite `#9C4221`** — au signa
 jouer ce rôle : il vaut `#191A18` en thème sombre, et le libellé d'une pastille
 active tombait alors à 3,32:1, sous le seuil AA. Le blanc tient 9,06:1 au-dessus
 de `#3F4A54` et 5,27:1 au-dessus de `#5E6E7A`.
+
+**Deux thèmes, un choix** (étape 32). Chaque couleur qui change de thème s'écrit une
+seule fois dans `tokens.css`, `light-dark(clair, sombre)`, et `color-scheme` décide :
+celui du système par défaut, ou celui que *Mon compte* force par `data-theme` sur la
+racine. ⚠️ **Jamais de bloc `prefers-color-scheme`** qui redéfinirait des couleurs : il
+suivrait le système en ignorant le choix, sans erreur. `npm run verifier` le refuse.
+Apple déconseille un réglage d'apparence propre à l'application ; il a été demandé, et
+*Automatique* reste le défaut.
 
 ⚠️ **Il n'y a que deux niveaux de gris de texte, et `texte-3` a été retiré.**
 Sa valeur mesurait `3,63:1` sur `surface` et `3,33:1` sur `canvas` en thème clair,

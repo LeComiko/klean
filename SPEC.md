@@ -4193,7 +4193,61 @@ limites. Tout est traité.
 - `npm run lint`, `npm run verifier`, `npm test` et `npm run build` sont verts.
 - ⚠️ **Trouvé en passant, non traité** : dans une fenêtre de 656 px de haut, le bouton
   *Déconnexion* dépasse de 11 px sous le bord de la barre latérale. Déjà le cas avant
-  ces deux étapes.
+  ces deux étapes. Corrigé à l'étape 32.
+
+---
+
+# Étape 32 — Le choix du thème, et la barre qui reste à l'écran
+
+Deux demandes. Le thème clair existait depuis le premier jour, mais il suivait le
+système, et un Mac réglé en sombre ne montrait que le sombre. Et le défaut de la barre
+latérale trouvé à l'étape 31 était plus large qu'annoncé.
+
+**Décidé** : un choix *Automatique, Clair, Sombre* dans **Mon compte**, retenu dans le
+navigateur. Un choix rattaché au compte, qui suivrait la personne sur ses appareils, a
+été écarté : migration, champ d'API, pour une préférence d'affichage. Un bouton rapide
+dans la barre aussi : Apple déconseille un réglage d'apparence propre à l'application,
+et le placer à côté de *Déconnexion* l'aurait mis en avant. *Automatique* reste le
+défaut.
+
+**Un seul lot — fait le 21 novembre 2026**
+
+- **La barre latérale tient dans la fenêtre**, `position: sticky` et `100dvh`. Étirée
+  sur toute la hauteur de la page, elle posait *Mon compte* et *Déconnexion* au pied de
+  la page, pas de la fenêtre : sur un écran long, il fallait descendre jusqu'en bas
+  pour se déconnecter. Quand elle-même ne tient pas, elle défile. Mesuré : bouton à
+  644 px dans une fenêtre de 656, et immobile pendant que la page défile.
+- **Une palette, écrite une fois.** Les quinze couleurs qui changent de thème
+  s'écrivent `light-dark(clair, sombre)` dans `tokens.css`, et `color-scheme` décide :
+  `light dark` par défaut, forcé par `data-theme='clair'` ou `'sombre'` sur la racine.
+  Le bloc `prefers-color-scheme: dark` a disparu : forcer le sombre l'aurait fait
+  recopier, et deux copies d'une palette divergent. Le contraste élevé de l'étape 31
+  tient en un bloc, et suit le thème choisi. Effet de bord voulu : les contrôles
+  natifs — sélecteur de date, barres de défilement — suivent le thème.
+- **`apparence/apparence.ts`** lit, enregistre et applique le choix, sous la clé
+  `klean.apparence`. Une valeur illisible, un stockage absent ou qui lève rendent
+  *Automatique* ; un enregistrement impossible ne fait pas échouer le geste, et l'écran
+  le dit. Appliqué dans `main.tsx`, avant le premier rendu.
+- **`ChoixApparence`**, trois boutons radio natifs dans une carte *Apparence* de Mon
+  compte, appliqués au clic, sans bouton d'enregistrement.
+- **`apparence.test.ts`, 8 cas**, dont un qui lit `tokens.css` : chaque valeur que le
+  module pose y existe, et y force le bon `color-scheme`. Un attribut que la feuille de
+  style ne connaît pas ne changerait rien, sans erreur.
+- **`npm run verifier` lit `light-dark()`** et mesure les quatre thèmes comme avant,
+  aux mêmes valeurs. Il exige `color-scheme` et les deux règles `data-theme`, refuse
+  tout bloc `prefers-color-scheme`, qui suivrait le système en ignorant le choix, et
+  toute couleur simple dans le bloc de contraste élevé.
+- **Trois sabotages, rouges** : un bloc `prefers-color-scheme` réintroduit ; l'attribut
+  `clair` renommé dans le module ; une couleur simple dans le contraste élevé.
+- Vu au navigateur : Clair au clic, retenu au rechargement, planning hachures
+  comprises ; Sombre forcé et Automatique sur un système sombre.
+- `RGPD.md` §3 nomme la valeur rangée dans le navigateur ; `CLAUDE.md` §12 la règle des
+  deux thèmes.
+- `npm run lint`, `npm run verifier`, `npm test` et `npm run build` sont verts.
+- ⚠️ **Limite.** Le choix s'applique au chargement du script, pas avant la première
+  peinture : la politique de sécurité du contenu n'autorise aucun script en ligne dans
+  `index.html`. Qui a choisi le contraire de son système peut voir un instant le fond
+  du système au chargement.
 
 ---
 

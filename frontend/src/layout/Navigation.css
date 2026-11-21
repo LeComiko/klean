@@ -3,6 +3,17 @@
   flex-direction: column;
   align-items: center;
   flex-shrink: 0;
+  /* La barre tient dans la fenêtre, et y reste pendant que la page défile (étape
+     32). Étirée sur toute la hauteur de la page, elle posait « Mon compte » et
+     « Déconnexion » au pied de la page et non de la fenêtre : sur un long écran, il
+     fallait descendre jusqu'en bas pour se déconnecter, et dans une fenêtre de 656 px
+     le bouton dépassait déjà de 11 px. Quand elle-même ne tient pas, elle défile. */
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
   width: var(--largeur-navigation);
   padding: var(--espace-3) 0;
   background: var(--surface);

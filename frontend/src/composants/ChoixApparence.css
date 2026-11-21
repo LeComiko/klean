@@ -1,0 +1,40 @@
+.choix-apparence {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+}
+
+.choix-apparence__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-6);
+}
+
+.choix-apparence__option {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-2);
+  min-height: var(--ligne-confortable);
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  font-weight: 500;
+  color: var(--texte);
+  cursor: pointer;
+}
+
+/* Le bouton radio natif, à la couleur de la marque. Sa coche reste celle du
+   navigateur : `color-scheme` la fait suivre le thème. */
+.choix-apparence__option input {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+
+.choix-apparence__note {
+  display: block;
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  color: var(--texte-2);
+}
