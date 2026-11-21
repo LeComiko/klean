@@ -82,6 +82,22 @@ verifier 'une valeur spéciale est écrite entre apostrophes' \
 # Une fonction locale et non `bash -c` : un bash neuf ne connaîtrait pas poser_env.
 refuse_apostrophe() { ! poser_env "$env" X "l'a" 2> /dev/null; }
 verifier 'une apostrophe est refusée' refuse_apostrophe
+refuse_saut_de_ligne() { ! poser_env "$env" X $'un\nINJECTEE=1' 2> /dev/null; }
+verifier 'un saut de ligne est refusé' refuse_saut_de_ligne
+refuse_cle() { ! poser_env "$env" 'KLEAN.*' x 2> /dev/null; }
+verifier 'une clé qui n’est pas un nom de variable est refusée' refuse_cle
+
+# Le remplacement passe par awk, l'ajout par cat : la valeur spéciale, deux fois.
+poser_env "$env" KLEAN_SMTP_MOT_DE_PASSE 'f\g$h i'
+verifier 'une valeur spéciale remplacée est relue telle quelle' \
+  egal "$(lire_env "$env" KLEAN_SMTP_MOT_DE_PASSE)" 'f\g$h i'
+
+sans_fin="$dossier/sans-fin.env"
+printf 'B=deux' > "$sans_fin"
+poser_env "$sans_fin" C 'x y'
+verifier 'un .env sans saut de ligne final garde sa dernière valeur' \
+  egal "$(lire_env "$sans_fin" B)" deux
+verifier 'et reçoit la nouvelle clé sur sa propre ligne' egal "$(lire_env "$sans_fin" C)" 'x y'
 
 completer_env "$env" KLEAN_DOMAINE ecrase.exemple.fr
 verifier 'completer_env n’écrase jamais' egal "$(lire_env "$env" KLEAN_DOMAINE)" autre.exemple.fr

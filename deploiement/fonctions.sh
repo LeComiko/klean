@@ -76,15 +76,23 @@ lire_env() {
 # Pose $2=$3 dans le fichier .env $1 : remplace la ligne de la clé, ou l'ajoute.
 #
 # Une valeur hors de [A-Za-z0-9._@:/+-] est écrite entre apostrophes : docker compose
-# lit alors la valeur littéralement, sans interpréter `$`. Une apostrophe dans la
-# valeur n'a pas d'écriture sûre : refusée.
+# lit alors la valeur littéralement, sans interpréter `$`. Une apostrophe ou un saut de
+# ligne dans la valeur n'ont pas d'écriture sûre : refusés — le saut de ligne ferait de
+# la suite une clé de plus. La clé elle-même est un nom de variable, rien d'autre :
+# grep la lit comme une expression régulière.
 #
-# Le fichier est réécrit à côté puis renommé : jamais de .env à moitié écrit.
+# Le fichier est réécrit à côté puis renommé : jamais de .env à moitié écrit. Un .env
+# retouché à la main peut finir sans saut de ligne : la ligne ajoutée commence alors
+# par le sien, sinon elle se collerait à la valeur précédente.
 poser_env() {
   local fichier="$1" cle="$2" valeur="$3" ligne temporaire
+  if ! [[ "$cle" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    printf 'Clé refusée : « %s » ne désigne pas une variable.\n' "$cle" >&2
+    return 1
+  fi
   case "$valeur" in
-    *"'"*)
-      printf 'Valeur refusée pour %s : une apostrophe ne peut pas figurer dans .env.\n' "$cle" >&2
+    *"'"* | *$'\n'* | *$'\r'*)
+      printf 'Valeur refusée pour %s : une apostrophe ou un saut de ligne ne peuvent pas figurer dans .env.\n' "$cle" >&2
       return 1
       ;;
   esac
@@ -93,16 +101,25 @@ poser_env() {
   else
     ligne="$cle='$valeur'"
   fi
-  temporaire=$(mktemp "$fichier.XXXXXX")
+  temporaire=$(mktemp "$fichier.XXXXXX") || return 1
   if grep -qE "^$cle=" "$fichier" 2> /dev/null; then
     # ENVIRON plutôt que `awk -v` : -v interprète les barres obliques inverses.
     LIGNE="$ligne" CLE="$cle" awk 'index($0, ENVIRON["CLE"] "=") == 1 { print ENVIRON["LIGNE"]; next } { print }' \
-      "$fichier" > "$temporaire"
+      "$fichier" > "$temporaire" || { rm -f "$temporaire"; return 1; }
   else
-    { cat "$fichier" 2> /dev/null || true; printf '%s\n' "$ligne"; } > "$temporaire"
+    # Un sous-shell, pour que l'échec de cat en sorte sans quitter l'appelant.
+    (
+      if [ -s "$fichier" ]; then
+        cat "$fichier" || exit 1
+        [ -z "$(tail -c 1 "$fichier")" ] || printf '\n'
+      fi
+      printf '%s\n' "$ligne"
+    ) > "$temporaire" || { rm -f "$temporaire"; return 1; }
   fi
-  chmod 600 "$temporaire"
-  mv -f "$temporaire" "$fichier"
+  if ! { chmod 600 "$temporaire" && mv -f "$temporaire" "$fichier"; }; then
+    rm -f "$temporaire"
+    return 1
+  fi
 }
 
 # Ajoute $2=$3 seulement si la clé $2 est absente. C'est ce qui rend une seconde
