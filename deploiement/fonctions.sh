@@ -7,20 +7,25 @@
 # remplace @DEPOT@ ; une variable d'environnement l'emporte, pour les essais.
 KLEAN_DEPOT_GITHUB="${KLEAN_DEPOT_GITHUB:-@DEPOT@}"
 
-# Base32 sans caractères ambigus — ni 0, O, 1, I ni L — : 31 symboles. Jamais `$`, que
-# docker compose interprète dans .env.
+# L'alphabet de base32 privé des caractères ambigus — ni 0, O, 1, I ni L — : 31
+# symboles, donc pas du base32 au sens strict. Jamais `$`, que docker compose interprète
+# dans .env.
 ALPHABET_CODE='ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 
-# Un octet aléatoire, de 0 à 255.
+# Un octet aléatoire, de 0 à 255. Échoue plutôt que de rendre une chaîne vide : les
+# boucles de rejet ci-dessous tourneraient alors sans fin.
 octet_aleatoire() {
-  od -An -N1 -tu1 /dev/urandom | tr -d ' \n'
+  local octet
+  octet=$(od -An -N1 -tu1 /dev/urandom | tr -d ' \n') || return 1
+  [[ "$octet" =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "$octet"
 }
 
 # Le code d'installation de l'assistant (lot A2) : 20 symboles, environ 99 bits.
 generer_code() {
   local code='' octet
   while [ "${#code}" -lt 20 ]; do
-    octet=$(octet_aleatoire)
+    octet=$(octet_aleatoire) || return 1
     # 248 = 8 × 31. Au-delà, l'octet est rejeté : sinon les premiers symboles de
     # l'alphabet sortiraient plus souvent que les autres.
     if [ "$octet" -lt 248 ]; then
@@ -45,7 +50,7 @@ generer_mot_de_passe() {
   while :; do
     mot=''
     while [ "${#mot}" -lt 16 ]; do
-      octet=$(octet_aleatoire)
+      octet=$(octet_aleatoire) || return 1
       # 216 = 4 × 54, pour la même raison que dans generer_code.
       if [ "$octet" -lt 216 ]; then
         mot+="${alphabet:$((octet % 54)):1}"
