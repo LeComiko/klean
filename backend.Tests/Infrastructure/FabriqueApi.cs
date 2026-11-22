@@ -26,6 +26,9 @@ public class FabriqueApi : WebApplicationFactory<Program>
     private const string CleTest =
         "cle-de-signature-reservee-aux-tests-automatises-48-octets-minimum";
 
+    /// <summary>Tiré à chaque exécution : aucune valeur littérale d'un code ne circule dans le dépôt.</summary>
+    public static readonly string CodeDInstallation = Klean.Api.Services.CodeInstallation.Tirer();
+
     /// <summary>
     /// ⚠️ Les valeurs de test passent par des **variables d'environnement**, et
     /// non par <c>ConfigureAppConfiguration</c>. Avec le modèle d'hébergement
@@ -38,9 +41,6 @@ public class FabriqueApi : WebApplicationFactory<Program>
     /// Le constructeur statique s'exécute avant toute création d'hôte, l'hôte
     /// étant construit paresseusement au premier accès à <see cref="Services"/>.
     /// </summary>
-    /// <summary>Tiré à chaque exécution : aucune valeur littérale d'un code ne circule dans le dépôt.</summary>
-    public static readonly string CodeDInstallation = Klean.Api.Services.CodeInstallation.Tirer();
-
     static FabriqueApi()
     {
         static void Poser(string cle, string valeur) =>
