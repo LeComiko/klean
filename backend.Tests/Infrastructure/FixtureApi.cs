@@ -55,6 +55,13 @@ public class FixtureApi : IAsyncLifetime
         await using (var db = new KleanDbContext(options))
         {
             await db.Database.MigrateAsync();
+
+            // ⚠️ Avant de démarrer l'hôte, donc l'amorçage. Une série précédente a pu laisser la
+            // base vide ou avec une entreprise sans compte (AmorcageTests, InstallationTests) :
+            // l'amorçage refuserait alors de démarrer, et toute la série échouerait d'un coup.
+            // Vide, l'amorçage par les variables de la fabrique la remplit, puis
+            // ReinitialiserAsync la remet à la forme de la série.
+            await db.Database.ExecuteSqlRawAsync(SqlVidage);
         }
 
         Fabrique = new FabriqueApi();
@@ -73,6 +80,38 @@ public class FixtureApi : IAsyncLifetime
     }
 
     /// <summary>
+    /// Les tables métier et les comptes. Les rôles restent : l'amorçage les crée au démarrage,
+    /// et ils ne changent jamais.
+    /// </summary>
+    private const string SqlVidage = """
+        TRUNCATE TABLE
+            "Remplacements", "Absences", "Interventions", "Prestations",
+            "Contrats", "ConsommationsType", "MouvementsStock", "Stocks", "Emplacements", "Sites", "Clients", "Produits", "TypesPrestation",
+            "Agents", "Entreprises",
+            "JetonsRafraichissement",
+            "AspNetUserRoles", "AspNetUserClaims", "AspNetUserLogins",
+            "AspNetUserTokens", "AspNetRoleClaims", "AspNetUsers"
+        RESTART IDENTITY CASCADE;
+        """;
+
+    /// <summary>
+    /// Laisse la base sans entreprise ni compte — l'instance neuve que l'amorçage et
+    /// l'assistant d'installation trouvent —, et oublie ce que l'API en savait. Une classe qui
+    /// l'appelle remet la base en forme en sortant : <c>DisposeAsync =&gt; ReinitialiserAsync</c>.
+    /// </summary>
+    public async Task ViderAsync()
+    {
+        using var portee = PorteeAuProprietaire();
+        var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
+
+        await db.Database.ExecuteSqlRawAsync(SqlVidage);
+
+        var etat = Fabrique.Services.GetRequiredService<EtatInstallation>();
+        etat.EntrepriseOrpheline = false;
+        etat.Installee = false;
+    }
+
+    /// <summary>
     /// Vide les tables métier et les comptes, puis recrée les deux entreprises
     /// et leur administrateur. Les cinq rôles sont conservés : ils sont créés
     /// par l'amorçage au démarrage et ne changent jamais.
@@ -83,7 +122,6 @@ public class FixtureApi : IAsyncLifetime
         // sécurité au niveau des lignes (SPEC.md, étape 26) : `klean_app` n'a ni `TRUNCATE`, ni
         // le droit de créer une entreprise qui n'est pas la sienne.
         using var portee = PorteeAuProprietaire();
-        var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
 
         // La série partage une instance d'application : sans remise à zéro, les
         // tentatives de connexion s'accumulent d'un test à l'autre et la série
@@ -96,16 +134,7 @@ public class FixtureApi : IAsyncLifetime
         Fabrique.Courriels.Reinitialiser();
         Fabrique.Horloge.Liberer();
 
-        await db.Database.ExecuteSqlRawAsync("""
-            TRUNCATE TABLE
-                "Remplacements", "Absences", "Interventions", "Prestations",
-                "Contrats", "ConsommationsType", "MouvementsStock", "Stocks", "Emplacements", "Sites", "Clients", "Produits", "TypesPrestation",
-                "Agents", "Entreprises",
-                "JetonsRafraichissement",
-                "AspNetUserRoles", "AspNetUserClaims", "AspNetUserLogins",
-                "AspNetUserTokens", "AspNetRoleClaims", "AspNetUsers"
-            RESTART IDENTITY CASCADE;
-            """);
+        await ViderAsync();
 
         EntrepriseAlpha = await CreerEntrepriseEtAdmin(
             portee.ServiceProvider, "Alpha Propreté", "10000000000001", AdminAlpha);

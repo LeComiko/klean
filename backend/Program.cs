@@ -219,6 +219,10 @@ builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
 var jwt = new JwtService(builder.Configuration);
 builder.Services.AddSingleton(jwt);
 builder.Services.AddScoped<AmorcageService>();
+// La création de l'entreprise et de son premier administrateur, commune à l'amorçage et à
+// l'assistant d'installation ; et ce que l'API sait de son installation, partagé entre eux.
+builder.Services.AddScoped<ServiceInstallation>();
+builder.Services.AddSingleton<EtatInstallation>();
 builder.Services.AddScoped<ServiceSession>();
 builder.Services.AddScoped<ServiceSecondFacteur>();
 
@@ -398,7 +402,7 @@ if (demonstration) builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Data
 
 var app = builder.Build();
 
-// Rôles, puis entreprise et administrateur si aucun utilisateur n'existe.
+// Rôles, puis, sans aucun compte : l'amorçage par variables, l'attente de l'assistant, ou le refus.
 using (var portee = app.Services.CreateScope())
 {
     await portee.ServiceProvider.GetRequiredService<AmorcageService>().ExecuterAsync();
