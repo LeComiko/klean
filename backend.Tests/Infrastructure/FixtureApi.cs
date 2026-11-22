@@ -7,6 +7,7 @@ using Klean.Api.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 
 namespace Klean.Api.Tests.Infrastructure;
 
@@ -43,8 +44,17 @@ public class FixtureApi : IAsyncLifetime
     /// </summary>
     private readonly Dictionary<string, string> _provisoires = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>La seule base que la série a le droit de migrer, de vider et de remplir.</summary>
+    public const string BaseDeTest = "klean_test";
+
     public async Task InitializeAsync()
     {
+        // ⚠️ Avant toute écriture — la migration en est une, le vidage plus encore. Lue dans la
+        // chaîne, sans connexion : une KLEAN_TEST_CONNECTION qui viserait la base de
+        // développement la viderait à la ligne du TRUNCATE (CLAUDE.md §10).
+        var baseVisee = new NpgsqlConnectionStringBuilder(FabriqueApi.ChaineTest).Database;
+        if (baseVisee != BaseDeTest) throw BaseRefusee(baseVisee);
+
         // La migration passe par un contexte autonome, avant que l'application
         // ne démarre : AmorcageService s'exécute au démarrage et échouerait sur
         // une base sans tables.
@@ -54,7 +64,15 @@ public class FixtureApi : IAsyncLifetime
 
         await using (var db = new KleanDbContext(options))
         {
+            // La migration crée la base si elle manque — le premier lancement sur un poste neuf :
+            // la base atteinte ne se lit donc qu'après elle. Elle ne touche que la base dont le nom
+            // vient d'être vérifié.
             await db.Database.MigrateAsync();
+
+            // Seconde lecture, celle du serveur : ce que la connexion atteint vraiment, avant le vidage.
+            var baseAtteinte = await db.Database
+                .SqlQueryRaw<string>("SELECT current_database() AS \"Value\"").SingleAsync();
+            if (baseAtteinte != BaseDeTest) throw BaseRefusee(baseAtteinte);
 
             // ⚠️ Avant de démarrer l'hôte, donc l'amorçage. Une série précédente a pu laisser la
             // base vide ou avec une entreprise sans compte (AmorcageTests, InstallationTests) :
@@ -73,6 +91,10 @@ public class FixtureApi : IAsyncLifetime
         await ReinitialiserAsync();
     }
 
+    private static InvalidOperationException BaseRefusee(string? nom) => new(
+        $"La série de tests vise la base « {nom} » au lieu de « {BaseDeTest} ». Arrêt : continuer "
+        + "la viderait. Voir KLEAN_TEST_CONNECTION.");
+
     public Task DisposeAsync()
     {
         Fabrique.Dispose();
@@ -80,15 +102,18 @@ public class FixtureApi : IAsyncLifetime
     }
 
     /// <summary>
-    /// Les tables métier et les comptes. Les rôles restent : l'amorçage les crée au démarrage,
-    /// et ils ne changent jamais.
+    /// Les tables métier, le journal d'accès et les comptes. Les rôles restent : l'amorçage les
+    /// crée au démarrage, et ils ne changent jamais.
+    ///
+    /// ⚠️ <c>AccesJournalises</c> ne porte aucune clé étrangère : la cascade ne l'atteint pas, elle
+    /// doit être nommée. <c>AmorcageTests</c> vérifie qu'aucune table n'est oubliée.
     /// </summary>
     private const string SqlVidage = """
         TRUNCATE TABLE
             "Remplacements", "Absences", "Interventions", "Prestations",
             "Contrats", "ConsommationsType", "MouvementsStock", "Stocks", "Emplacements", "Sites", "Clients", "Produits", "TypesPrestation",
             "Agents", "Entreprises",
-            "JetonsRafraichissement",
+            "JetonsRafraichissement", "AccesJournalises",
             "AspNetUserRoles", "AspNetUserClaims", "AspNetUserLogins",
             "AspNetUserTokens", "AspNetRoleClaims", "AspNetUsers"
         RESTART IDENTITY CASCADE;
@@ -141,6 +166,9 @@ public class FixtureApi : IAsyncLifetime
 
         EntrepriseBeta = await CreerEntrepriseEtAdmin(
             portee.ServiceProvider, "Beta Nettoyage", "20000000000002", AdminBeta);
+
+        // Deux comptes existent : ce que l'amorçage noterait au démarrage en production.
+        Fabrique.Services.GetRequiredService<EtatInstallation>().Installee = true;
     }
 
     private static async Task<Guid> CreerEntrepriseEtAdmin(

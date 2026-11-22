@@ -89,12 +89,20 @@ public class AmorcageService
                 // Écrit en clair dans .env : il ne sert qu'une fois (SPEC.md, étape 24).
                 MotDePasseProvisoire: true), CancellationToken.None);
 
+            // Un autre processus, démarré en même temps sur la même base, a créé le compte pendant
+            // que celui-ci attendait le verrou : l'instance est installée, rien n'a échoué.
+            if (resultat.Issue == IssueInstallation.DejaInstallee)
+            {
+                _etat.Installee = true;
+                return;
+            }
+
+            // Creee : ServiceInstallation a noté l'installation lui-même.
             if (resultat.Issue != IssueInstallation.Creee)
             {
                 throw new InvalidOperationException($"Amorçage impossible ({resultat.Issue}) : {resultat.Message}");
             }
 
-            _etat.Installee = true;
             return;
         }
 
