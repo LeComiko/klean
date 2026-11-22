@@ -38,6 +38,9 @@ public class FabriqueApi : WebApplicationFactory<Program>
     /// Le constructeur statique s'exécute avant toute création d'hôte, l'hôte
     /// étant construit paresseusement au premier accès à <see cref="Services"/>.
     /// </summary>
+    /// <summary>Tiré à chaque exécution : aucune valeur littérale d'un code ne circule dans le dépôt.</summary>
+    public static readonly string CodeDInstallation = Klean.Api.Services.CodeInstallation.Tirer();
+
     static FabriqueApi()
     {
         static void Poser(string cle, string valeur) =>
@@ -51,6 +54,8 @@ public class FabriqueApi : WebApplicationFactory<Program>
         Poser("Amorcage__MotDePasseAdmin", "AmorcageTest2026");
         Poser("Amorcage__RaisonSocialeEntreprise", "Amorçage Test");
         Poser("Amorcage__SiretEntreprise", "00000000000001");
+        // La base de la série a toujours des comptes : il ne sert qu'aux tests qui la vident.
+        Poser("Installation__Code", CodeDInstallation);
 
         // Surface HTTP (étape 16). Une seule origine déclarée : il en faut une
         // pour prouver qu'elle passe, et son unicité prouve que les autres non.

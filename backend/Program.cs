@@ -225,6 +225,10 @@ builder.Services.AddScoped<ServiceSecondFacteur>();
 // Singletons : le compteur de débit doit survivre aux requêtes, et la
 // configuration SMTP est lue une fois pour toutes.
 builder.Services.AddSingleton<LimiteurDebit>();
+
+// Le code de l'assistant d'installation (SPEC.md, étape 34, lot A2). Lu avant la construction :
+// un code mal formé refuse le démarrage, comme une configuration SMTP incomplète.
+builder.Services.AddSingleton(CodeInstallation.Lire(builder.Configuration));
 builder.Services.AddSingleton<IServiceCourriel, ServiceCourrielSmtp>();
 builder.Services.AddScoped<AffectationService>();
 builder.Services.AddScoped<RemplacementService>();
