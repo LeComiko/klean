@@ -11,7 +11,36 @@ public class TenantContext : ITenantContext
 
     public bool FiltrageActif { get; private set; } = true;
 
-    public void DesactiverFiltrage() => FiltrageActif = false;
+    private Guid? _entrepriseInstallation;
+
+    /// <summary>
+    /// ⚠️ <b>Jamais dans une requête HTTP</b> (SPEC.md, étape 34, lot A2) : une route ne tourne
+    /// jamais en propriétaire des tables. Hors requête seulement : l'amorçage, la commande de
+    /// démonstration, la fixture de test. C'est un fil-piège contre l'appel involontaire, pas une
+    /// garantie : un travail lancé hors du flux de la requête n'a pas de <c>HttpContext</c>.
+    /// </summary>
+    public void DesactiverFiltrage()
+    {
+        if (_accesseur.HttpContext is not null)
+        {
+            throw new InvalidOperationException(
+                "DesactiverFiltrage dans une requête HTTP : refusé. Une route ne tourne jamais en "
+                + "propriétaire des tables (CLAUDE.md §7).");
+        }
+
+        FiltrageActif = false;
+    }
+
+    public Guid PoserEntrepriseInstallation()
+    {
+        if (_accesseur.HttpContext?.User?.Identity?.IsAuthenticated == true)
+            throw new InvalidOperationException("L'entreprise d'installation ne se pose pas sur une requête authentifiée.");
+        if (_entrepriseInstallation is not null)
+            throw new InvalidOperationException("L'entreprise d'installation est déjà posée pour cette requête.");
+
+        _entrepriseInstallation = Guid.NewGuid();
+        return _entrepriseInstallation.Value;
+    }
 
     /// <summary>
     /// Nuls pour un compte interne : aucune restriction supplémentaire ne
@@ -58,10 +87,11 @@ public class TenantContext : ITenantContext
             // Hors requête, ou requête anonyme : pas de tenant. Les onze
             // contrôleurs métier portant [Authorize], ce cas ne correspond
             // jamais à un accès aux données — seulement à l'amorçage, à la
-            // série de tests et à /api/sante.
+            // série de tests et à /api/sante — sauf l'assistant d'installation,
+            // qui pose la sienne.
             if (utilisateur?.Identity?.IsAuthenticated != true)
             {
-                return null;
+                return _entrepriseInstallation;
             }
 
             var valeur = utilisateur.FindFirst(JwtService.RevendicationEntrepriseId)?.Value;

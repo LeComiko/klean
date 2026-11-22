@@ -45,4 +45,13 @@ public interface ITenantContext
     /// qu'aucun tenant n'existe.
     /// </summary>
     void DesactiverFiltrage();
+
+    /// <summary>
+    /// Tire l'identifiant de l'entreprise que crée l'assistant d'installation (SPEC.md, étape 34,
+    /// lot A2) et en fait l'entreprise de cette requête anonyme : la connexion passe sous
+    /// <c>klean_app</c> avec ce réglage, et la politique d'<c>Entreprises</c> accepte l'insertion.
+    /// Une fois par requête, jamais sur une requête authentifiée, jamais avec un identifiant venu
+    /// d'ailleurs. Seul <c>InstallationController</c> l'appelle (un test le vérifie).
+    /// </summary>
+    Guid PoserEntrepriseInstallation();
 }
