@@ -81,7 +81,18 @@ public class InstallationTests : IAsyncLifetime
     /// Un client de la fabrique n'a pas d'adresse distante : X-Forwarded-For y serait ignoré.
     /// Recopié de <c>ExploitationTests.Envoyer</c>.
     /// </summary>
-    private async Task<(int Statut, string Corps)> EnvoyerDepuis(string transmise, object corps)
+    /// <summary>En secondes, positif, au plus la fenêtre : la durée avant qu'un essai repasse.</summary>
+    private static void AssertRetryAfter(HttpResponseMessage reponse) =>
+        AssertRetryAfter(reponse.Headers.TryGetValues("Retry-After", out var valeurs) ? valeurs.Single() : null);
+
+    private static void AssertRetryAfter(string? valeur)
+    {
+        Assert.NotNull(valeur);
+        var secondes = int.Parse(valeur);
+        Assert.InRange(secondes, 1, (int)PlafondsDebit.FenetreInstallations.TotalSeconds);
+    }
+
+    private async Task<(int Statut, string Corps, string? RetryAfter)> EnvoyerDepuis(string transmise, object corps)
     {
         var octets = JsonSerializer.SerializeToUtf8Bytes(corps);
 
@@ -98,7 +109,9 @@ public class InstallationTests : IAsyncLifetime
             requete.Request.Headers["X-Forwarded-For"] = transmise;
         });
 
-        return (contexte.Response.StatusCode, await new StreamReader(contexte.Response.Body).ReadToEndAsync());
+        var retryAfter = contexte.Response.Headers.RetryAfter.ToString();
+        return (contexte.Response.StatusCode, await new StreamReader(contexte.Response.Body).ReadToEndAsync(),
+            string.IsNullOrEmpty(retryAfter) ? null : retryAfter);
     }
 
     private async Task<List<Entreprise>> EntreprisesAsync()
@@ -151,13 +164,17 @@ public class InstallationTests : IAsyncLifetime
     /// <summary>
     /// Le second cas départage le contrôleur de la relecture de <c>ServiceInstallation</c>, qui
     /// rendrait aussi 409 sur un corps valide : le contrôleur répond avant les champs.
+    ///
+    /// Le troisième fige l'ordre : un code faux sur une instance installée rend 409, pas 400. Ce
+    /// n'est pas un oracle — <c>GET</c> dit déjà l'état —, et le code n'y sert plus à rien.
     /// </summary>
     [Theory]
-    [InlineData("40000000000004")]
-    [InlineData("123")]
-    public async Task Post_avec_des_comptes_rend_409(string siret)
+    [InlineData("40000000000004", false)]
+    [InlineData("123", false)]
+    [InlineData("40000000000004", true)]
+    public async Task Post_avec_des_comptes_rend_409(string siret, bool codeFaux)
     {
-        var reponse = await Poster(Corps(siret: siret));
+        var reponse = await Poster(Corps(siret: siret, code: codeFaux ? CodeFaux() : null));
 
         Assert.Equal(HttpStatusCode.Conflict, reponse.StatusCode);
         Assert.DoesNotContain(await EntreprisesAsync(), e => e.RaisonSociale == "Delta Propreté");
@@ -177,6 +194,42 @@ public class InstallationTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.Conflict, reponse.StatusCode);
         Assert.Equal(2, (await EntreprisesAsync()).Count);
+    }
+
+    /// <summary>
+    /// L'état en mémoire n'est qu'un raccourci : tant qu'il dit « non installée », la base est
+    /// lue. Des comptes existent, l'état est forcé à faux — ce qu'un amorçage qui n'aurait rien
+    /// vu laisserait.
+    /// </summary>
+    [Fact]
+    public async Task L_etat_non_installe_est_corrige_par_la_lecture_des_comptes()
+    {
+        Etat.Installee = false;
+
+        Assert.Equal("""{"installee":true}""", await (await _fixture.ClientAnonyme().GetAsync(Route)).Content.ReadAsStringAsync());
+        Assert.True(Etat.Installee);
+
+        Etat.Installee = false;
+
+        Assert.Equal(HttpStatusCode.Conflict, (await Poster(Corps())).StatusCode);
+        Assert.True(Etat.Installee);
+        Assert.Equal(2, (await EntreprisesAsync()).Count);
+    }
+
+    /// <summary>Le plafond par adresse passe avant la lecture de l'état : un inconnu n'interroge pas la base sans limite.</summary>
+    [Fact]
+    public async Task Sur_une_instance_installee_les_codes_faux_sont_plafonnes_par_adresse()
+    {
+        var client = _fixture.ClientAnonyme();
+
+        for (var essai = 1; essai <= PlafondsDebit.InstallationsParAdresse; essai++)
+        {
+            Assert.Equal(HttpStatusCode.Conflict, (await Poster(Corps(code: CodeFaux()), client)).StatusCode);
+        }
+
+        var refus = await Poster(Corps(code: CodeFaux()), client);
+        Assert.Equal(HttpStatusCode.TooManyRequests, refus.StatusCode);
+        AssertRetryAfter(refus);
     }
 
     [Fact]
@@ -305,6 +358,9 @@ public class InstallationTests : IAsyncLifetime
     [InlineData("nom", "\"\"")]
     [InlineData("prenom", "\"\"")]
     [InlineData("nom", "§LONG§")]
+    [InlineData("raisonSociale", "\"Delta\\u0000Propreté\"")]
+    [InlineData("nom", "\"Du\\u0000rand\"")]
+    [InlineData("prenom", "\"Cla\\u0007ire\"")]
     [InlineData("code", "null")]
     [InlineData("raisonSociale", "null")]
     [InlineData("siret", "null")]
@@ -524,7 +580,9 @@ public class InstallationTests : IAsyncLifetime
             Assert.Equal(HttpStatusCode.BadRequest, (await Poster(Corps(code: CodeFaux()), client)).StatusCode);
         }
 
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await Poster(Corps(code: CodeFaux()), client)).StatusCode);
+        var refus = await Poster(Corps(code: CodeFaux()), client);
+        Assert.Equal(HttpStatusCode.TooManyRequests, refus.StatusCode);
+        AssertRetryAfter(refus);
     }
 
     /// <summary>
@@ -562,7 +620,10 @@ public class InstallationTests : IAsyncLifetime
             Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(Route)).StatusCode);
         }
 
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.GetAsync(Route)).StatusCode);
+        var refus = await client.GetAsync(Route);
+        Assert.Equal(HttpStatusCode.TooManyRequests, refus.StatusCode);
+        Assert.True(refus.Headers.TryGetValues("Retry-After", out var valeurs), "Retry-After absent.");
+        Assert.InRange(int.Parse(valeurs.Single()), 1, (int)PlafondsDebit.FenetreLecturesInstallation.TotalSeconds);
     }
 
     [Fact]
@@ -575,7 +636,14 @@ public class InstallationTests : IAsyncLifetime
             Assert.Equal(StatusCodes.Status400BadRequest, (await EnvoyerDepuis($"198.51.100.{i}", Corps(code: CodeFaux()))).Statut);
         }
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, (await EnvoyerDepuis("198.51.100.200", Corps(code: CodeFaux()))).Statut);
+        var refus = await EnvoyerDepuis("198.51.100.200", Corps(code: CodeFaux()));
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, refus.Statut);
+        // Le propriétaire qui se trompe d'un caractère pendant qu'un inconnu remplit le plafond doit
+        // apprendre que son code est faux, et non attendre pour rien.
+        Assert.StartsWith(InstallationController.DebutRefusCode, refus.Corps);
+        Assert.Contains("sudo klean code", refus.Corps);
+        AssertRetryAfter(refus.RetryAfter);
     }
 
     /// <summary>Un inconnu qui garde le plafond global plein ne bloque que d'autres inconnus.</summary>
@@ -592,7 +660,7 @@ public class InstallationTests : IAsyncLifetime
         // Témoin : le plafond global est bien plein.
         Assert.Equal(StatusCodes.Status429TooManyRequests, (await EnvoyerDepuis("198.51.100.200", Corps(code: CodeFaux()))).Statut);
 
-        var (statut, corps) = await EnvoyerDepuis("198.51.100.201", Corps());
+        var (statut, corps, _) = await EnvoyerDepuis("198.51.100.201", Corps());
 
         Assert.True(statut == StatusCodes.Status201Created, $"{statut} {corps}");
         Assert.Single(await EntreprisesAsync());

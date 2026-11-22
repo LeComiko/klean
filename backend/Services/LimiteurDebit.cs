@@ -33,9 +33,18 @@ public class LimiteurDebit : IDisposable
     /// indéfiniment sa propre punition en réessayant, ce qui transforme la
     /// limitation en verrouillage définitif.
     /// </summary>
-    public bool Autoriser(string cle, int maximum, TimeSpan fenetre)
+    public bool Autoriser(string cle, int maximum, TimeSpan fenetre) =>
+        Autoriser(cle, maximum, fenetre, out _);
+
+    /// <summary>
+    /// La même, qui dit aussi, sur un refus, combien de temps attendre avant qu'un essai repasse :
+    /// la sortie du plus ancien horodatage de la fenêtre. <see cref="TimeSpan.Zero"/> sur une
+    /// autorisation.
+    /// </summary>
+    public bool Autoriser(string cle, int maximum, TimeSpan fenetre, out TimeSpan attente)
     {
         var maintenant = DateTime.UtcNow;
+        attente = TimeSpan.Zero;
 
         var horodatages = _cache.GetOrCreate(cle, entree =>
         {
@@ -50,7 +59,12 @@ public class LimiteurDebit : IDisposable
             var debut = maintenant - fenetre;
             horodatages.RemoveAll(h => h < debut);
 
-            if (horodatages.Count >= maximum) return false;
+            if (horodatages.Count >= maximum)
+            {
+                // À défaut d'horodatage (maximum nul), la fenêtre entière.
+                attente = horodatages.Count > 0 ? horodatages.Min() + fenetre - maintenant : fenetre;
+                return false;
+            }
 
             horodatages.Add(maintenant);
             return true;

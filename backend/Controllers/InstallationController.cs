@@ -47,9 +47,9 @@ public partial class InstallationController(
     public async Task<ActionResult<EtatInstallationDto>> Lire(CancellationToken annulation)
     {
         if (!debit.Autoriser($"installation-lecture:adresse:{Adresse}",
-                PlafondsDebit.LecturesInstallationParAdresse, PlafondsDebit.FenetreLecturesInstallation))
+                PlafondsDebit.LecturesInstallationParAdresse, PlafondsDebit.FenetreLecturesInstallation, out var attente))
         {
-            return TropDeTentatives();
+            return TropDeTentatives(attente, PlafondsDebit.FenetreLecturesInstallation);
         }
 
         return new EtatInstallationDto(await InstalleeAsync(annulation));
@@ -63,18 +63,24 @@ public partial class InstallationController(
         if (!debit.Autoriser(
                 $"installation{(codeJuste ? "-bon-code" : "")}:adresse:{Adresse}",
                 codeJuste ? PlafondsDebit.InstallationsBonCodeParAdresse : PlafondsDebit.InstallationsParAdresse,
-                PlafondsDebit.FenetreInstallations))
+                PlafondsDebit.FenetreInstallations, out var attente))
         {
-            return TropDeTentatives();
+            return TropDeTentatives(attente, PlafondsDebit.FenetreInstallations);
         }
 
-        if (User.Identity?.IsAuthenticated == true || await InstalleeAsync(annulation)) return Conflict(DejaInstallee);
+        // Inatteignable par l'API, une session suppose un compte ; défense en profondeur, la garde
+        // de PoserEntrepriseInstallation fait foi. Écrite comme TenantContext : toute identité.
+        if (User.Identities.Any(i => i.IsAuthenticated) || await InstalleeAsync(annulation)) return Conflict(DejaInstallee);
 
         if (!codeJuste)
         {
-            return debit.Autoriser("installation:codes-faux:global", PlafondsDebit.CodesFauxGlobaux, PlafondsDebit.FenetreInstallations)
+            // Le 429 du global dit encore que le code est faux : le propriétaire qui se trompe d'un
+            // caractère pendant qu'un inconnu remplit le plafond doit l'apprendre, pas attendre.
+            return debit.Autoriser("installation:codes-faux:global", PlafondsDebit.CodesFauxGlobaux,
+                    PlafondsDebit.FenetreInstallations, out var attenteGlobale)
                 ? BadRequest($"{DebutRefusCode}. Il s'affiche à la fin de l'installation sur le serveur, et par : sudo klean code")
-                : TropDeTentatives();
+                : TropDeTentatives(attenteGlobale, PlafondsDebit.FenetreInstallations,
+                    $"{DebutRefusCode}, ou trop de codes faux reçus par ce serveur. Vérifiez le code (sudo klean code), puis réessayez dans quelques minutes.");
         }
 
         var saisie = Saisie.De(dto);
@@ -113,8 +119,17 @@ public partial class InstallationController(
         return etat.Installee;
     }
 
-    private ObjectResult TropDeTentatives() =>
-        StatusCode(StatusCodes.Status429TooManyRequests, "Trop de tentatives. Réessayer dans quelques minutes.");
+    /// <summary>
+    /// 429 avec <c>Retry-After</c>, en secondes : l'attente restante, à défaut la fenêtre. Posé ici,
+    /// dans l'action qui écrit la réponse : aucun gestionnaire d'exception ne la vide ensuite.
+    /// </summary>
+    private ObjectResult TropDeTentatives(TimeSpan attente, TimeSpan fenetre,
+        string message = "Trop de tentatives. Réessayer dans quelques minutes.")
+    {
+        var secondes = attente > TimeSpan.Zero ? attente : fenetre;
+        Response.Headers.RetryAfter = ((int)Math.Ceiling(secondes.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return StatusCode(StatusCodes.Status429TooManyRequests, message);
+    }
 
     /// <summary>La saisie, normalisée une seule fois ; <c>null</c> vaut vide.</summary>
     private sealed record Saisie(string RaisonSociale, string Siret, string Territoire, string Email,
@@ -131,6 +146,10 @@ public partial class InstallationController(
 
         public string? Refus()
         {
+            // Un caractère de contrôle — \u0000 surtout — finirait en 500 : PostgreSQL refuse NUL
+            // dans un texte (22021). Le refuser ici, en français.
+            if (RaisonSociale.Any(char.IsControl) || Nom.Any(char.IsControl) || Prenom.Any(char.IsControl))
+                return "La raison sociale, le nom et le prénom ne peuvent pas contenir de caractère de contrôle.";
             if (RaisonSociale.Length is 0 or > 200) return "La raison sociale est obligatoire, 200 caractères au plus.";
             if (!SiretValide().IsMatch(Siret)) return "Le SIRET compte 14 chiffres.";
             // Par les noms exacts : Enum.TryParse accepterait « 0 » (CLAUDE.md §5).
