@@ -31,7 +31,7 @@ export interface Saisie {
   confirmation: string
 }
 
-export const SaisieVide: Saisie = {
+export const SaisieVide: Readonly<Saisie> = Object.freeze({
   code: '',
   raisonSociale: '',
   siret: '',
@@ -42,7 +42,7 @@ export const SaisieVide: Saisie = {
   prenom: '',
   motDePasse: '',
   confirmation: '',
-}
+})
 
 /** Celui de `CodeInstallation.Alphabet` : sans I, L, O, 0 ni 1. */
 export const AlphabetCode = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -60,9 +60,14 @@ const LongueurCode = 20
 const Blanc = /[\t-\r \u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/
 
 /** Ce que `CodeInstallation.Normaliser` retire en plus des blancs. */
-const Tirets = new Set(['-', '\u00AD', '\u200B', '\u2010', '\u2011', '\u2012', '\u2013', '\u2014', '\u2212', '\uFF0D'])
+export const Tirets: ReadonlySet<string> = new Set(['-', '\u00AD', '\u200B', '\u2010', '\u2011', '\u2012', '\u2013', '\u2014', '\u2212', '\uFF0D'])
 
-/** `char.ToUpperInvariant` : un caractère pour un caractère, jamais « ß » → « SS ». */
+/**
+ * `char.ToUpperInvariant` : un caractère pour un caractère, jamais « ß » → « SS ». Un point hors
+ * du plan de base reste inchangé, comme en .NET. Les seules divergences mesurées avec .NET sur
+ * tous les points de code sont « ı » et les lettres grecques à iota souscrit : toutes hors de
+ * l'alphabet, donc sans effet sur un code juste.
+ */
 function majuscule(c: string): string {
   const m = c.toUpperCase()
   return m.length === 1 ? m : c
@@ -85,9 +90,11 @@ export function refusCode(saisie: string): string | null {
 
   for (const c of code) {
     if (AlphabetCode.includes(c)) continue
-    return 'ILO01'.includes(c)
-      ? "Relisez le code : les lettres I, L, O et les chiffres 0, 1 n'y figurent pas."
-      : `Le caractère « ${c} » n'existe pas dans un code d'installation.`
+    if ('ILO01'.includes(c)) return "Relisez le code : les lettres I, L, O et les chiffres 0, 1 n'y figurent pas."
+    // Un caractère invisible (U+FEFF, U+200C, U+2060) se nomme : l'afficher ne dirait rien.
+    const invisible = /[\p{Cc}\p{Cf}\p{Z}]/u.test(c)
+    const nom = invisible ? `U+${(c.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0')}` : `« ${c} »`
+    return `Le caractère ${nom} n'existe pas dans un code d'installation.`
   }
 
   if (code.length !== LongueurCode) {
@@ -134,7 +141,12 @@ export function refusEntreprise(
   return null
 }
 
-/** Règle minimale : un `@` entre deux parties non vides, sans blanc. Le serveur juge. */
+/**
+ * Règle minimale : un `@` entre deux parties non vides, sans blanc. Le serveur juge. L'écran est
+ * un peu plus strict que lui sur les blancs — il refuse toute adresse qui en contient, là où le
+ * serveur ne rogne que les extrémités —, et c'est délibéré. La confirmation ne distingue pas
+ * les majuscules : la casse d'une adresse ne change pas la faute de frappe qu'elle attrape.
+ */
 function adresseVraisemblable(adresse: string): boolean {
   const arobase = adresse.indexOf('@')
   return (
@@ -153,7 +165,7 @@ export function refusCompte(
   const prenom = rogner(s.prenom)
 
   if (!adresseVraisemblable(email)) return "L'adresse électronique n'est pas valide."
-  if (email !== rogner(s.emailConfirmation)) return 'Les deux saisies de l’adresse diffèrent.'
+  if (email.toLowerCase() !== rogner(s.emailConfirmation).toLowerCase()) return 'Les deux saisies de l’adresse diffèrent.'
   if (ContientControle(nom) || ContientControle(prenom)) return MessageControle
   if (nom.length === 0 || nom.length > 100) return 'Le nom est obligatoire, 100 caractères au plus.'
   if (prenom.length === 0 || prenom.length > 100) return 'Le prénom est obligatoire, 100 caractères au plus.'

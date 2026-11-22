@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { describe, test } from 'node:test'
 
 // ⚠️ Extension explicite : `node --test` n'applique pas la résolution de Vite (CLAUDE.md §10).
@@ -6,6 +7,7 @@ import {
   AlphabetCode,
   DebutRefusCode,
   SaisieVide,
+  Tirets,
   corpsInstallation,
   normaliserCode,
   refusCode,
@@ -14,6 +16,12 @@ import {
   refusEntreprise,
 } from './installation.ts'
 import type { Saisie } from './installation.ts'
+
+const serveur = (fichier: string): string =>
+  readFileSync(new URL(`../../../backend/${fichier}`, import.meta.url), 'utf8')
+
+const CodeInstallationCs = serveur('Services/CodeInstallation.cs')
+const ControleurCs = serveur('Controllers/InstallationController.cs')
 
 const CodeBon = 'ABCDEFGHJKMNPQRSTUVW' // 20 symboles de l'alphabet
 
@@ -71,7 +79,7 @@ describe('normaliserCode — le même geste que CodeInstallation.Normaliser', ()
 
   test('ne change pas la longueur d’un caractère qui s’étendrait en majuscules', () => {
     // « ß » devient « SS » par toUpperCase d'une chaîne, pas par ToUpperInvariant d'un char.
-    assert.equal(normaliserCode('aßb'), 'Aß'.concat('B'))
+    assert.equal(normaliserCode('aßb'), 'AßB')
   })
 })
 
@@ -112,9 +120,14 @@ describe('refusCode', () => {
     assert.match(refusCode('$') ?? '', /n'existe pas/)
   })
 
-  test('l’alphabet est celui du serveur', () => {
-    assert.equal(AlphabetCode, 'ABCDEFGHJKMNPQRSTUVWXYZ23456789')
-  })
+  for (const c of ['\uFEFF', '\u200C', '\u2060']) {
+    test(`le caractère invisible ${c.codePointAt(0)?.toString(16)} est nommé par son U+XXXX`, () => {
+      const nom = `U+${(c.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0')}`
+      const refus = refusCode(`${CodeBon.slice(0, 19)}${c}`) ?? ''
+      assert.ok(refus.includes(nom), refus)
+      assert.ok(!refus.includes(c), 'le caractère lui-même n’est pas affiché')
+    })
+  }
 })
 
 describe('refusEntreprise', () => {
@@ -183,6 +196,10 @@ describe('refusCompte', () => {
 
   test('l’adresse est rognée avant d’être jugée', () => {
     assert.equal(refusCompte({ ...bon, email: ' patron@exemple.fr ', emailConfirmation: 'patron@exemple.fr' }), null)
+  })
+
+  test('la confirmation d’adresse ne distingue pas les majuscules', () => {
+    assert.equal(refusCompte({ ...bon, email: 'Patron@x.fr', emailConfirmation: 'patron@x.fr' }), null)
   })
 
   test('deux saisies d’adresse différentes sont refusées', () => {
@@ -299,5 +316,50 @@ describe('refusDInstallation — où renvoyer l’utilisateur', () => {
   test('un 409 ou un 500 qui commencerait par ce texte ne revient pas au code', () => {
     assert.equal(refusDInstallation(409, DebutRefusCode).retourAuCode, false)
     assert.equal(refusDInstallation(500, DebutRefusCode).retourAuCode, false)
+  })
+})
+
+/**
+ * Ce que l'écran recopie du serveur est lu **dans** le serveur : une copie littérale comparée à
+ * elle-même ne prouve rien (même motif que `descriptions.test.ts` avec `backend/DTOs`).
+ */
+describe('l’écran suit le serveur', () => {
+  const unique = (source: string, motif: RegExp): RegExpExecArray => {
+    const m = motif.exec(source)
+    assert.ok(m, `motif introuvable : ${String(motif)}`)
+    return m
+  }
+
+  test('l’alphabet du code', () => {
+    assert.equal(unique(CodeInstallationCs, /Alphabet = "([^"]+)"/)[1], AlphabetCode)
+  })
+
+  test('la longueur du code', () => {
+    const longueur = Number(unique(CodeInstallationCs, /Longueur = (\d+);/)[1])
+    assert.equal(refusCode('A'.repeat(longueur)), null)
+    assert.notEqual(refusCode('A'.repeat(longueur - 1)), null)
+    assert.notEqual(refusCode('A'.repeat(longueur + 1)), null)
+  })
+
+  test('les tirets que Normaliser retire', () => {
+    const ligne = unique(CodeInstallationCs, /c is not \(([^)]*)\)/)[1]
+    const lus = [...ligne.matchAll(/'(?:\\u([0-9A-Fa-f]{4})|(.))'/gu)].map((m) =>
+      m[1] === undefined ? (m[2] as string) : String.fromCharCode(parseInt(m[1], 16)),
+    )
+    assert.equal(lus.length, 10)
+    assert.deepEqual([...Tirets].sort(), [...lus].sort())
+  })
+
+  test('le début du refus du code', () => {
+    assert.equal(unique(ControleurCs, /DebutRefusCode = "([^"]+)"/)[1], DebutRefusCode)
+  })
+
+  test('les bornes des champs', () => {
+    assert.match(ControleurCs, /RaisonSociale\.Length is 0 or > 200/)
+    assert.match(ControleurCs, /Nom\.Length is 0 or > 100/)
+    assert.match(ControleurCs, /Prenom\.Length is 0 or > 100/)
+    assert.match(ControleurCs, /Email\.Length > 256/)
+    assert.equal(refusEntreprise({ raisonSociale: 'a'.repeat(200), siret: '12345678900012', territoire: 'Metropole' }), null)
+    assert.notEqual(refusEntreprise({ raisonSociale: 'a'.repeat(201), siret: '12345678900012', territoire: 'Metropole' }), null)
   })
 })
