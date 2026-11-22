@@ -426,11 +426,18 @@ restaurer_base() {
   # Une seule transaction : un échec laisse une base vide, jamais à moitié remplie.
   compose exec -T postgres pg_restore -U klean -d klean --no-owner --exit-on-error --single-transaction < "$sauvegarde" ||
     echouer "La restauration a échoué : la base est vide et l'API arrêtée. $sortie"
-  # Les sessions de la sauvegarde valent encore : sans cette ligne, un jeton de
+  # Les sessions de la sauvegarde valent encore : sans la révocation, un jeton de
   # rafraîchissement d'alors rouvrirait la session d'un compte que la sauvegarde
-  # croyait ouvert.
+  # croyait ouvert. Et la révocation seule ne suffit pas (CLAUDE.md §10) : la
+  # sauvegarde rend à chaque compte l'empreinte de sécurité qu'il avait, souvent la même
+  # qu'aujourd'hui, et tout jeton d'accès déjà émis restait valable jusqu'à quinze
+  # minutes — mesuré sur le VPS d'essai, connecté après « toutes les sessions sont
+  # fermées ». Une empreinte neuve le fait refuser dès la requête suivante.
   compose exec -T postgres psql -U klean -d klean -v ON_ERROR_STOP=1 -c \
-    'UPDATE "JetonsRafraichissement" SET "DateRevocation" = now() WHERE "DateRevocation" IS NULL;' ||
+    'BEGIN;
+     UPDATE "JetonsRafraichissement" SET "DateRevocation" = now() WHERE "DateRevocation" IS NULL;
+     UPDATE "AspNetUsers" SET "SecurityStamp" = upper(replace(gen_random_uuid()::text, '"'-'"', '"''"'));
+     COMMIT;' ||
     echouer "La base est restaurée, mais les anciennes sessions n'ont pas pu être révoquées ; l'API reste arrêtée. $sortie"
   restaurer_trousseau "$sortie"
   if [ "$migrations" = migrer ]; then
