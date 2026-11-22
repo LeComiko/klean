@@ -90,6 +90,9 @@ public class FabriqueApi : WebApplicationFactory<Program>
     /// <summary>Horloge de la génération. Libérée par la fixture entre chaque test.</summary>
     public HorlogeDeTest Horloge { get; } = new();
 
+    /// <summary>Rôle et entreprise des connexions, relevés sous chaque commande. Inactive par défaut.</summary>
+    public SondeInstallation Sonde { get; } = new();
+
     private readonly string _environnement;
 
     /// <summary>
@@ -117,6 +120,10 @@ public class FabriqueApi : WebApplicationFactory<Program>
 
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Horloge);
+
+            // Relève le rôle et l'entreprise de la connexion sous les requêtes de l'assistant
+            // (étape 34, lot A2). S'ajoute à BasculeRoleApplicatif sans le remplacer (EF Core 10).
+            services.ConfigureDbContext<KleanDbContext>(options => options.AddInterceptors(Sonde));
         });
     }
 

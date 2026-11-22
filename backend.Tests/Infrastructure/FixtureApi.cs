@@ -158,6 +158,8 @@ public class FixtureApi : IAsyncLifetime
         _provisoires.Clear();
         Fabrique.Courriels.Reinitialiser();
         Fabrique.Horloge.Liberer();
+        Fabrique.Sonde.Active = false;
+        Fabrique.Sonde.Vider();
 
         await ViderAsync();
 

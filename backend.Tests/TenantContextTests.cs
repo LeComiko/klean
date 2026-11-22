@@ -84,7 +84,7 @@ public class TenantContextTests
     /// Seul l'assistant d'installation pose une entreprise sur une requête anonyme. Lu dans les
     /// sources : un appel ajouté ailleurs demain ne lèverait rien.
     /// </summary>
-    [Fact(Skip = "tâche 4")]
+    [Fact]
     public void Seul_InstallationController_pose_l_entreprise_d_installation()
     {
         var racine = new DirectoryInfo(AppContext.BaseDirectory);
@@ -94,7 +94,7 @@ public class TenantContextTests
         var appelants = Directory.EnumerateFiles(Path.Combine(racine!.FullName, "backend"), "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
                         && Appel.IsMatch(string.Join('\n', File.ReadAllLines(f).Where(l => !Commentaire.IsMatch(l)))))
-            .Select(Path.GetFileName)
+            .Select(f => Path.GetFileName(f))
             .Order(StringComparer.Ordinal)
             .ToArray();
 
