@@ -41,7 +41,7 @@ public partial class InstallationController(
     /// <summary>Début du refus d'un code faux : l'écran s'en sert pour revenir au premier écran.</summary>
     public const string DebutRefusCode = "Code d'installation incorrect";
 
-    private const string DejaInstallee = "KLEAN est déjà installé : connectez-vous.";
+    public const string DejaInstallee = "KLEAN est déjà installé : connectez-vous.";
 
     [HttpGet]
     public async Task<ActionResult<EtatInstallationDto>> Lire(CancellationToken annulation)

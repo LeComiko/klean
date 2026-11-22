@@ -50,6 +50,9 @@ export const AlphabetCode = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 /** Le même texte que `InstallationController.DebutRefusCode`. */
 export const DebutRefusCode = "Code d'installation incorrect"
 
+/** Le même texte que `InstallationController.DejaInstallee` : le seul 409 qui mène à la connexion. */
+export const MessageDejaInstallee = 'KLEAN est déjà installé : connectez-vous.'
+
 const LongueurCode = 20
 
 /**
@@ -191,17 +194,25 @@ export function corpsInstallation(s: Saisie): CorpsInstallation {
 }
 
 /**
- * Où renvoyer l'utilisateur après un refus du serveur.
+ * Où mène un refus du serveur :
  *
- * - 400 ou 429 dont le message commence par `DebutRefusCode` : le code est faux — ou le plafond
- *   global des codes faux est plein, ce que le 429 dit en commençant pareil — : retour au code.
- * - tout autre 400 (champs, Identity) : l'écran en cours ;
- * - 409 (installé, orpheline, SIRET pris) et 429 de plafond par adresse : le message, tel quel.
+ * - `Code` : 400 ou 429 dont le message commence par `DebutRefusCode` — le code est faux, ou le
+ *   plafond global des codes faux est plein, ce que le 429 dit en commençant pareil ;
+ * - `Connexion` : le 409 « déjà installé » — un compte existe, l'assistant n'a plus d'objet ;
+ * - `Bloquee` : tout autre 409. Le serveur n'en a qu'un, l'entreprise orpheline, qui couvre aussi
+ *   le SIRET pris : sans aucun compte, une entreprise au même SIRET est forcément orpheline.
+ *   ⚠️ Aucun retour à l'entreprise : changer de SIRET contournerait le blocage et laisserait
+ *   l'orpheline en base. Elle se retire à la main, puis KLEAN redémarre ;
+ * - `SurPlace` : le reste — un 400 de champ ou d'Identity, un 429 de plafond par adresse, une
+ *   panne : le message, sur l'écran en cours.
  */
+export type SuiteDuRefus = 'Code' | 'Connexion' | 'Bloquee' | 'SurPlace'
+
 export function refusDInstallation(
   statut: number,
   message: string,
-): { retourAuCode: boolean; message: string } {
-  const codeFaux = (statut === 400 || statut === 429) && message.startsWith(DebutRefusCode)
-  return { retourAuCode: codeFaux, message }
+): { suite: SuiteDuRefus; message: string } {
+  if ((statut === 400 || statut === 429) && message.startsWith(DebutRefusCode)) return { suite: 'Code', message }
+  if (statut === 409) return { suite: message === MessageDejaInstallee ? 'Connexion' : 'Bloquee', message }
+  return { suite: 'SurPlace', message }
 }

@@ -6,6 +6,7 @@ import { describe, test } from 'node:test'
 import {
   AlphabetCode,
   DebutRefusCode,
+  MessageDejaInstallee,
   SaisieVide,
   Tirets,
   corpsInstallation,
@@ -270,52 +271,53 @@ describe('corpsInstallation', () => {
 describe('refusDInstallation — où renvoyer l’utilisateur', () => {
   test('un 400 de code faux revient au premier écran', () => {
     const r = refusDInstallation(400, `${DebutRefusCode}. Il s'affiche à la fin de l'installation sur le serveur, et par : sudo klean code`)
-    assert.equal(r.retourAuCode, true)
+    assert.equal(r.suite, 'Code')
     assert.match(r.message, /sudo klean code/)
   })
 
   test('un 429 qui commence par le refus du code revient au premier écran', () => {
     // Le plafond global des codes faux dit encore que le code est faux.
     const r = refusDInstallation(429, `${DebutRefusCode}, ou trop de codes faux reçus par ce serveur. Vérifiez le code (sudo klean code), puis réessayez dans quelques minutes.`)
-    assert.equal(r.retourAuCode, true)
+    assert.equal(r.suite, 'Code')
   })
 
   test('un 400 de champ reste sur l’écran en cours', () => {
     const r = refusDInstallation(400, 'Le SIRET compte 14 chiffres.')
-    assert.equal(r.retourAuCode, false)
-    assert.equal(r.message, 'Le SIRET compte 14 chiffres.')
+    assert.deepEqual(r, { suite: 'SurPlace', message: 'Le SIRET compte 14 chiffres.' })
   })
 
   test('un 400 d’Identity sur le mot de passe reste sur l’écran en cours', () => {
-    assert.equal(refusDInstallation(400, 'Le mot de passe doit compter 10 caractères.').retourAuCode, false)
+    assert.equal(refusDInstallation(400, 'Le mot de passe doit compter 10 caractères.').suite, 'SurPlace')
   })
 
-  test('un 409 « déjà installé » rend son message, sans retour au code', () => {
-    const r = refusDInstallation(409, 'KLEAN est déjà installé : connectez-vous.')
-    assert.deepEqual(r, { retourAuCode: false, message: 'KLEAN est déjà installé : connectez-vous.' })
+  test('le 409 « déjà installé » mène à la connexion', () => {
+    assert.deepEqual(refusDInstallation(409, MessageDejaInstallee), { suite: 'Connexion', message: MessageDejaInstallee })
   })
 
-  test('un 409 d’entreprise orpheline rend son message, sans retour au code', () => {
-    const r = refusDInstallation(409, 'Une entreprise existe déjà.')
-    assert.deepEqual(r, { retourAuCode: false, message: 'Une entreprise existe déjà.' })
+  test('tout autre 409 bloque l’assistant, sans retour à l’entreprise', () => {
+    // L'orpheline, qui couvre le SIRET pris : changer de SIRET la laisserait en base.
+    const orpheline = "Une entreprise existe déjà sans aucun compte : le reste d'une installation interrompue."
+    assert.deepEqual(refusDInstallation(409, orpheline), { suite: 'Bloquee', message: orpheline })
+    assert.equal(refusDInstallation(409, 'Ce SIRET existe déjà.').suite, 'Bloquee')
   })
 
-  test('un 409 de SIRET pris rend son message', () => {
-    assert.equal(refusDInstallation(409, 'Ce SIRET existe déjà.').retourAuCode, false)
+  test('le message « déjà installé » hors d’un 409 ne mène pas à la connexion', () => {
+    assert.equal(refusDInstallation(400, MessageDejaInstallee).suite, 'SurPlace')
+    assert.equal(refusDInstallation(500, MessageDejaInstallee).suite, 'SurPlace')
   })
 
-  test('un 429 de plafond par adresse rend son message, sans retour au code', () => {
+  test('un 429 de plafond par adresse rend son message, sur place', () => {
     const r = refusDInstallation(429, 'Trop de tentatives. Réessayer dans quelques minutes.')
-    assert.deepEqual(r, { retourAuCode: false, message: 'Trop de tentatives. Réessayer dans quelques minutes.' })
+    assert.deepEqual(r, { suite: 'SurPlace', message: 'Trop de tentatives. Réessayer dans quelques minutes.' })
   })
 
   test('le début du refus n’est cherché qu’au début du message', () => {
-    assert.equal(refusDInstallation(400, `Le champ dit : ${DebutRefusCode}`).retourAuCode, false)
+    assert.equal(refusDInstallation(400, `Le champ dit : ${DebutRefusCode}`).suite, 'SurPlace')
   })
 
   test('un 409 ou un 500 qui commencerait par ce texte ne revient pas au code', () => {
-    assert.equal(refusDInstallation(409, DebutRefusCode).retourAuCode, false)
-    assert.equal(refusDInstallation(500, DebutRefusCode).retourAuCode, false)
+    assert.equal(refusDInstallation(409, DebutRefusCode).suite, 'Bloquee')
+    assert.equal(refusDInstallation(500, DebutRefusCode).suite, 'SurPlace')
   })
 })
 
@@ -352,6 +354,10 @@ describe('l’écran suit le serveur', () => {
 
   test('le début du refus du code', () => {
     assert.equal(unique(ControleurCs, /DebutRefusCode = "([^"]+)"/)[1], DebutRefusCode)
+  })
+
+  test('le message « déjà installé »', () => {
+    assert.equal(unique(ControleurCs, /DejaInstallee = "([^"]+)"/)[1], MessageDejaInstallee)
   })
 
   test('les bornes des champs', () => {

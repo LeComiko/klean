@@ -63,13 +63,18 @@ export function Installation() {
   const [erreur, setErreur] = useState<string | null>(null)
   // Le seul champ fautif qu'on sache désigner sans recopier les règles de `installation.ts`.
   const [codeFautif, setCodeFautif] = useState(false)
-  // Un 409 qui n'est pas « déjà installée » : SIRET pris, entreprise sans compte. Le bouton
-  // d'envoi cède la place au retour à l'entreprise, où le message suit.
-  const [conflit, setConflit] = useState(false)
+  // Un 409 qui n'est pas « déjà installé » : l'entreprise orpheline, SIRET pris compris.
+  // L'assistant s'arrête là : rien de ce qu'on y saisirait ne lève le blocage.
+  const [bloquee, setBloquee] = useState(false)
   const [lecture, setLecture] = useState<Lecture>('en-cours')
 
   const titre = useRef<HTMLHeadingElement>(null)
   const etapeVue = useRef<Etape>('Code')
+  // L'envoi en cours, abandonné si l'écran se démonte : sa réponse n'aurait plus personne à qui
+  // parler.
+  const envoiEnCours = useRef<AbortController | null>(null)
+
+  useEffect(() => () => envoiEnCours.current?.abort(), [])
 
   useEffect(() => {
     const controleur = new AbortController()
@@ -111,7 +116,6 @@ export function Installation() {
     // Le mot de passe ne survit à aucun changement d'écran : la saisie, si.
     setSaisie((avant) => ({ ...avant, motDePasse: '', confirmation: '' }))
     setErreur(message)
-    setConflit(false)
     setCodeFautif(false)
     setEtape(suivante)
   }
@@ -135,16 +139,17 @@ export function Installation() {
 
   async function soumettreCompte(evenement: FormEvent<HTMLFormElement>) {
     evenement.preventDefault()
-    setConflit(false)
 
     const refus = refusCompte(saisie)
     setErreur(refus)
     if (refus !== null) return
 
+    const controleur = new AbortController()
+    envoiEnCours.current = controleur
     setEnvoi(true)
 
     try {
-      await installer(corpsInstallation(saisie))
+      await installer(corpsInstallation(saisie), controleur.signal)
 
       // Plus rien de la saisie n'a d'usage : ni le code, qui ne sert qu'une fois, ni le mot
       // de passe. L'écran 4 ne la relit pas.
@@ -152,46 +157,41 @@ export function Installation() {
       setErreur(null)
       setEtape('Savoir')
     } catch (echec: unknown) {
-      await refuser(echec)
+      if (!controleur.signal.aborted) refuser(echec)
     } finally {
+      envoiEnCours.current = null
       setEnvoi(false)
     }
   }
 
-  async function refuser(echec: unknown) {
+  function refuser(echec: unknown) {
     if (!(echec instanceof ErreurApi)) {
       // Une panne de réseau rend un `TypeError` en anglais, que l'écran ne peut pas montrer.
       setErreur('Le serveur ne répond pas. Vérifiez la connexion, puis réessayez.')
       return
     }
 
-    const { retourAuCode, message } = refusDInstallation(echec.statut, echec.message)
+    const { suite, message } = refusDInstallation(echec.statut, echec.message)
 
-    if (retourAuCode) {
+    if (suite === 'Code') {
       aller('Code', message)
       setCodeFautif(true)
       return
     }
 
-    if (echec.statut === 409) {
-      // « Déjà installée » mène à la connexion ; le reste — SIRET pris, entreprise sans
-      // compte — se corrige à l'écran de l'entreprise.
-      const installee = await lireEtatInstallation().then(
-        (etat) => etat.installee,
-        () => false,
-      )
-
-      if (installee) {
-        setLecture('installee')
-        return
-      }
-
-      setConflit(true)
-      setErreur(message)
+    // Le message du serveur suffit à le savoir : aucune relecture de l'état, dont l'échec
+    // ne doit jamais valoir « pas installé ».
+    if (suite === 'Connexion') {
+      setLecture('installee')
       return
     }
 
     setErreur(message)
+
+    if (suite === 'Bloquee') {
+      setBloquee(true)
+      return
+    }
 
     // 400 : un champ, ou la règle d'Identity sur le mot de passe — on ressaisit. Un 429 ou
     // une panne du serveur laissent la saisie telle quelle.
@@ -241,14 +241,19 @@ export function Installation() {
         ))}
       </ol>
 
-      <h2 ref={titre} className="installation__titre" tabIndex={-1}>
+      <h2
+        ref={titre}
+        className="installation__titre"
+        tabIndex={-1}
+        aria-describedby={erreur !== null ? IdErreur : undefined}
+      >
         {Titres[etape]}
       </h2>
     </>
   )
 
   const retour = (precedente: Etape) => (
-    <button className="connexion__lien" type="button" onClick={() => aller(precedente)}>
+    <button className="connexion__lien" type="button" disabled={envoi} onClick={() => aller(precedente)}>
       Retour
     </button>
   )
@@ -286,7 +291,7 @@ export function Installation() {
             </li>
           </ul>
 
-          <button className="connexion__bouton" type="button" onClick={() => naviguer('/connexion')}>
+          <button className="connexion__bouton" type="button" onClick={() => naviguer('/connexion', { replace: true })}>
             Se connecter
           </button>
         </div>
@@ -319,7 +324,10 @@ export function Installation() {
               aria-invalid={codeFautif || undefined}
               aria-describedby={codeFautif && erreur !== null ? `installation-aide-code ${IdErreur}` : 'installation-aide-code'}
               value={saisie.code}
-              onChange={(evenement) => changer('code', evenement.target.value)}
+              onChange={(evenement) => {
+                changer('code', evenement.target.value)
+                setCodeFautif(false)
+              }}
             />
 
             {erreurAffichee}
@@ -404,6 +412,28 @@ export function Installation() {
     )
   }
 
+  // ⚠️ Ni retour à l'entreprise ni nouvel envoi : changer de SIRET contournerait le blocage et
+  // laisserait l'orpheline en base. Elle se retire à la main (DEPLOIEMENT.md).
+  if (bloquee) {
+    return (
+      <main className="connexion">
+        <div className="connexion__carte">
+          {enTete}
+
+          {erreurAffichee}
+
+          <p className="connexion__explication">
+            Une fois l’entreprise retirée et KLEAN redémarré, rechargez cette page.
+          </p>
+
+          <button className="connexion__lien" type="button" onClick={() => naviguer('/connexion', { replace: true })}>
+            Aller à la connexion
+          </button>
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main className="connexion">
       <div className="connexion__carte">
@@ -444,6 +474,8 @@ export function Installation() {
           <input
             id="installation-nom"
             className="connexion__champ"
+            // oxlint-disable-next-line jsx-a11y/autocomplete-valid -- faux positif : jetons valides de la norme HTML
+            autoComplete="family-name"
             required
             maxLength={100}
             value={saisie.nom}
@@ -456,6 +488,8 @@ export function Installation() {
           <input
             id="installation-prenom"
             className="connexion__champ"
+            // oxlint-disable-next-line jsx-a11y/autocomplete-valid -- faux positif : jetons valides de la norme HTML
+            autoComplete="given-name"
             required
             maxLength={100}
             value={saisie.prenom}
@@ -494,20 +528,11 @@ export function Installation() {
 
           {erreurAffichee}
 
-          {conflit ? (
-            // Le message suit : c'est sur l'écran de l'entreprise qu'il se corrige.
-            <button className="connexion__bouton" type="button" onClick={() => aller('Entreprise', erreur)}>
-              Revenir à l’entreprise
-            </button>
-          ) : (
-            <>
-              <button className="connexion__bouton" type="submit" disabled={envoi}>
-                {envoi ? 'Création…' : 'Créer l’entreprise et le compte'}
-              </button>
+          <button className="connexion__bouton" type="submit" disabled={envoi}>
+            {envoi ? 'Création…' : 'Créer l’entreprise et le compte'}
+          </button>
 
-              {retour('Entreprise')}
-            </>
-          )}
+          {retour('Entreprise')}
         </form>
       </div>
     </main>

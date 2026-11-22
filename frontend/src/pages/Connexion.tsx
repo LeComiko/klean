@@ -55,12 +55,14 @@ export function Connexion() {
 
     const controleur = new AbortController()
 
-    lireEtatInstallation(controleur.signal)
+    // Cinq secondes au plus : un serveur qui ne répond pas ne retient pas le formulaire.
+    lireEtatInstallation(AbortSignal.any([controleur.signal, AbortSignal.timeout(5000)]))
       .then((etat) => {
         if (!controleur.signal.aborted) setInstallee(etat.installee)
       })
       .catch(() => {
-        // Un abandon — le `StrictMode` monte deux fois — n'est ni une erreur ni un `false`.
+        // Un abandon au démontage — le `StrictMode` monte deux fois — n'est ni une erreur ni
+        // un `false`. L'expiration, elle, vaut « inconnu » : le formulaire s'affiche.
         if (!controleur.signal.aborted) setInstallee('inconnu')
       })
 
