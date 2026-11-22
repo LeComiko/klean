@@ -13,8 +13,10 @@ public class TenantContext : ITenantContext
 
     private Guid? _entrepriseInstallation;
 
+    private bool Authentifie => _accesseur.HttpContext?.User?.Identities.Any(i => i.IsAuthenticated) == true;
+
     /// <summary>
-    /// ⚠️ <b>Jamais dans une requête HTTP</b> (SPEC.md, étape 34, lot A2) : une route ne tourne
+    /// ⚠️ <b>Jamais sous un <c>HttpContext</c></b> (SPEC.md, étape 34, lot A2) : une route ne tourne
     /// jamais en propriétaire des tables. Hors requête seulement : l'amorçage, la commande de
     /// démonstration, la fixture de test. C'est un fil-piège contre l'appel involontaire, pas une
     /// garantie : un travail lancé hors du flux de la requête n'a pas de <c>HttpContext</c>.
@@ -24,8 +26,8 @@ public class TenantContext : ITenantContext
         if (_accesseur.HttpContext is not null)
         {
             throw new InvalidOperationException(
-                "DesactiverFiltrage dans une requête HTTP : refusé. Une route ne tourne jamais en "
-                + "propriétaire des tables (CLAUDE.md §7).");
+                "DesactiverFiltrage sous un HttpContext (requête HTTP, ou identité jouée par la démonstration) : "
+                + "refusé. Une route ne tourne jamais en propriétaire des tables (CLAUDE.md §7).");
         }
 
         FiltrageActif = false;
@@ -33,7 +35,10 @@ public class TenantContext : ITenantContext
 
     public Guid PoserEntrepriseInstallation()
     {
-        if (_accesseur.HttpContext?.User?.Identity?.IsAuthenticated == true)
+        if (_accesseur.HttpContext is null)
+            throw new InvalidOperationException(
+                "PoserEntrepriseInstallation n'existe que pour la requête d'installation : pas de HttpContext ici.");
+        if (Authentifie)
             throw new InvalidOperationException("L'entreprise d'installation ne se pose pas sur une requête authentifiée.");
         if (_entrepriseInstallation is not null)
             throw new InvalidOperationException("L'entreprise d'installation est déjà posée pour cette requête.");
@@ -84,12 +89,12 @@ public class TenantContext : ITenantContext
         {
             var utilisateur = _accesseur.HttpContext?.User;
 
-            // Hors requête, ou requête anonyme : pas de tenant. Les onze
-            // contrôleurs métier portant [Authorize], ce cas ne correspond
+            // Hors requête, ou requête anonyme : pas de tenant. Les contrôleurs
+            // métier portant tous [Authorize], ce cas ne correspond
             // jamais à un accès aux données — seulement à l'amorçage, à la
             // série de tests et à /api/sante — sauf l'assistant d'installation,
             // qui pose la sienne.
-            if (utilisateur?.Identity?.IsAuthenticated != true)
+            if (utilisateur is null || !Authentifie)
             {
                 return _entrepriseInstallation;
             }

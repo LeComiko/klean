@@ -35,10 +35,31 @@ public class TenantContextTests
     [Fact]
     public void Elle_est_refusee_a_une_requete_authentifiee() => Anonyme((tenant, accesseur) =>
     {
+        var revendiquee = Guid.NewGuid();
         accesseur.HttpContext!.User = new ClaimsPrincipal(new ClaimsIdentity(
-            [new Claim(JwtService.RevendicationEntrepriseId, Guid.NewGuid().ToString())], "test"));
+            [new Claim(JwtService.RevendicationEntrepriseId, revendiquee.ToString())], "test"));
         Assert.Throws<InvalidOperationException>(() => tenant.PoserEntrepriseInstallation());
+        Assert.Equal(revendiquee, tenant.EntrepriseId);
     });
+
+    [Fact]
+    public void Une_identite_non_authentifiee_n_a_pas_d_entreprise_meme_revendiquee() => Anonyme((tenant, accesseur) =>
+    {
+        accesseur.HttpContext!.User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(JwtService.RevendicationEntrepriseId, Guid.NewGuid().ToString())]));
+        Assert.Null(tenant.EntrepriseId);
+
+        var id = tenant.PoserEntrepriseInstallation();
+        Assert.Equal(id, tenant.EntrepriseId);
+    });
+
+    [Fact]
+    public void Elle_est_refusee_hors_requete()
+    {
+        var tenant = new TenantContext(new HttpContextAccessor());
+        var erreur = Assert.Throws<InvalidOperationException>(() => tenant.PoserEntrepriseInstallation());
+        Assert.Contains("requête d'installation", erreur.Message);
+    }
 
     [Fact]
     public void DesactiverFiltrage_est_refuse_dans_une_requete_http() => Anonyme((tenant, _) =>
@@ -56,6 +77,9 @@ public class TenantContextTests
         Assert.False(tenant.FiltrageActif);
     }
 
+    private static readonly System.Text.RegularExpressions.Regex Appel = new(@"\bPoserEntrepriseInstallation\b");
+    private static readonly System.Text.RegularExpressions.Regex Commentaire = new(@"^\s*//");
+
     /// <summary>
     /// Seul l'assistant d'installation pose une entreprise sur une requête anonyme. Lu dans les
     /// sources : un appel ajouté ailleurs demain ne lèverait rien.
@@ -69,9 +93,9 @@ public class TenantContextTests
 
         var appelants = Directory.EnumerateFiles(Path.Combine(racine!.FullName, "backend"), "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                        && File.ReadAllText(f).Contains("PoserEntrepriseInstallation("))
+                        && Appel.IsMatch(string.Join('\n', File.ReadAllLines(f).Where(l => !Commentaire.IsMatch(l)))))
             .Select(Path.GetFileName)
-            .Order()
+            .Order(StringComparer.Ordinal)
             .ToArray();
 
         Assert.Equal(["ITenantContext.cs", "InstallationController.cs", "TenantContext.cs"], appelants);
