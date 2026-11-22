@@ -37,7 +37,7 @@ public sealed class CodeInstallation
 
     /// <summary>Retire espaces et tirets — y compris ceux qu'un copier-coller apporte — et met en majuscules.</summary>
     public static string Normaliser(string saisie) =>
-        new(saisie.Where(c => !char.IsWhiteSpace(c) && c is not ('-' or '‐' or '‑' or '‒' or '–' or '—'))
+        new(saisie.Where(c => !char.IsWhiteSpace(c) && c is not ('-' or '\u00AD' or '\u200B' or '‐' or '‑' or '‒' or '–' or '—' or '\u2212' or '\uFF0D'))
             .Select(char.ToUpperInvariant).ToArray());
 
     /// <summary>Un code neuf. Pour la série de tests : le script tire le sien.</summary>
@@ -57,7 +57,7 @@ public sealed class CodeInstallation
             throw new InvalidOperationException(
                 $"Installation:Code doit compter {Longueur} symboles parmi {Alphabet} : configuré à moitié. "
                 + "Le script en tire un (KLEAN_CODE_INSTALLATION dans .env). À la main : "
-                + "tr -dc 'ABCDEFGHJKMNPQRSTUVWXYZ23456789' < /dev/urandom | head -c 20 ; "
+                + $"LC_ALL=C tr -dc '{Alphabet}' < /dev/urandom | head -c 20 ; "
                 + "sans assistant, retirer la variable.");
         }
 
