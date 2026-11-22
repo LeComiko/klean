@@ -1,0 +1,80 @@
+/* L'assistant d'installation reprend la charpente de Connexion.css — carte, champs,
+   boutons, cibles de 56 px sous 720 px. Ne figure ici que ce qui lui manque. */
+
+.installation__formulaire {
+  display: flex;
+  flex-direction: column;
+}
+
+/* La barre d'étapes : quatre repères non interactifs. L'étape courante se lit par la
+   graisse et le fond, et `aria-current` l'annonce ; une étape passée porte le mot
+   « terminée » : la couleur ne porte rien seule. */
+.installation__etapes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-2);
+  margin-bottom: var(--espace-6);
+}
+
+.installation__etape {
+  padding: var(--espace-1) var(--espace-2);
+  border-radius: var(--rayon-badge);
+  color: var(--texte-2);
+}
+
+.installation__etape[aria-current='step'] {
+  background: var(--brand-tint);
+  color: var(--texte);
+  font-weight: 700;
+}
+
+.installation__numero {
+  font-family: var(--police-chiffres);
+  font-variant-numeric: tabular-nums;
+}
+
+.installation__titre {
+  margin-bottom: var(--espace-4);
+  font-size: var(--corps-mobile-taille);
+  line-height: var(--corps-mobile-interligne);
+  font-weight: 700;
+}
+
+/* Une phrase d'aide sous son champ, liée par aria-describedby. Le champ porte déjà
+   une marge basse : l'aide s'y loge, et garde la sienne avant l'étiquette suivante. */
+.installation__aide {
+  margin-top: calc(-1 * var(--espace-3));
+  margin-bottom: var(--espace-4);
+  color: var(--texte-2);
+}
+
+/* Vingt caractères dans un champ de 390 px de large : moins espacés que les six
+   chiffres du second facteur, en chasse fixe pour se comparer à l'écran du serveur. */
+.installation__code {
+  font-family: var(--police-chiffres);
+  letter-spacing: 0.1em;
+}
+
+.installation__premier {
+  padding: var(--espace-3);
+  background: var(--brand-tint);
+  border-radius: var(--rayon-bloc);
+}
+
+.installation__savoir {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-3);
+  margin-bottom: var(--espace-6);
+  padding-left: var(--espace-6);
+  list-style: disc;
+}
+
+@media (max-width: 720px) {
+  .installation__etape,
+  .installation__aide,
+  .installation__savoir {
+    font-size: var(--corps-mobile-taille);
+    line-height: var(--corps-mobile-interligne);
+  }
+}
