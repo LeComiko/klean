@@ -80,8 +80,12 @@ services:
     environment:
       <<: *configuration-api
 
-      # Lues seulement si la base n'a encore aucun compte. Après la première
-      # connexion, les retirer de .env : voir DEPLOIEMENT.md.
+      # Le code de l'assistant d'installation (étape 34, lot A2). Le script le retire de .env dès
+      # qu'un compte existe. Sans lui ni variables d'amorçage, l'API refuse de démarrer sur une
+      # base vide.
+      Installation__Code: "${KLEAN_CODE_INSTALLATION:-}"
+
+      # L'autre voie, celle de DEPLOIEMENT.md : lues seulement si la base n'a aucun compte.
       Amorcage__EmailAdmin: "${KLEAN_ADMIN_EMAIL:-}"
       Amorcage__MotDePasseAdmin: "${KLEAN_ADMIN_MOT_DE_PASSE:-}"
       Amorcage__RaisonSocialeEntreprise: "${KLEAN_RAISON_SOCIALE:-}"

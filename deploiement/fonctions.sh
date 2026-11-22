@@ -12,8 +12,8 @@ KLEAN_DEPOT_GITHUB="${KLEAN_DEPOT_GITHUB:-@DEPOT@}"
 # dans .env.
 ALPHABET_CODE='ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 
-# Un octet aléatoire, de 0 à 255. Échoue plutôt que de rendre une chaîne vide : les
-# boucles de rejet ci-dessous tourneraient alors sans fin.
+# Un octet aléatoire, de 0 à 255. Échoue plutôt que de rendre une chaîne vide : la
+# boucle de rejet de generer_code tournerait alors sans fin.
 octet_aleatoire() {
   local octet
   octet=$(od -An -N1 -tu1 /dev/urandom | tr -d ' \n') || return 1
@@ -35,32 +35,22 @@ generer_code() {
   printf '%s\n' "$code"
 }
 
+# Le code d'installation par groupes de cinq, pour le lire à l'écran et le recopier.
+# L'API retire les tirets à la saisie.
+code_lisible() {
+  local code="$1" groupes=()
+  while [ -n "$code" ]; do
+    groupes+=("${code:0:5}")
+    code="${code:5}"
+  done
+  (IFS=-; printf '%s\n' "${groupes[*]:-}")
+}
+
 # Un secret hexadécimal de $1 octets. Hexadécimal : un « ; » ou un « = » couperait la
 # chaîne de connexion de PostgreSQL (.env.example).
 generer_secret() {
   od -An -N"$1" -tx1 /dev/urandom | tr -d ' \n'
   printf '\n'
-}
-
-# Un mot de passe provisoire qui passe les règles d'Identity (CLAUDE.md §6) : 16
-# caractères, une majuscule, une minuscule et un chiffre au moins.
-generer_mot_de_passe() {
-  local alphabet='ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
-  local mot octet
-  while :; do
-    mot=''
-    while [ "${#mot}" -lt 16 ]; do
-      octet=$(octet_aleatoire) || return 1
-      # 216 = 4 × 54, pour la même raison que dans generer_code.
-      if [ "$octet" -lt 216 ]; then
-        mot+="${alphabet:$((octet % 54)):1}"
-      fi
-    done
-    if [[ "$mot" =~ [A-Z] && "$mot" =~ [a-z] && "$mot" =~ [0-9] ]]; then
-      printf '%s\n' "$mot"
-      return
-    fi
-  done
 }
 
 # La valeur de la clé $2 dans le fichier .env $1, ou une chaîne vide. Les apostrophes
@@ -171,24 +161,6 @@ normaliser_domaine() {
     printf '%s\n' "« $1 » n'est pas un nom de domaine (exemple : klean.mon-entreprise.fr)."
     return 1
   fi
-}
-
-# L'apostrophe droite de « Nettoyage de l'Ouest » ne peut pas figurer dans .env :
-# elle devient l'apostrophe typographique, que l'écran affiche de même. 200 : la
-# colonne de la base (Entreprise.RaisonSociale).
-normaliser_raison_sociale() {
-  local raison
-  raison=$(rogner "$1")
-  raison="${raison//\'/’}"
-  if [ -z "$raison" ]; then
-    printf 'La raison sociale est nécessaire.\n'
-    return 1
-  fi
-  if [ "${#raison}" -gt 200 ]; then
-    printf 'Trop longue : 200 caractères au plus.\n'
-    return 1
-  fi
-  printf '%s\n' "$raison"
 }
 
 # Une adresse de forme plausible, rien de plus : seul l'envoi d'un courriel prouve
@@ -430,4 +402,48 @@ fuseau_valide() {
 heure_de_la_sauvegarde() {
   local instant="${2:-$(date +%s)}"
   [ "$(TZ="$1" date -d "@$instant" +%H)" = 03 ]
+}
+
+# ---- Installation ---------------------------------------------------------------
+
+# Ce que disent de l'installation le nombre de comptes $1 et, s'il est donné, le nombre
+# d'entreprises $2, tels que psql les a écrits : « installee » dès qu'un compte existe ;
+# sans compte, « orpheline » si une entreprise existe — le reste d'un amorçage d'avant le
+# lot A2, que l'assistant ne reprend pas —, sinon « a-faire ». Une sortie illisible —
+# vide, PostgreSQL muet, un message d'erreur — n'est ni l'une ni l'autre : un échec, et
+# jamais « aucun compte », qui ferait tirer ou montrer un code sur une instance installée.
+etat_installation() {
+  [[ "$1" =~ ^[0-9]+$ ]] || return 1
+  if [ "$1" -gt 0 ]; then
+    printf 'installee\n'
+    return
+  fi
+  if [ "$#" -ge 2 ]; then
+    [[ "$2" =~ ^[0-9]+$ ]] || return 1
+    if [ "$2" -gt 0 ]; then
+      printf 'orpheline\n'
+      return
+    fi
+  fi
+  printf 'a-faire\n'
+}
+
+# Les clés du fichier .env $1 qu'un compte existant rend inutiles, d'après le nombre de
+# comptes $2 : le code de l'assistant, et les restes de l'amorçage d'une version 0.1.x.
+# Seulement celles qui portent une valeur, une par ligne ; rien sans compte, et un échec
+# sur un nombre illisible (etat_installation).
+#
+# ⚠️ Un mot de passe provisoire encore là n'a pas été montré : une installation 0.1.x
+# inachevée, que `klean installer` termine par montrer_puis_retirer_mot_de_passe. Le
+# retirer, ou l'adresse qu'il ouvre, perdrait le seul accès au compte. Il reste, avec elle
+# et la raison sociale : ils partiront une fois montré.
+cles_d_installation_a_retirer() {
+  local fichier="$1" etat cle
+  etat=$(etat_installation "$2") || return 1
+  [ "$etat" = installee ] || return 0
+  [ -z "$(lire_env "$fichier" KLEAN_CODE_INSTALLATION)" ] || printf 'KLEAN_CODE_INSTALLATION\n'
+  [ -z "$(lire_env "$fichier" KLEAN_ADMIN_MOT_DE_PASSE)" ] || return 0
+  for cle in KLEAN_ADMIN_EMAIL KLEAN_RAISON_SOCIALE; do
+    [ -z "$(lire_env "$fichier" "$cle")" ] || printf '%s\n' "$cle"
+  done
 }
