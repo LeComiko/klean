@@ -4586,6 +4586,59 @@ est marqué *(relecture)*.
 - Le géocodage des domiciles des agents ; l'import des contrats et des prestations.
 - La partie retenue de B — portail client, contrôle qualité, rapport PDF — à choisir
   avant de la cadrer.
+
+**Lot A1 — fait le 22 novembre 2026**
+
+Le dépôt est public, `LeComiko/klean`, et trois versions sont publiées : 0.1.0, 0.1.1 et
+0.1.2, chacune avec ses deux images sur `ghcr.io`, son archive, son installateur et leurs
+empreintes, lisibles sans compte. L'essai s'est fait sur le VPS OVH remis à neuf en
+Debian 12 (amd64, 4 cœurs, 8 Go), sous `klean.solum-immo.fr`, A **et** AAAA.
+
+- **Installation** : `curl … | sudo bash`, les questions, la vérification du domaine en
+  IPv4 et IPv6, le certificat de Let's Encrypt, l'adresse et le mot de passe provisoire.
+  Première connexion : mot de passe remplacé, second facteur équipé ; le mot de passe
+  provisoire ne reste pas dans `.env`.
+- **Seconde exécution** : « aucun secret n'est régénéré », KLEAN répond toujours.
+- **Sauvegarde** : dossiers en 700, fichiers en 600, à root ; `klean etat` le dit, et
+  rappelle qu'aucune copie n'existe hors du serveur.
+- **Mise à jour** 0.1.0 → 0.1.1, puis 0.1.0 → 0.1.2 : sauvegarde `…-avant-<version>.dump`,
+  migration — aucune à appliquer —, redémarrage, et la sonde annonce la nouvelle version.
+- **Retour** : la version précédente répond, et un client créé après la mise à jour a
+  disparu de la base, tout en restant dans la copie `…-avant-restauration.dump`.
+- **Restauration** de la sauvegarde de la nuit : un client créé depuis a disparu, et la
+  session ouverte tombe à la requête suivante. Après la restauration, la connexion passe
+  avec le mot de passe et le code de l'application : le trousseau fusionné déchiffre
+  toujours la clé du second facteur.
+- **Cron** : `/etc/cron.d/klean` en 644, et la sauvegarde de 3 h 30 a tourné seule la
+  première nuit, son journal dans `/var/log/klean-sauvegarde.log`.
+
+**Ce qui a cassé, et comment c'est réparé**
+
+- **La sonde annonçait « 0.1.0 » écrit à la main**, quelle que soit l'image : une mise à
+  jour ne pouvait pas se vérifier par elle. Depuis 0.1.1, la version vient de l'étiquette,
+  passée à `dotnet publish` par `publication.yml` ; hors publication, `0.0.0-dev`.
+- **Une restauration laissait les sessions ouvertes jusqu'à quinze minutes**, alors qu'elle
+  annonçait « Toutes les sessions sont fermées ». Elle révoquait les jetons de
+  rafraîchissement, pas les jetons d'accès : la sauvegarde rend à chaque compte son
+  empreinte de sécurité, la même que celle du jeton déjà émis. C'est le piège du §10 de
+  `CLAUDE.md`, sous une forme nouvelle. Depuis 0.1.2, chaque compte reçoit une empreinte
+  neuve dans la même transaction, pour `restaurer` comme pour `revenir` ; vu sur le VPS,
+  la session tombe au clic suivant.
+- **La question du géocodage** est retirée de l'installation avant l'essai : l'API ne la
+  lit qu'au lot A3. `KLEAN_GEOCODAGE` est posée à `false`.
+- Un premier essai du retour n'a rien prouvé : aucune donnée n'avait été saisie entre la
+  mise à jour et le retour, ce qu'a montré la comparaison des deux sauvegardes. Refait
+  avec un client nommé.
+
+**Limites constatées**
+
+- **La sauvegarde tourne à 3 h 30 heure du serveur**, et un VPS OVH est en UTC : 4 h 30 à
+  Paris l'hiver, 5 h 30 l'été. Sans gravité, mais ce n'est pas ce que lit l'exploitant.
+- **Ubuntu n'a pas été essayé**, seulement Debian 12.
+- La question de l'adresse de l'administrateur ne dit pas si elle doit exister : sans SMTP,
+  ce n'est qu'un identifiant. À dire au lot A2, qui réécrit ce premier lancement.
+- La première connexion SSH d'un VPS OVH réinstallé exige un changement de mot de passe
+  dans un vrai terminal — hors de KLEAN, mais c'est le premier obstacle d'un patron.
 ---
 
 # Suite — non planifié
