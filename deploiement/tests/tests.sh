@@ -345,6 +345,42 @@ verifier 'l’archive est reproductible' \
 
 rm -rf "$sortie" "$contenu" "$seconde"
 
+# ---- Heure de la sauvegarde de nuit ------------------------------------------
+
+instant() { date -u -d "$1" +%s; }
+# Vrai si la commande échoue : un `bash -c '! …'` ne verrait pas les fonctions sourcées.
+faux() { ! "$@"; }
+
+verifier 'Paris l’hiver : 2 h 30 UTC est 3 h 30' heure_de_la_sauvegarde Europe/Paris "$(instant 2026-01-15T02:30:00Z)"
+verifier 'Paris l’hiver : 3 h 30 UTC est 4 h 30' faux heure_de_la_sauvegarde Europe/Paris "$(instant 2026-01-15T03:30:00Z)"
+verifier 'Paris l’été : 1 h 30 UTC est 3 h 30' heure_de_la_sauvegarde Europe/Paris "$(instant 2026-07-15T01:30:00Z)"
+verifier 'Paris l’été : 2 h 30 UTC est 4 h 30' faux heure_de_la_sauvegarde Europe/Paris "$(instant 2026-07-15T02:30:00Z)"
+verifier 'La Réunion : 23 h 30 UTC est 3 h 30 le lendemain' heure_de_la_sauvegarde Indian/Reunion "$(instant 2026-01-15T23:30:00Z)"
+
+# Une fois par jour exactement : le cron appelle à chaque heure, à la demie UTC. Les
+# deux jours de changement d'heure à Paris, un jour ordinaire, et un fuseau décalé
+# d'une demi-heure, où la demie UTC tombe à l'heure pile.
+sauvegardes_du_jour() {
+  local debut n=0 h
+  debut=$(instant "$2T00:30:00Z")
+  for h in $(seq 0 23); do
+    if heure_de_la_sauvegarde "$1" $((debut + h * 3600)); then n=$((n + 1)); fi
+  done
+  echo "$n"
+}
+verifier 'une seule sauvegarde le jour du passage à l’heure d’été' egal "$(sauvegardes_du_jour Europe/Paris 2026-03-29)" 1
+verifier 'une seule sauvegarde le jour du retour à l’heure d’hiver' egal "$(sauvegardes_du_jour Europe/Paris 2026-10-25)" 1
+verifier 'une seule sauvegarde un jour ordinaire' egal "$(sauvegardes_du_jour Europe/Paris 2026-11-22)" 1
+verifier 'une seule sauvegarde dans un fuseau à la demi-heure' egal "$(sauvegardes_du_jour Asia/Kolkata 2026-11-22)" 1
+
+verifier 'Europe/Paris est un fuseau' fuseau_valide Europe/Paris
+verifier 'UTC est un fuseau' fuseau_valide UTC
+verifier 'America/Martinique est un fuseau' fuseau_valide America/Martinique
+verifier 'un fuseau mal écrit est refusé' faux fuseau_valide Europe/Pari
+verifier 'un chemin qui remonte est refusé' faux fuseau_valide ../../../etc/passwd
+verifier 'un fuseau vide est refusé' faux fuseau_valide ''
+verifier 'un chemin absolu est refusé' faux fuseau_valide /usr/share/zoneinfo/UTC
+
 # ---- Bilan -------------------------------------------------------------------
 
 printf '%s réussis, %s échoués\n' "$reussis" "$echoues"

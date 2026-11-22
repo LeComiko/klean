@@ -5,7 +5,7 @@
 #   sudo klean installer               première installation, ou reprise
 #   sudo klean mettre-a-jour [1.2.3]   sans version : la dernière publiée
 #   sudo klean revenir                 la version précédente, et la base d'avant (14 jours)
-#   sudo klean sauvegarder             ce que fait la tâche de chaque nuit
+#   sudo klean sauvegarder             une sauvegarde, tout de suite
 #   sudo klean restaurer <sauvegarde>
 #   sudo klean etat | journaux | code
 #
@@ -24,6 +24,7 @@ ENV="$REPERTOIRE/.env"
 SAUVEGARDES="${KLEAN_SAUVEGARDES:-/var/backups/klean}"
 VERROU="${KLEAN_VERROU:-/run/klean.lock}"
 TROUSSEAU="${KLEAN_TROUSSEAU:-/var/lib/klean-trousseau}"
+JOURNAL_NUIT=/var/log/klean-sauvegarde.log
 JOURS_CONSERVATION=14
 
 # shellcheck source-path=SCRIPTDIR source=fonctions.sh
@@ -190,6 +191,28 @@ cmd_sauvegarder() {
   dire "Sauvegarde : $nom"
 }
 
+# La tâche de nuit, que klean.cron appelle à chaque heure. Le cron de Debian suit le
+# fuseau du système — UTC sur un VPS, 4 h 30 à Paris l'hiver pour un « 3 h 30 » — et ignore
+# CRON_TZ : seule l'heure de 3 h dans le fuseau de .env sauvegarde, une fois par nuit,
+# changement d'heure compris. Le journal ne s'ouvre qu'alors : une heure sans
+# sauvegarde effacerait sinon celui de la nuit. Un fuseau inconnu ne coûte pas la
+# sauvegarde : elle se fait à 3 h UTC, et le journal le dit.
+cmd_sauvegarde_de_nuit() {
+  exiger_root
+  local fuseau
+  fuseau=$(lire_env "$ENV" KLEAN_FUSEAU)
+  fuseau="${fuseau:-Europe/Paris}"
+  if fuseau_valide "$fuseau"; then
+    heure_de_la_sauvegarde "$fuseau" || return 0
+    exec > "$JOURNAL_NUIT" 2>&1
+  else
+    heure_de_la_sauvegarde UTC || return 0
+    exec > "$JOURNAL_NUIT" 2>&1
+    avertir "KLEAN_FUSEAU vaut « $fuseau », qui n'est pas un fuseau connu (exemple : Europe/Paris, Indian/Reunion) : sauvegarde à 3 h UTC. Corrigez-le dans $ENV."
+  fi
+  cmd_sauvegarder
+}
+
 # Le trousseau ne change presque jamais : une archive n'est gardée que s'il a changé.
 # La plus récente contient toutes les clés, anciennes comprises (DEPLOIEMENT.md §4).
 sauvegarder_trousseau() {
@@ -268,7 +291,7 @@ cmd_etat() {
   if [ "$derniere" -eq 0 ]; then
     avertir "Aucune sauvegarde réussie. Lancez : sudo klean sauvegarder"
   elif [ "$heures" -gt 48 ]; then
-    avertir "Dernière sauvegarde réussie il y a $heures heures. Voir /var/log/klean-sauvegarde.log, puis : sudo klean sauvegarder"
+    avertir "Dernière sauvegarde réussie il y a $heures heures. Voir $JOURNAL_NUIT, puis : sudo klean sauvegarder"
   else
     dire "Dernière sauvegarde réussie il y a $heures heure(s)."
   fi
@@ -1301,7 +1324,9 @@ principal() {
   shift || true
   case "$COMMANDE" in
     installer) cmd_installer ;;
-    sauvegarder) cmd_sauvegarder "$@" ;;
+    sauvegarder)
+      if [ "${1:-}" = --nuit ]; then cmd_sauvegarde_de_nuit; else cmd_sauvegarder "$@"; fi
+      ;;
     etat) cmd_etat ;;
     journaux) cmd_journaux "$@" ;;
     code) cmd_code ;;

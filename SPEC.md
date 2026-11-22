@@ -4632,8 +4632,11 @@ Debian 12 (amd64, 4 cœurs, 8 Go), sous `klean.solum-immo.fr`, A **et** AAAA.
 
 **Limites constatées**
 
-- **La sauvegarde tourne à 3 h 30 heure du serveur**, et un VPS OVH est en UTC : 4 h 30 à
-  Paris l'hiver, 5 h 30 l'été. Sans gravité, mais ce n'est pas ce que lit l'exploitant.
+- ~~**La sauvegarde tourne à 3 h 30 heure du serveur**~~, et un VPS OVH est en UTC : 4 h 30
+  à Paris l'hiver, 5 h 30 l'été. **Corrigé en 0.1.3** : le cron de Debian ignore `CRON_TZ`,
+  la tâche est donc horaire, et `klean sauvegarder --nuit` ne sauvegarde qu'à 3 h dans le
+  fuseau `KLEAN_FUSEAU` de `.env`, `Europe/Paris` par défaut — une fois par nuit, les jours
+  de changement d'heure compris, ce que la série éprouve.
 - **Ubuntu n'a pas été essayé**, seulement Debian 12.
 - La question de l'adresse de l'administrateur ne dit pas si elle doit exister : sans SMTP,
   ce n'est qu'un identifiant. À dire au lot A2, qui réécrit ce premier lancement.

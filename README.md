@@ -112,8 +112,9 @@ libère. `mettre-a-jour` et `revenir` sont décrites dans `DEPLOIEMENT.md` §3 e
 
 ### Sauvegardes
 
-La base est sauvegardée **chaque nuit à 3 h 30** (tâche `/etc/cron.d/klean`, journal dans
-`/var/log/klean-sauvegarde.log`). Chaque sauvegarde est relue en entier avant d'être gardée,
+La base est sauvegardée **chaque nuit vers 3 h**, heure de Paris (tâche `/etc/cron.d/klean`,
+journal dans `/var/log/klean-sauvegarde.log`). Ailleurs qu'en métropole, changez le fuseau
+dans `/opt/klean/.env` : `KLEAN_FUSEAU=America/Martinique`, `Indian/Reunion`… Chaque sauvegarde est relue en entier avant d'être gardée,
 et **quatorze jours** sont conservés.
 
 - La base va dans `/var/backups/klean`.

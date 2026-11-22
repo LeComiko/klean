@@ -244,8 +244,11 @@ voient toujours toutes les lignes, comme avant.
 
 ### Sauvegarder, avec `klean`
 
-Une tâche cron fait `klean sauvegarder` **chaque nuit à 3 h 30** (`/etc/cron.d/klean`,
-journal dans `/var/log/klean-sauvegarde.log`), et la commande se lance aussi à la main :
+Une tâche cron fait `klean sauvegarder --nuit` à chaque heure, et elle ne sauvegarde qu'**une
+fois par nuit, à 3 h** dans le fuseau `KLEAN_FUSEAU` de `.env` — `Europe/Paris` par défaut,
+changement d'heure compris (`/etc/cron.d/klean`, journal dans `/var/log/klean-sauvegarde.log`).
+Le cron de Debian suit le fuseau du serveur, souvent UTC, et ignore `CRON_TZ` : d'où cet
+appel horaire. La commande se lance aussi à la main :
 
 ```bash
 sudo klean sauvegarder

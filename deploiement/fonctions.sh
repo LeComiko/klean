@@ -415,3 +415,19 @@ sauvegardes_a_supprimer() {
   done <<< "$fichiers"
 }
 
+
+# Vrai si $1 nomme un fuseau connu du système, Europe/Paris ou Indian/Reunion. `date`
+# accepte n'importe quel TZ et compte alors en UTC sans rien dire : un fuseau mal écrit
+# déplacerait la sauvegarde de la nuit en silence. Le motif écarte aussi « .. ».
+fuseau_valide() {
+  [[ "$1" =~ ^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)*$ ]] && [ -f "/usr/share/zoneinfo/$1" ]
+}
+
+# Vrai si l'instant $2 — secondes depuis 1970, maintenant par défaut — tombe dans
+# l'heure de 3 h du fuseau $1. Appelée à chaque heure par la tâche de nuit, elle n'est
+# vraie qu'une fois par jour, changement d'heure compris : à Paris, l'heure répétée ou
+# sautée est celle de 2 h.
+heure_de_la_sauvegarde() {
+  local instant="${2:-$(date +%s)}"
+  [ "$(TZ="$1" date -d "@$instant" +%H)" = 03 ]
+}

@@ -1789,12 +1789,16 @@ Npgsql cherche `libgssapi_krb5`, absente de l'image .NET, et écrit « Error: �
 open shared object file » au premier démarrage. Sans conséquence, mais c'est la première
 ligne qu'un exploitant lirait.
 
-**Cinq pièges du script d'installation** (`deploiement/`, étape 34), chacun rencontré en
+**Six pièges du script d'installation** (`deploiement/`, étape 34), chacun rencontré en
 l'écrivant ou en le relisant :
 
 - **Un fichier de `/etc/cron.d` dont le nom porte un point est ignoré par cron**, sans
   erreur ni journal : `klean.cron` s'installe donc sous `/etc/cron.d/klean`. Il lui faut
   aussi le mode 644 et root pour propriétaire, que l'`umask 077` du script ne donnerait pas.
+- **Le cron de Debian suit le fuseau du système et ignore `CRON_TZ`** : sur un VPS en UTC,
+  « 3 h 30 » tombait à 4 h 30 à Paris l'hiver. La tâche est donc horaire, et
+  `klean sauvegarder --nuit` ne sauvegarde qu'à 3 h dans `KLEAN_FUSEAU`. Un fuseau mal écrit
+  ne lève rien sous `date`, qui compte alors en UTC : `fuseau_valide` le refuse d'abord.
 - **L'API crée une clé de Data Protection dès son démarrage**, sans requête. Sur une
   machine neuve, « restaurer le trousseau s'il est vide » ne restaure donc jamais rien : le
   trousseau se **fusionne** toujours, et chaque clé gardant son identifiant, celle de la
