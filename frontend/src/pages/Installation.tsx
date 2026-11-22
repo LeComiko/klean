@@ -413,7 +413,8 @@ export function Installation() {
   }
 
   // ⚠️ Ni retour à l'entreprise ni nouvel envoi : changer de SIRET contournerait le blocage et
-  // laisserait l'orpheline en base. Elle se retire à la main (DEPLOIEMENT.md).
+  // laisserait l'orpheline en base. Elle se retire à la main (DEPLOIEMENT.md). Ni lien vers la
+  // connexion : sans aucun compte, elle renvoie ici, saisie perdue (vu au navigateur).
   if (bloquee) {
     return (
       <main className="connexion">
@@ -425,10 +426,6 @@ export function Installation() {
           <p className="connexion__explication">
             Une fois l’entreprise retirée et KLEAN redémarré, rechargez cette page.
           </p>
-
-          <button className="connexion__lien" type="button" onClick={() => naviguer('/connexion', { replace: true })}>
-            Aller à la connexion
-          </button>
         </div>
       </main>
     )
