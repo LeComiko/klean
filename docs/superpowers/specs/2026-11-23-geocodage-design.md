@@ -111,10 +111,18 @@ client nommé (§11, et le cadrage A3, point 9).
   `postcode` omis s'il est vide. Ce qui part : **la voie, le code postal et la commune** d'un
   site — ni son nom, ni ses consignes, ni le client.
 - **`User-Agent: KLEAN`**, sans version ni domaine : aucun en-tête n'identifie l'instance.
+- **L'enregistrement est une méthode**, `ServiceGeocodage.Enregistrer(IServiceCollection,
+  IConfiguration)`, appelée par `Program.cs` : le test de la redirection l'appelle sur une
+  `ServiceCollection` neuve pour obtenir la configuration de production du client, sans
+  substitution. La série, elle, substitue en ajoutant au client nommé un `DelegatingHandler`
+  **en dernier**, qui répond sans appeler la suite : le gestionnaire primaire reste en place.
 - **Le gestionnaire** : le gestionnaire primaire du client nommé est un `SocketsHttpHandler`
   avec `AllowAutoRedirect = false` ; c'est lui qui suivrait une redirection, pas `HttpClient`.
-  Délai : `Geocodage:DelaiSecondes`, 5 par défaut, réglable pour que le test du délai ne coûte
-  pas cinq secondes. Réponse lue avec un plafond de 64 Kio, au-delà de quoi elle est rejetée.
+  Délai : `Geocodage:DelaiSecondes`, 5 par défaut ; un entier de 1 à 30, sinon le démarrage
+  refuse, comme pour l'adresse. Il est lu **à la construction du service**, depuis
+  `IConfiguration`, et non au niveau supérieur de `Program.cs` : le test du délai le pose par
+  `ConfigureAppConfiguration` sur une fabrique dérivée, qui n'atteint pas le reste de la série
+  (§10, `WebApplicationFactory`). Réponse lue avec un plafond de 64 Kio, au-delà de quoi elle est rejetée.
   Le `CancellationToken` de l'action est passé à l'appel.
 - **Aucun journal du client** : `RemoveAllLoggers()` sur le client `geocodage`. C'est la
   garde principale du journal technique, plus bas : un exploitant qui passe `Default` en
@@ -139,11 +147,18 @@ recopier.
   portent l'URL complète, et sa **portée** `HTTP GET {Uri}` aussi — or `IncludeScopes` est
   vrai, et un niveau filtre les messages, pas les portées d'une ligne écrite par une autre
   catégorie.
-- Un test vérifie **sur le chemin réel** — l'hôte de la série, sa configuration, un
-  fournisseur de journal qui capture **les messages et les portées** — qu'aucune ligne ne
-  contient l'adresse envoyée, ni la chaîne `geocodage/search?`. Il s'éprouve par deux
-  sabotages séparés : `RemoveAllLoggers()` retiré, le test rougit ; le réglage de
-  `appsettings.json` retiré seul, il reste vert, ce qui est attendu et dit dans le test.
+- **Deux tests, un par garde**, car deux gardes qui couvrent le même cas ne s'éprouvent
+  qu'une fois séparées (§7 bis) :
+  - **`RemoveAllLoggers()`** : un fournisseur de capture, ajouté à l'hôte de la série avec sa
+    règle propre `AddFilter<FournisseurCapture>(null, LogLevel.Trace)` — une règle propre à un
+    fournisseur l'emporte sur toute règle générale, donc sur le `Warning` de
+    `appsettings.json` —, enregistre **les messages et les portées**. Après une localisation,
+    aucune ligne ne contient l'adresse envoyée, ni `geocodage/search?`. Sabotage :
+    `RemoveAllLoggers()` retiré, le test rougit. Ce n'est pas tout à fait le chemin de la
+    console : c'est le client lui-même qu'il éprouve.
+  - **Le réglage de `appsettings.json`** : lu dans le fichier, comme la série du frontend lit
+    les sources du serveur, `System.Net.Http.HttpClient` y vaut `Warning`, et
+    `appsettings.Development.json` ne le redéfinit pas plus bas.
 
 ## L'écran
 
@@ -230,7 +245,9 @@ votre choix » devient « Désactivée : à activer, si vous le voulez, dans Ent
   exactement `KLEAN` ;
 - le journal technique : aucune ligne ne contient l'adresse envoyée ;
 - le démarrage refuse `Geocodage:Adresse` en `http` ;
-- la migration : une entreprise insérée **par SQL, sans la colonne** — comme une ligne écrite
+- la migration : une entreprise insérée **par SQL, sans la colonne**, depuis une
+  `PorteeAuProprietaire()` (sous `klean_app`, `Entreprises` refuserait en `42501`, §10) et sous
+  un SIRET libre (`IX_Entreprises_Siret`) — comme une ligne écrite
   avant la migration —, relue en base, porte `false`. Une entreprise créée par EF ne prouve
   rien : EF écrit explicitement le `false` du CLR, et le défaut de la colonne n'est jamais
   exercé.
