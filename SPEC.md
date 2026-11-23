@@ -4720,6 +4720,64 @@ téléphone.
     seul en tête ;
   - la barre de navigation fait défiler les noms sous les icônes du compte, sans
     transition visible.
+
+**0.2.1 — fait le 23 novembre 2026**
+
+La version 0.2.1 est publiée et tourne sur le VPS. Elle corrige les trois limites du lot A2.
+
+- **Les visiteurs IPv6 sous leur adresse.** Caddy rejoint un second réseau, `public`, qui a
+  l'IPv6 (`KLEAN_IPV6`, `true` par défaut) et ne sert qu'à recevoir les visiteurs. Le réseau
+  `klean` est resté identique octet pour octet : Caddy y garde `172.28.0.10`, que désigne
+  `Proxy__Reseaux__0`, et l'API, PostgreSQL et la migration n'y changent rien. Les plafonds
+  par adresse comptent l'IPv6 par son /64, dans les trois contrôleurs qui en ont ; l'adresse
+  des sessions reste brute.
+- **Le code d'installation part dans l'heure.** La tâche horaire du cron le retire avant
+  de décider s'il est 3 h, et ne le dit au journal du système que si elle a eu quelque chose
+  à faire (`journalctl -t klean`).
+- **Trois retouches d'écran.** Une liste vide n'a plus qu'un état vide. La flèche d'une
+  ressource enfant suit son onglet à la ligne. La barre de navigation porte un fondu du côté
+  où des noms continuent, garde le lien focalisé hors du fondu, et sépare d'un filet le
+  groupe du compte.
+- **Sur le VPS :**
+  - **Mise à jour 0.2.0 → 0.2.1**, conduite par la 0.2.0 installée. Le premier essai a
+    échoué sur un raté du DNS de l'hébergeur, au téléchargement des images : le script
+    s'est arrêté avant tout arrêt, la 0.2.0 tournait toujours. Le second a réussi.
+  - **Les deux réseaux** existent, `klean_public` a l'IPv6 sur `fd91:8576:6d::/64`, et son
+    IPv4 vient du pool de Docker. Caddy a repris son certificat sans erreur.
+  - **Une connexion ouverte depuis l'iPhone en 5G** est enregistrée sous l'adresse IPv6
+    du téléphone, et non plus `172.28.0.1`. L'adresse n'est pas recopiée ici.
+  - **L'IPv6 de la machine n'a pas bougé** : route par défaut statique, `accept_ra` à 0 sur
+    l'interface publique, Docker 29.10.
+  - **Les trois retouches** ont été regardées sur l'iPhone, et validées.
+- **Non rejoués sur le VPS**, éprouvés seulement par `commande.sh` : l'aller-retour
+  `revenir` puis `mettre-a-jour`, avec le retrait de `klean_public` ; le retrait horaire du
+  code, ce VPS n'en ayant plus ; une machine sans IPv6.
+
+**Ce qui a cassé en route, et comment c'est réparé**
+
+- **Activer l'IPv6 sur le réseau `klean` aurait cassé la mise à jour de toutes les
+  instances.** Docker refuse de recréer un réseau tant qu'un conteneur y est branché, et la
+  mise à jour lance la migration pendant que Caddy tourne. Reproduit sous Compose v5, avant
+  d'écrire le code : d'où le réseau séparé, et la règle « un besoin nouveau prend un réseau
+  nouveau » (`CLAUDE.md` §10).
+- **La documentation attribuait à `mettre-a-jour` une détection de l'IPv6** que seule
+  l'installation fait. Trouvé à la relecture d'ensemble, corrigé avant la publication.
+- **Trois commandes de `DEPLOIEMENT.md` commençaient par `cd /opt/klean`**, que le script
+  crée en mode 700 : refusé à l'utilisateur, vu sur le VPS. Elles passent par
+  `--project-directory`, ou en root.
+
+**Limites constatées**
+
+- **Mesuré sous Docker 29 seulement.** Sur un Docker plus ancien, ou sans `ip6tables`, les
+  visiteurs IPv6 pourraient retrouver une adresse commune, sans symptôme.
+  `DEPLOIEMENT.md` §9 donne la vérification.
+- **Une machine qui reçoit sa route IPv6 des annonces du routeur** peut la perdre une fois le
+  transfert IPv6 actif. Non mesuré, faute d'une telle machine : documenté au §9, avec le
+  remède `accept_ra=2`.
+- **Avec `KLEAN_IPV6=false`**, les visiteurs IPv6 partagent de nouveau une adresse, celle du
+  réseau `public`.
+- **Une mise à jour ne détecte pas l'IPv6** : elle écrit `true`. Sur une machine sans IPv6,
+  la reprise est manuelle (`DEPLOIEMENT.md` §9).
 ---
 
 # Suite — non planifié
