@@ -42,7 +42,7 @@ public class ReglageGeocodageTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Le_reglage_est_desactive_par_defaut()
+    public async Task Une_entreprise_neuve_se_lit_desactivee_et_sans_date()
     {
         var admin = await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
 
@@ -63,7 +63,7 @@ public class ReglageGeocodageTests : IAsyncLifetime
 
         var lue = await admin.GetFromJsonAsync<EntrepriseDto>($"/api/entreprises/{_fixture.EntrepriseAlpha}");
         Assert.True(lue!.GeocodageActif);
-        Assert.True(lue.GeocodageActiveLe >= avant);
+        Assert.True(lue.GeocodageActiveLe >= avant && lue.GeocodageActiveLe <= DateTime.UtcNow);
         Assert.Null(lue.GeocodageDesactiveLe);
 
         var liste = await admin.ListerAsync<EntrepriseDto>("/api/entreprises");
@@ -78,8 +78,9 @@ public class ReglageGeocodageTests : IAsyncLifetime
     public async Task Decoche_le_reglage_pose_sa_date_de_desactivation_et_garde_celle_d_activation()
     {
         var admin = await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
-        await Poser(admin, true);
+        Assert.Equal(HttpStatusCode.NoContent, (await Poser(admin, true)).StatusCode);
         var activeLe = (await EnBase()).GeocodageActiveLe;
+        Assert.NotNull(activeLe);
 
         Assert.Equal(HttpStatusCode.NoContent, (await Poser(admin, false)).StatusCode);
 
@@ -87,20 +88,58 @@ public class ReglageGeocodageTests : IAsyncLifetime
         Assert.False(enBase.GeocodageActif);
         Assert.Equal(activeLe, enBase.GeocodageActiveLe);
         Assert.NotNull(enBase.GeocodageDesactiveLe);
+        Assert.True(enBase.GeocodageDesactiveLe >= activeLe);
     }
 
     [Fact]
     public async Task Un_PUT_qui_ne_change_pas_le_reglage_ne_touche_aucune_date()
     {
         var admin = await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
-        await Poser(admin, true);
+        Assert.Equal(HttpStatusCode.NoContent, (await Poser(admin, true)).StatusCode);
         var activeLe = (await EnBase()).GeocodageActiveLe;
+        Assert.NotNull(activeLe);
 
-        await Poser(admin, true, raisonSociale: "Alpha Propreté et fils");
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await Poser(admin, true, raisonSociale: "Alpha Propreté et fils")).StatusCode);
 
         var enBase = await EnBase();
+        Assert.Equal("Alpha Propreté et fils", enBase.RaisonSociale);
         Assert.Equal(activeLe, enBase.GeocodageActiveLe);
         Assert.Null(enBase.GeocodageDesactiveLe);
+    }
+
+    [Fact]
+    public async Task Decocher_une_localisation_jamais_activee_ne_date_rien()
+    {
+        var admin = await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await Poser(admin, false)).StatusCode);
+
+        var enBase = await EnBase();
+        Assert.False(enBase.GeocodageActif);
+        Assert.Null(enBase.GeocodageActiveLe);
+        Assert.Null(enBase.GeocodageDesactiveLe);
+    }
+
+    [Fact]
+    public async Task Reactiver_renouvelle_la_date_d_activation_et_garde_celle_de_desactivation()
+    {
+        var admin = await _fixture.ClientConnecteAsync(FixtureApi.AdminAlpha);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await Poser(admin, true)).StatusCode);
+        var premiereActivation = (await EnBase()).GeocodageActiveLe;
+        Assert.NotNull(premiereActivation);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await Poser(admin, false)).StatusCode);
+        var desactiveLe = (await EnBase()).GeocodageDesactiveLe;
+        Assert.NotNull(desactiveLe);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await Poser(admin, true)).StatusCode);
+
+        var enBase = await EnBase();
+        Assert.True(enBase.GeocodageActif);
+        Assert.True(enBase.GeocodageActiveLe > premiereActivation);
+        Assert.Equal(desactiveLe, enBase.GeocodageDesactiveLe);
     }
 
     /// <summary>
