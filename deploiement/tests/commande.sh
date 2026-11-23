@@ -68,6 +68,19 @@ verifier_https() { printf 'attente\n' >> "$R/journal"; [ "$SONDE" = 200 ]; }
 exiger_root() { :; }
 # Aucun volume : reprendre_env ne refuse pas une base orpheline.
 volume_postgres_existe() { return 1; }
+# La tâche horaire : l'instant que lit `date +%s` — heure_de_la_sauvegarde le lit ainsi, la
+# vraie fonction tranche —, le journal de la nuit, et logger, qui note ce qu'il reçoit.
+INSTANT=''
+JOURNAL_NUIT="$R/nuit.log"
+date() {
+  if [ -n "$INSTANT" ] && [ "$*" = +%s ]; then printf '%s\n' "$INSTANT"; else command date "$@"; fi
+}
+logger() { printf '[logger %s]\n' "$*" >> "$R/logger"; cat >> "$R/logger"; }
+# Les attentes du verrou, raccourcies : un verrou qui ne se libère pas échoue en cinq
+# secondes au lieu de suspendre la série une demi-heure.
+flock() {
+  if [ "$1" = -w ]; then shift 2; command flock -w 5 "$@"; else command flock "$@"; fi
+}
 
 # neuf « contenu de .env » : un .env neuf, un journal vide, aucun verrou tenu.
 neuf() {
@@ -83,6 +96,8 @@ neuf() {
   SONDE=200
   EN_MARCHE=$'postgres\napi\ncaddy'
   CODE_API=''
+  INSTANT=''
+  : > "$R/logger"
 }
 
 CODE=$(generer_code)
@@ -412,6 +427,105 @@ for machine in avec_ipv6 sans_ipv6; do
   verifier "installation neuve, $machine : KLEAN_IPV6=$attendu" egal "$(valeur KLEAN_IPV6)" "$attendu"
   verifier "installation neuve, $machine : le domaine est écrit avec" egal "$(valeur KLEAN_DOMAINE)" k.exemple.fr
 done
+
+# ---- La tâche horaire retire le code à chaque passage ----------------------------
+#
+# Le cron appelle `klean sauvegarder --nuit` toutes les heures. Le code part dès le passage
+# qui suit le premier compte, sans attendre 3 h ; sa sortie va à logger, jamais au journal de
+# la nuit ni au courrier de cron. Europe/Paris, le fuseau par défaut, l'hiver.
+
+A_TROIS_HEURES=$(command date -u -d 2026-01-15T02:30:00Z +%s)
+HORS_DE_TROIS_HEURES=$(command date -u -d 2026-01-15T10:30:00Z +%s)
+journal_de_la_nuit() { cat "$JOURNAL_NUIT" 2> /dev/null; }
+logge() { cat "$R/logger" 2> /dev/null; }
+sauvegardes_faites() { find "$KLEAN_SAUVEGARDES" -maxdepth 1 -name 'klean-*.dump' 2> /dev/null | wc -l; }
+nuit() {
+  printf 'la nuit précédente\n' > "$JOURNAL_NUIT"
+  rm -rf "$KLEAN_SAUVEGARDES"
+}
+
+neuf "${BASE}KLEAN_CODE_INSTALLATION=$CODE\n"
+COMPTES=1
+INSTANT=$HORS_DE_TROIS_HEURES
+nuit
+sortie=$(cmd_sauvegarde_de_nuit 2>&1)
+s=$?
+verifier 'hors de 3 h, avec des comptes : réussit' statut "$s" 0
+verifier 'hors de 3 h : le code part de .env' egal "$(valeur KLEAN_CODE_INSTALLATION)" ''
+verifier 'hors de 3 h : et du conteneur' recree_l_api
+verifier 'hors de 3 h : aucune sauvegarde' egal "$(sauvegardes_faites)" 0
+verifier 'hors de 3 h : PostgreSQL n’est pas sauvegardé' sans "$(journal)" pg_dump
+verifier 'hors de 3 h : le journal de la nuit n’est pas touché' egal "$(journal_de_la_nuit)" 'la nuit précédente'
+verifier 'hors de 3 h : rien pour le courrier de cron' egal "$sortie" ''
+verifier 'hors de 3 h : le retrait est dit à logger' contient "$(logge)" 'ce qui ne servait qu'
+verifier 'sous l’étiquette klean' contient "$(logge)" '[logger -t klean]'
+verifier 'logger ne reçoit jamais le code' sans "$(logge)" "$CODE"
+
+neuf "${BASE}KLEAN_CODE_INSTALLATION=\n"
+COMPTES=1
+INSTANT=$HORS_DE_TROIS_HEURES
+nuit
+sortie=$(cmd_sauvegarde_de_nuit 2>&1)
+verifier 'hors de 3 h, rien à faire : aucune sortie' egal "$sortie" ''
+verifier 'hors de 3 h, rien à faire : logger n’est pas appelé' egal "$(logge)" ''
+verifier 'hors de 3 h, rien à faire : l’API n’est pas recréée' aucun_demarrage
+verifier 'hors de 3 h, rien à faire : le journal de la nuit reste' egal "$(journal_de_la_nuit)" 'la nuit précédente'
+
+neuf "${BASE}KLEAN_CODE_INSTALLATION=\n"
+COMPTES=0
+INSTANT=$HORS_DE_TROIS_HEURES
+nuit
+sortie=$(cmd_sauvegarde_de_nuit 2>&1)
+verifier 'hors de 3 h, aucun compte : aucune sortie' egal "$sortie" ''
+verifier 'hors de 3 h, aucun compte : logger n’est pas appelé' egal "$(logge)" ''
+
+neuf "${BASE}KLEAN_CODE_INSTALLATION=\n"
+COMPTES=1
+CODE_API="$CODE"
+INSTANT=$HORS_DE_TROIS_HEURES
+nuit
+sortie=$(cmd_sauvegarde_de_nuit 2>&1)
+verifier 'hors de 3 h : l’API relancée avec l’ancien code est recréée' recree_l_api
+verifier 'hors de 3 h : le rattrapage est dit à logger' contient "$(logge)" 'recréée sans lui'
+verifier 'hors de 3 h : le rattrapage ne dit rien au courrier' egal "$sortie" ''
+verifier 'ni le code rattrapé à logger' sans "$(logge)" "$CODE"
+
+for etat_inacheve in KLEAN_MAJ_EN_COURS KLEAN_RETOUR_EN_COURS; do
+  neuf "${BASE}KLEAN_CODE_INSTALLATION=$CODE\n$etat_inacheve=0.2.1\n"
+  COMPTES=1
+  INSTANT=$HORS_DE_TROIS_HEURES
+  nuit
+  sortie=$(cmd_sauvegarde_de_nuit 2>&1)
+  verifier "hors de 3 h, $etat_inacheve posé : le code part de .env" egal "$(valeur KLEAN_CODE_INSTALLATION)" ''
+  verifier "hors de 3 h, $etat_inacheve posé : l’API n’est pas démarrée" aucun_demarrage
+  verifier "hors de 3 h, $etat_inacheve posé : rien pour le courrier" egal "$sortie" ''
+done
+
+neuf "${BASE}KLEAN_CODE_INSTALLATION=$CODE\n"
+COMPTES=1
+INSTANT=$A_TROIS_HEURES
+nuit
+sortie=$(cmd_sauvegarde_de_nuit 2>&1)
+s=$?
+verifier 'à 3 h : réussit' statut "$s" 0
+verifier 'à 3 h : la sauvegarde est faite' egal "$(sauvegardes_faites)" 1
+verifier 'à 3 h : le journal de la nuit est réécrit' contient "$(journal_de_la_nuit)" 'Sauvegarde : '
+verifier 'à 3 h : sans la nuit précédente' sans "$(journal_de_la_nuit)" 'la nuit précédente'
+verifier 'à 3 h : le code part aussi' egal "$(valeur KLEAN_CODE_INSTALLATION)" ''
+verifier 'à 3 h : l’API est recréée une seule fois' egal "$(journal | grep -c 'compose up')" 1
+verifier 'à 3 h : le retrait va à logger' contient "$(logge)" 'ce qui ne servait qu'
+verifier 'à 3 h : et pas au journal de la nuit' sans "$(journal_de_la_nuit)" 'ce qui ne servait qu'
+verifier 'à 3 h : rien pour le courrier de cron' egal "$sortie" ''
+verifier 'à 3 h : le verrou du retrait ne retient pas la sauvegarde' sans "$(journal_de_la_nuit)" 'Une autre commande klean'
+
+neuf "${BASE}KLEAN_CODE_INSTALLATION=\n"
+COMPTES=1
+INSTANT=$A_TROIS_HEURES
+nuit
+sortie=$(cmd_sauvegarde_de_nuit 2>&1)
+verifier 'à 3 h, rien à retirer : la sauvegarde est faite' egal "$(sauvegardes_faites)" 1
+verifier 'à 3 h, rien à retirer : logger n’est pas appelé' egal "$(logge)" ''
+verifier 'à 3 h, rien à retirer : rien pour le courrier' egal "$sortie" ''
 
 # ---- Bilan ---------------------------------------------------------------------
 

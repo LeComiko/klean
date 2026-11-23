@@ -213,9 +213,14 @@ cmd_sauvegarder() {
 # changement d'heure compris. Le journal ne s'ouvre qu'alors : une heure sans
 # sauvegarde effacerait sinon celui de la nuit. Un fuseau inconnu ne coûte pas la
 # sauvegarde : elle se fait à 3 h UTC, et le journal le dit.
+#
+# Le code d'installation part à chaque passage, 3 h compris (retirer_code_de_l_heure) :
+# il ne reste ainsi, en temps ordinaire, qu'une heure au plus dans .env et dans le
+# conteneur après le premier compte — et non jusqu'à 3 h.
 cmd_sauvegarde_de_nuit() {
   exiger_root
   local fuseau
+  retirer_code_de_l_heure
   fuseau=$(lire_env "$ENV" KLEAN_FUSEAU)
   fuseau="${fuseau:-Europe/Paris}"
   if fuseau_valide "$fuseau"; then
@@ -227,10 +232,27 @@ cmd_sauvegarde_de_nuit() {
     avertir "KLEAN_FUSEAU vaut « $fuseau », qui n'est pas un fuseau connu (exemple : Europe/Paris, Indian/Reunion) : sauvegarde à 3 h UTC. Corrigez-le dans $ENV."
   fi
   cmd_sauvegarder
-  # Après la sauvegarde, qu'un échec ici ne doit pas coûter. Le filet d'une mise à jour
-  # depuis 0.1.x, conduite par l'ancien `klean`, qui laisse le code dans .env : recréer
-  # l'API à 3 h, une fois, est le prix assumé.
-  retirer_code_si_installe
+}
+
+# retirer_code_si_installe, pour la tâche horaire. Sa sortie ne va ni au journal de la nuit
+# — l'`exec` qui l'ouvre le vide, et elle passe avant lui — ni au courrier de cron, que
+# cron enverrait chaque heure où l'API est recréée : à logger, étiquetée klean, et
+# seulement s'il y a eu quelque chose à faire. Le cas ordinaire, sans code ni conteneur à
+# rattraper, ne dit rien.
+#
+# Dans un sous-shell, et c'est voulu : un échec — .env illisible, par exemple — n'y quitte
+# que lui, et ne coûte pas la sauvegarde de 3 h qui suit. Le verrou qu'il prend part avec
+# lui : KLEAN_VERROUILLE n'en remonte pas, et le descripteur 9 qu'il ouvre se ferme à sa
+# sortie, donc cmd_sauvegarder reprend le verrou de zéro. Rien n'est recréé sous une mise
+# à jour ou un retour inachevé : retirer_code_si_installe et rattraper_code_de_l_api le
+# refusent d'elles-mêmes.
+#
+# Le filet, aussi, d'une mise à jour conduite par une version qui ne retire rien (0.1.x),
+# ou d'un premier compte créé dans l'assistant : le code part dans l'heure.
+retirer_code_de_l_heure() {
+  local sortie
+  sortie=$(retirer_code_si_installe 2>&1) || true
+  [ -z "$sortie" ] || printf '%s\n' "$sortie" | logger -t klean || true
 }
 
 # Le trousseau ne change presque jamais : une archive n'est gardée que s'il a changé.
@@ -852,7 +874,7 @@ preparer_env() {
   jwt=$(generer_secret 48)
   # Montré à la toute fin, une fois le certificat obtenu (montrer_code_installation), et
   # retiré de ce fichier par la commande klean suivante qui voit un compte, au plus tard
-  # à la sauvegarde de la nuit (retirer_code_si_installe).
+  # au passage suivant de la tâche horaire du cron (retirer_code_de_l_heure).
   code=$(generer_code)
   ecrire_env \
     KLEAN_VERSION "$(cat "$REPERTOIRE/VERSION")" \
@@ -1485,7 +1507,8 @@ basculer_vers() {
   # La base a ses comptes : le code ne sert plus. Avant la sonde, qui attend alors l'API
   # recréée. ⚠️ Ce geste est celui du `klean` qui conduit la mise à jour, donc de la version
   # d'avant : une 0.1.x ne le connaît pas, et le code reste dans .env jusqu'au prochain
-  # `klean etat`, ou jusqu'à la sauvegarde de la nuit.
+  # `klean etat`, ou au plus tard jusqu'au passage suivant de la tâche horaire, que le
+  # cron confie au `klean` mis en place (retirer_code_de_l_heure).
   retirer_code_si_installe
   verifier_https ||
     echouer "KLEAN est passé en version $cible, mais ne répond pas en HTTPS (voir ci-dessus). Si cela vient de la nouvelle version : sudo klean revenir"

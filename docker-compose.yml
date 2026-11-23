@@ -81,7 +81,8 @@ services:
       <<: *configuration-api
 
       # Le code de l'assistant d'installation (étape 34, lot A2). Le script le retire de .env à
-      # la commande klean suivante qui voit un compte, au plus tard à la sauvegarde de la nuit.
+      # la commande klean suivante qui voit un compte, au plus tard dans l'heure : la tâche
+      # horaire du cron le retire à chaque passage.
       # Sans lui ni variables d'amorçage, l'API refuse de démarrer sur une base vide.
       Installation__Code: "${KLEAN_CODE_INSTALLATION:-}"
 
