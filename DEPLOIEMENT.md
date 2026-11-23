@@ -924,5 +924,9 @@ de confirmation. Ne le raccourcissez pas. Les comptes, eux, ne sont pas rattach�
 l'entreprise par une clé : sans la première condition, un compte survivrait à son
 entreprise, et n'ouvrirait plus rien.
 
-⚠️ **Ce rapport et ce `DELETE` n'ont pas encore été joués**, ni sur l'instance d'essai, ni
-sur une base jetable.
+Ce rapport et ce `DELETE` ont été joués tels quels le 23 novembre 2026, sur une base
+jetable au schéma des migrations. Il y avait cinq entreprises : une orpheline vide, puis
+quatre autres portant chacune une seule chose, un client, un type de prestation, un
+emplacement ou un compte. Seule l'orpheline est partie (`DELETE 1`), et une seconde
+exécution n'a rien retiré (`DELETE 0`). Le catalogue de la base confirme que les cinq
+tables nommées plus haut sont les seules à pointer vers `Entreprises`.
