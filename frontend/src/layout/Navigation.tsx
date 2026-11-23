@@ -34,7 +34,8 @@ export function Navigation() {
 
   // Un lien atteint au clavier ne reste pas sous le fondu : son contour de focus y serait
   // rogné. Le scroll-padding de la liste le garde hors de la zone du masque. Écouteur posé
-  // ici plutôt qu'en `onFocus` sur la liste, qui n'est pas un élément interactif.
+  // ici plutôt qu'en `onFocus` sur la liste, qui n'est pas un élément interactif ; et sur
+  // `profil`, comme l'observateur : sans profil, la liste n'est pas montée.
   useEffect(() => {
     const element = liste.current
     if (element === null) return
@@ -45,14 +46,21 @@ export function Navigation() {
     }
     element.addEventListener('focusin', amener)
     return () => element.removeEventListener('focusin', amener)
-  }, [])
+  }, [profil])
 
+  // La boîte de la liste ne change pas quand Figtree arrive après le premier affichage :
+  // seule la largeur des noms change. D'où la seconde mesure, une fois les polices prêtes.
   useEffect(() => {
     const element = liste.current
     if (element === null) return
+    let actif = true
     const observateur = new ResizeObserver(mesurer)
     observateur.observe(element)
+    void document.fonts?.ready.then(() => {
+      if (actif) mesurer()
+    })
     return () => {
+      actif = false
       observateur.disconnect()
     }
   }, [profil, mesurer])

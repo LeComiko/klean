@@ -734,7 +734,10 @@ réseau : l'API enregistrait `172.28.0.1` — mesuré en base sur deux sessions 
 IPv6, depuis un ordinateur et un téléphone. La colonne ne désignait alors personne pour ces
 visiteurs-là, et le plafond de connexion leur était commun. Caddy est désormais sur un
 second réseau, `public`, qui a l'IPv6 (`DEPLOIEMENT.md`, schéma de l'introduction et §9) : l'adresse enregistrée
-est celle du visiteur, en IPv4 comme en IPv6. Ce que cela change pour le traitement :
+est celle du visiteur, en IPv4 comme en IPv6 — **à deux conditions** : `KLEAN_IPV6=true`, et un
+Docker qui reçoit l'IPv6 sans la retransmettre (mesuré sous Docker 29). Avec
+`KLEAN_IPV6=false`, un visiteur IPv6 est encore enregistré sous une adresse du réseau
+`public`, commune à tous ; `DEPLOIEMENT.md` §9 dit comment le vérifier. Ce que cela change pour le traitement :
 
 - ⚠️ **La colonne devient plus identifiante**, ce qu'elle n'était pas pour les visiteurs
   IPv6 : une adresse IPv6 complète, et non plus celle d'un équipement du serveur. Elle reste

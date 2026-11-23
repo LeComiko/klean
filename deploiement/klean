@@ -892,8 +892,9 @@ preparer_env() {
     "${SMTP_ENV[@]}"
 }
 
-# true si la machine a l'IPv6, false sinon : la valeur de KLEAN_IPV6 qu'une installation
-# écrit. ⚠️ Non mesuré : sur un noyau sans IPv6, la création d'un réseau Docker IPv6 peut
+# true si le noyau a l'IPv6 — activé, et au moins une adresse, ne serait-ce que ::1 sur lo —,
+# false sinon : la valeur de KLEAN_IPV6 qu'une installation écrit. Ce n'est pas « la machine
+# a une adresse IPv6 publique » : il s'agit seulement que Docker puisse créer le réseau. ⚠️ Non mesuré : sur un noyau sans IPv6, la création d'un réseau Docker IPv6 peut
 # échouer. false l'évite — Docker crée alors `public` en IPv4 seul, sous-réseau ULA ignoré
 # (mesuré sous Docker 29).
 ipv6_de_la_machine() {

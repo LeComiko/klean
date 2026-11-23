@@ -2256,7 +2256,9 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   noms dépassent de la vue, et seulement de ce côté — un masque permanent pâlirait un nom
   entièrement visible, et l'ombre est interdite (§12). La section courante et le lien qui
   reçoit le focus au clavier restent visibles, contour compris : `scroll-padding-inline`
-  d'une largeur de fondu les arrête avant le masque. Le groupe du compte et de la
+  — la largeur du fondu plus celle du contour — les arrête avant le masque, et une marge
+  intérieure, rendue par une marge négative, empêche `overflow-x` de rogner le contour en
+  haut et en bas. Le groupe du compte et de la
   déconnexion a un filet à gauche, sinon rien ne dit où les noms passent sous lui. Dans
   la sous-navigation, la flèche d'une ressource enfant suit son onglet à la ligne au lieu
   de rester seule en tête ; et une liste vide n'a qu'un état vide, pas deux.

@@ -41,9 +41,14 @@
   gap: var(--espace-1);
   min-width: 0;
   overflow-x: auto;
-  /* La largeur du fondu : un lien amené en vue (section courante, focus clavier) s'arrête
-     avant le masque, contour de focus compris. */
-  scroll-padding-inline: var(--espace-6);
+  /* `overflow-x` rogne aussi à la verticale : sans cette marge intérieure, le contour de
+     focus, qui déborde du lien de son épaisseur et de son décalage, serait coupé en haut et
+     en bas. La marge négative la rend à la barre, dont la hauteur ne change pas. */
+  padding: calc(var(--focus-epaisseur) + var(--focus-decalage));
+  margin: calc(-1 * (var(--focus-epaisseur) + var(--focus-decalage)));
+  /* La largeur du fondu et du contour : un lien amené en vue (section courante, focus
+     clavier) s'arrête avant le masque, contour de focus compris. */
+  scroll-padding-inline: calc(var(--espace-6) + var(--focus-epaisseur) + var(--focus-decalage));
 }
 
 /* La fin de la zone défilante, marquée sans ombre (§12) : un fondu **du côté où des

@@ -40,7 +40,11 @@ machine, voir §9.
 ## 1. Ce qu'il faut
 
 - Une machine Linux avec **Docker Engine** et le greffon **Docker Compose v2**
-  (`docker compose version` doit répondre).
+  (`docker compose version` doit répondre). La réception des visiteurs IPv6 sous leur
+  vraie adresse (0.2.1) n'est **mesurée que sous Docker 29**, `ip6tables` actif — le
+  défaut depuis Docker 27. Sur une version plus ancienne, ou avec `"ip6tables": false`
+  dans `daemon.json`, les visiteurs IPv6 peuvent de nouveau arriver sous une adresse
+  commune, sans aucun symptôme : faites la vérification du §9.
 - Un **nom de domaine** dont l'enregistrement DNS pointe sur cette machine.
 - Les ports **80 et 443** ouverts depuis Internet : Let's Encrypt vérifie le
   domaine par le port 80 avant d'émettre le certificat.
@@ -72,7 +76,7 @@ Ouvrez `.env` et renseignez au moins :
 | `POSTGRES_PASSWORD` | le résultat de `openssl rand -hex 32` |
 | `KLEAN_JWT_CLE` | le résultat de `openssl rand -base64 64 \| tr -d '\n'` |
 | `KLEAN_CODE_INSTALLATION` | **première voie** : un code de vingt symboles, tiré par la commande de `.env.example` — l'entreprise et son administrateur se créent dans le navigateur |
-| `KLEAN_IPV6` | `true` (le défaut) ou `false` : l'IPv6 du réseau `public` de Caddy, qui reçoit les visiteurs sous leur vraie adresse. Le script l'écrit d'après la machine, à l'installation comme à la mise à jour ; `false` pour une machine sans IPv6, à la main (§9) |
+| `KLEAN_IPV6` | `true` (le défaut) ou `false` : l'IPv6 du réseau `public` de Caddy, qui reçoit les visiteurs sous leur vraie adresse. Le script l'écrit d'après la machine à l'installation ; une mise à jour l'ajoute à `true`. `false` pour une machine sans IPv6, à la main (§9) |
 | `KLEAN_ADMIN_EMAIL`, `KLEAN_ADMIN_MOT_DE_PASSE`, `KLEAN_RAISON_SOCIALE` | **seconde voie** : le premier compte, et l'entreprise qu'il administre, créés au démarrage |
 
 ⚠️ Le mot de passe de PostgreSQL doit être **hexadécimal**. Un `;` ou un `=` couperait
@@ -720,9 +724,10 @@ l'adresse IP de chaque visiteur, avec la durée de conservation que cela suppose
 
 **Une machine sans IPv6.** Le réseau `public` demande l'IPv6 : sur un noyau qui n'en a pas
 (`ipv6.disable=1`, ou `disable_ipv6=1`), sa création peut échouer. Le script l'évite de
-lui-même : `klean installer`, et `klean mettre-a-jour` quand `.env` n'a pas encore la
-ligne, écrivent `KLEAN_IPV6=false` si la machine n'a pas d'adresse IPv6, et Docker crée
-alors `public` en IPv4 seul. Une valeur déjà écrite, même vide, n'est jamais réécrite :
+lui-même **à l'installation** : `klean installer` écrit `KLEAN_IPV6=false` si le noyau n'a
+pas l'IPv6, et Docker crée alors `public` en IPv4 seul. **Une mise à jour ne regarde pas
+la machine** : quand `.env` n'a pas encore la ligne, elle ajoute le `true` du modèle — d'où
+la reprise ci-dessous. Une valeur déjà écrite, même vide, n'est jamais réécrite :
 c'est la vôtre. `klean` n'accepte d'office que `true`, `false` ou une valeur vide ; pour
 toute autre, il laisse `docker compose` trancher, et vous dit de corriger la ligne s'il la
 refuse — « oui » ou `1`, par exemple, ne passent pas.
@@ -743,30 +748,40 @@ version qui n'est plus celle-ci. Il ne contient rien à garder :
 
 ```bash
 sudo docker network rm klean_public   # Docker refuse tant qu'un conteneur s'en sert
-sudo klean mettre-a-jour
 ```
+
+puis relancez la commande qui a échoué : `sudo klean mettre-a-jour` reprend une mise à
+jour inachevée ; après un `restaurer`, ou pour appliquer un `KLEAN_IPV6` changé à la main
+sur une instance qui tourne, `cd /opt/klean && sudo docker compose up -d`.
 
 `sudo klean revenir` retire ce réseau de lui-même à la fin d'un retour réussi, pour que la
 mise à jour suivante n'y bute pas.
 
-**Vérifier que les visiteurs IPv6 sont comptés sous leur adresse.** Ouvrez une session
-depuis une connexion IPv6 — `curl -6 https://votre-domaine/` sur la machine, ou un
-téléphone sur le réseau mobile —, puis lisez `AdresseIp` de la dernière session :
+**Vérifier que les visiteurs IPv6 sont comptés sous leur adresse.** Connectez-vous dans un
+navigateur, depuis une connexion IPv6 — un téléphone sur le réseau mobile, par exemple :
+seule une connexion ouvre une session, une simple requête n'en laisse aucune trace. Puis
+lisez `AdresseIp` de la dernière session :
 
 ```bash
-docker compose exec -T postgres psql -U klean -d klean -c 'SELECT "AdresseIp", "DateCreation" FROM "JetonsRafraichissement" ORDER BY "DateCreation" DESC LIMIT 3'
+cd /opt/klean && sudo docker compose exec -T postgres psql -U klean -d klean -c 'SELECT "AdresseIp", "DateCreation" FROM "JetonsRafraichissement" ORDER BY "DateCreation" DESC LIMIT 3'
 ```
 
-Une adresse IPv6, et non `172.28.0.1`. Cette colonne est la seule adresse IP du produit ;
+L'adresse IPv6 du téléphone. Ni `172.28.0.1`, ni une adresse du réseau `public` —
+`fd91:8576:6d::` suivi d'un suffixe, ou l'IPv4 de sa passerelle, que donne
+`sudo docker network inspect klean_public` : dans ces trois cas, tous les visiteurs IPv6
+partagent encore une adresse. Cette colonne est la seule adresse IP du produit ;
 sa durée est dans `RGPD.md` §9.2.
 
 **Le réseau `172.28.0.0/24` existe déjà sur la machine.** Changez-le dans
 `docker-compose.yml`, en trois endroits qui doivent rester cohérents : `subnet`,
 `ipv4_address` de Caddy, et `Proxy__Reseaux__0` de l'API. Ce dernier doit désigner
-Caddy **seul**, en `/32`. Le réseau `public` n'a rien de tel à changer côté IPv4, Docker
-l'attribuant de son pool ; seule sa plage IPv6, privée, peut chevaucher un réseau de la
-machine, auquel cas changez le `subnet` de `public` en un `fd` d'une autre valeur. Plus large, il laisserait un autre conteneur choisir
-l'adresse sous laquelle il est compté par la limitation de débit.
+Caddy **seul**, en `/32`. Plus large, il laisserait un autre conteneur choisir
+l'adresse sous laquelle il est compté par la limitation de débit. Le réseau `public` n'a
+rien de tel à changer côté IPv4, Docker l'attribuant de son pool ; seule sa plage IPv6,
+privée, peut chevaucher un réseau de la machine, auquel cas changez le `subnet` de
+`public` en un `fd` d'une autre valeur. ⚠️ Une retouche de `docker-compose.yml` est
+écrasée à chaque mise à jour, qui installe les fichiers de la nouvelle version : elle est à
+refaire après chacune.
 
 **Un réseau interne, sans domaine public ni accès à Let's Encrypt.** Avec
 `KLEAN_DOMAINE=localhost`, Caddy émet un certificat depuis sa propre autorité, que
