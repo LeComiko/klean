@@ -32,6 +32,21 @@ export function Navigation() {
     mesurer()
   }, [pathname, profil, mesurer])
 
+  // Un lien atteint au clavier ne reste pas sous le fondu : son contour de focus y serait
+  // rogné. Le scroll-padding de la liste le garde hors de la zone du masque. Écouteur posé
+  // ici plutôt qu'en `onFocus` sur la liste, qui n'est pas un élément interactif.
+  useEffect(() => {
+    const element = liste.current
+    if (element === null) return
+    const amener = (evenement: FocusEvent) => {
+      if (evenement.target instanceof HTMLElement) {
+        evenement.target.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+      }
+    }
+    element.addEventListener('focusin', amener)
+    return () => element.removeEventListener('focusin', amener)
+  }, [])
+
   useEffect(() => {
     const element = liste.current
     if (element === null) return
@@ -69,11 +84,6 @@ export function Navigation() {
       <ul
         ref={liste}
         onScroll={mesurer}
-        // Un lien atteint au clavier ne reste pas sous le fondu : son contour de focus y serait
-        // rogné. Le scroll-padding de la liste le garde hors de la zone du masque.
-        onFocus={(evenement) =>
-          evenement.target.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-        }
         className={[
           'navigation__liste',
           suiteGauche && 'navigation__liste--suite-gauche',
