@@ -189,6 +189,8 @@ public static class PlafondsDebit
     /// les entreprises d'un serveur partagent ses 50 requêtes par seconde. Le plafond par compte borne un
     /// compte, et ne protège pas ce quota seul — trente requêtes peuvent partir dans la même seconde, et
     /// un administrateur peut en créer d'autres. Le global, dix par seconde, le protège.
+    /// Le global est commun à toutes les entreprises de l'instance : un administrateur peut en priver
+    /// les autres quelques secondes, la saisie à la main restant possible.
     /// </summary>
     public const int LocalisationsParCompte = 30;
     public static TimeSpan FenetreLocalisations => TimeSpan.FromMinutes(15);

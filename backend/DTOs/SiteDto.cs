@@ -66,6 +66,9 @@ public class LocaliserSiteDto
 /// La réponse d'une localisation. ⚠️ Porte <c>Latitude</c> et <c>Longitude</c>, que surveille le filet de
 /// <c>JournalAccesTests</c> ; la route n'est pas journalisée, et c'est une décision (CLAUDE.md §7 bis) :
 /// rien n'est lu en base, et la réponse est une donnée publique de référence sur l'adresse envoyée.
+/// Le filet de <c>JournalAccesTests</c> ne la voit pas parce que la route est un POST : il ne vise que
+/// les GET. La décision tombe le jour où une route géocode une adresse lue en base — celle d'un agent,
+/// ou l'import de la 0.3.1.
 /// </summary>
 public class LocalisationDto
 {

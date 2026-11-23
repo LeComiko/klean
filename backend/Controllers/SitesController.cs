@@ -37,6 +37,7 @@ public class SitesController : ControllerBase
     public const string RefusTropLongue = "L’adresse et la ville dépassent ensemble 200 caractères : abrégez-les.";
     public const string RefusDebut = "L’adresse doit commencer par un numéro ou une lettre, et compter au moins trois caractères.";
     public const string RefusIntrouvable = "Adresse introuvable : vérifiez-la, ou saisissez les coordonnées à la main.";
+    public const string RefusSurcharge = "Trop de localisations en même temps sur ce serveur : réessayez dans un instant.";
     public const string RefusInjoignable = "La Géoplateforme de l’IGN ne répond pas : réessayez plus tard, ou saisissez les coordonnées à la main.";
 
     /// <summary>
@@ -139,12 +140,6 @@ public class SitesController : ControllerBase
             return this.TropDeTentatives(attente, PlafondsDebit.FenetreLocalisations);
         }
 
-        if (!_debit.Autoriser("localisation:global", PlafondsDebit.LocalisationsGlobales,
-                PlafondsDebit.FenetreLocalisationsGlobales, out var attenteGlobale))
-        {
-            return this.TropDeTentatives(attenteGlobale, PlafondsDebit.FenetreLocalisationsGlobales);
-        }
-
         // L'entreprise du jeton, et elle seule : sous la RLS, et cadrée sur son Id. Introuvable vaut désactivé.
         var entrepriseId = _tenant.EntrepriseId;
         var actif = entrepriseId is not null && await _db.Entreprises.AsNoTracking()
@@ -170,6 +165,15 @@ public class SitesController : ControllerBase
         var recherche = ville.Length == 0 ? adresse : $"{adresse} {ville}";
         if (recherche.Length > 200) return BadRequest(RefusTropLongue);
         if (recherche.Length < 3 || !char.IsLetterOrDigit(recherche[0])) return BadRequest(RefusDebut);
+
+        // Le plafond global ne compte que les requêtes qui partent vers l'IGN, sur le modèle du plafond
+        // global des codes faux de l'installation : compté sur tout, un 409 ou un 400 de champ le
+        // tiendrait plein sans qu'aucune requête ne parte.
+        if (!_debit.Autoriser("localisation:global", PlafondsDebit.LocalisationsGlobales,
+                PlafondsDebit.FenetreLocalisationsGlobales, out var attenteGlobale))
+        {
+            return this.TropDeTentatives(attenteGlobale, PlafondsDebit.FenetreLocalisationsGlobales, RefusSurcharge);
+        }
 
         return await _geocodage.LocaliserAsync(recherche, codePostal, annulation) switch
         {
