@@ -69,6 +69,11 @@ export function Navigation() {
       <ul
         ref={liste}
         onScroll={mesurer}
+        // Un lien atteint au clavier ne reste pas sous le fondu : son contour de focus y serait
+        // rogné. Le scroll-padding de la liste le garde hors de la zone du masque.
+        onFocus={(evenement) =>
+          evenement.target.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+        }
         className={[
           'navigation__liste',
           suiteGauche && 'navigation__liste--suite-gauche',

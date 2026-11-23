@@ -41,6 +41,9 @@
   gap: var(--espace-1);
   min-width: 0;
   overflow-x: auto;
+  /* La largeur du fondu : un lien amené en vue (section courante, focus clavier) s'arrête
+     avant le masque, contour de focus compris. */
+  scroll-padding-inline: var(--espace-6);
 }
 
 /* La fin de la zone défilante, marquée sans ombre (§12) : un fondu **du côté où des
