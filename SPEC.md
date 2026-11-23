@@ -4638,10 +4638,88 @@ Debian 12 (amd64, 4 cœurs, 8 Go), sous `klean.solum-immo.fr`, A **et** AAAA.
   fuseau `KLEAN_FUSEAU` de `.env`, `Europe/Paris` par défaut — une fois par nuit, les jours
   de changement d'heure compris, ce que la série éprouve.
 - **Ubuntu n'a pas été essayé**, seulement Debian 12.
-- La question de l'adresse de l'administrateur ne dit pas si elle doit exister : sans SMTP,
-  ce n'est qu'un identifiant. À dire au lot A2, qui réécrit ce premier lancement.
+- ~~La question de l'adresse de l'administrateur ne dit pas si elle doit exister~~ :
+  **sans objet depuis 0.2.0**, le script ne la pose plus (lot A2).
 - La première connexion SSH d'un VPS OVH réinstallé exige un changement de mot de passe
   dans un vrai terminal — hors de KLEAN, mais c'est le premier obstacle d'un patron.
+
+**Lot A2 — fait le 23 novembre 2026**
+
+La version 0.2.0 est publiée. Elle a été éprouvée sur le même VPS, avec deux essais : la
+mise à jour d'une instance qui a des comptes, puis une installation neuve faite au
+téléphone.
+
+- **Le premier lancement.** Le script ne pose plus aucune question d'administrateur. Il
+  écrit un code d'installation de vingt symboles dans `.env` et l'affiche en dernier, une
+  fois le certificat obtenu. Le patron ouvre son domaine et saisit ce code dans un
+  assistant en quatre écrans. Il y crée son entreprise et son compte, avec un mot de passe
+  qu'il est seul à connaître, puis lit l'écran « Ce que vous devez savoir ».
+  - Une requête anonyme ne peut rien faire sans le code. La création se fait sous la RLS.
+  - Les codes faux sont plafonnés par adresse et globalement.
+  - L'API démarre sur une base sans compte de trois façons : avec les trois variables
+    d'amorçage, elle crée l'entreprise elle-même ; avec un code, elle attend l'assistant ;
+    sans l'un ni l'autre, elle refuse de démarrer en nommant les deux sorties.
+- **Le code ne survit pas à l'installation.** La première commande `klean` qui voit un
+  compte le retire de `.env`, et la sauvegarde de la nuit le fait au plus tard. Elle
+  retire aussi les variables d'amorçage d'une 0.1.x, puis recrée l'API, mais seulement si
+  l'API tournait et qu'aucune mise à jour ni aucun retour n'est en cours.
+- **Sur le VPS :**
+  - **Mise à jour 0.1.3 → 0.2.0**, conduite par la 0.1.3 installée : aucune migration, la
+    sonde annonce 0.2.0. Le premier `klean etat` retire le code, l'adresse et la raison
+    sociale hérités de la 0.1.x. Le conteneur ne porte plus le code ensuite.
+  - **Retour 0.2.0 → 0.1.3, puis de nouveau 0.2.0.** La 0.1.3 démarre sur le `.env` écrit
+    par la 0.2.0, dont le code avait déjà été vidé.
+  - **Installation neuve.** La base et le trousseau ont été supprimés ; les certificats et
+    les sauvegardes ont été gardés. L'assistant a été parcouru sur un iPhone, et tout y
+    tient à l'écran. La connexion mène ensuite à l'équipement du second facteur, sans
+    changement de mot de passe. `klean etat` a ensuite retiré le code.
+- **Au navigateur, sur une base jetable :** refus locaux ; code faux renvoyé à l'écran du
+  code ; saisie gardée au retour ; entreprise orpheline bloquée ; `/installation` renvoyé
+  à la connexion une fois l'instance installée.
+- **Éprouvés sur une base jetable :** le rapport et le `DELETE` de `DEPLOIEMENT.md` §12,
+  « Une entreprise sans compte ».
+
+**Deux écarts au cadrage, assumés**
+
+- **Le plafond global du `POST` ne compte que les codes faux.** S'il comptait toutes les
+  tentatives, un inconnu pourrait bloquer indéfiniment l'installation légitime.
+- **Le `GET` n'a qu'un plafond par adresse**, sans plafond global. Un 429 sur cette
+  lecture laisse simplement le formulaire de connexion, et n'empêche rien.
+
+**Ce qui a cassé en route, et comment c'est réparé**
+
+- **Le plan vidait `klean_test` avant la garde du nom de la base.** Une chaîne de test
+  mal dirigée aurait vidé la base de développement. La fixture vérifie désormais le nom de
+  la base avant toute écriture.
+- **L'écran proposait « Revenir à l'entreprise » devant une entreprise orpheline.** Changer
+  de SIRET y aurait contourné le blocage et laissé l'orpheline en base. Le lien vers la
+  connexion, ajouté ensuite, ramenait à l'assistant, sans compte, avec la saisie perdue.
+  L'écran ne propose plus que de recharger la page.
+- **`AbortSignal.any` rendait la page de connexion blanche** sur iOS 16 et sur les
+  navigateurs de 2023. Retiré avant la publication.
+- **`klean etat` aurait redémarré une API laissée arrêtée exprès** au milieu d'une mise à
+  jour ratée. C'est reproduit dans Debian, puis corrigé et éprouvé par `commande.sh`, la
+  nouvelle série de la commande.
+
+**Limites constatées**
+
+- **Les visiteurs IPv6 arrivent tous sous l'adresse de la passerelle Docker,
+  `172.28.0.1`.** Le domaine a un AAAA, et Docker relaie l'IPv6 par `docker-proxy` parce
+  que le réseau `klean` ne l'active pas. Mesuré par l'adresse des sessions en base, aussi
+  bien depuis le Mac que depuis le téléphone. Ce défaut est antérieur au lot A2. Il fait
+  de chaque plafond par adresse un plafond commun à tous les visiteurs IPv6, celui de la
+  connexion compris, et fausse l'adresse consignée de chaque session. Le corriger demande
+  d'activer l'IPv6 sur le réseau, ce qui touche le contrat de mise à jour : **0.2.1**.
+- **Le code reste dans `.env` jusqu'à la commande `klean` suivante**, ou jusqu'à 3 h. La
+  tâche du cron tourne pourtant toutes les heures, mais elle sort avant le retrait hors de
+  3 h. Il suffirait de retirer le code avant ce test pour que le délai tombe à une heure :
+  0.2.1.
+- **Vus au téléphone, des défauts antérieurs au lot :**
+  - les listes vides affichent deux fois l'état vide, une carte puis « Aucune ligne » ;
+  - à 390 px, le fil `Clients › Sites › Contrats` revient à la ligne en laissant un « › »
+    seul en tête ;
+  - la barre de navigation fait défiler les noms sous les icônes du compte, sans
+    transition visible.
 ---
 
 # Suite — non planifié
