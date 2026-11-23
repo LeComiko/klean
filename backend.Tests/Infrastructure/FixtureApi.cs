@@ -160,6 +160,8 @@ public class FixtureApi : IAsyncLifetime
         Fabrique.Horloge.Liberer();
         Fabrique.Sonde.Active = false;
         Fabrique.Sonde.Vider();
+        Fabrique.Geocodage.Reinitialiser();
+        Fabrique.Services.GetRequiredService<ServiceGeocodage>().Rearmer();
 
         await ViderAsync();
 
