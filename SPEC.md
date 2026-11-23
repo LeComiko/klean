@@ -4749,8 +4749,10 @@ La version 0.2.1 est publiée et tourne sur le VPS. Elle corrige les trois limit
   - **L'IPv6 de la machine n'a pas bougé** : route par défaut statique, `accept_ra` à 0 sur
     l'interface publique, Docker 29.10.
   - **Les trois retouches** ont été regardées sur l'iPhone, et validées.
-- **Non rejoués sur le VPS**, éprouvés seulement par `commande.sh` : l'aller-retour
-  `revenir` puis `mettre-a-jour`, avec le retrait de `klean_public` ; le retrait horaire du
+  - **Retour 0.2.1 → 0.2.0, puis de nouveau 0.2.1.** `revenir` a retiré `klean_public` :
+    la 0.2.0 tournait sur le seul réseau `klean`. La mise à jour suivante, conduite par la
+    0.2.0, a migré sans rien appliquer, puis recréé `public` sans buter dessus.
+- **Non rejoués sur le VPS**, éprouvés seulement par `commande.sh` : le retrait horaire du
   code, ce VPS n'en ayant plus ; une machine sans IPv6.
 
 **Ce qui a cassé en route, et comment c'est réparé**
