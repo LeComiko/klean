@@ -205,6 +205,7 @@ public class LocalisationSitesTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.TooManyRequests, refusee.StatusCode);
         Assert.True(refusee.Headers.RetryAfter?.Delta > TimeSpan.FromSeconds(60));
+        Assert.DoesNotContain(SitesController.RefusSurcharge, await refusee.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -219,6 +220,24 @@ public class LocalisationSitesTests : IAsyncLifetime
         var refusees = reponses.Where(r => r.StatusCode == HttpStatusCode.TooManyRequests).ToArray();
         Assert.NotEmpty(refusees);
         Assert.All(refusees, r => Assert.Equal(TimeSpan.FromSeconds(1), r.Headers.RetryAfter?.Delta));
+        // Borne haute : au plus le double du plafond passe, la marge de la course de GetOrCreate.
+        Assert.InRange(reponses.Count(r => r.StatusCode == HttpStatusCode.OK), 1, 2 * PlafondsDebit.LocalisationsGlobales);
+        Assert.Contains(SitesController.RefusSurcharge, await refusees[0].Content.ReadAsStringAsync());
+    }
+
+    /// <summary>Un 409 « désactivé » ne part pas vers l'IGN : il ne consomme pas le plafond global.</summary>
+    [Fact]
+    public async Task Un_409_desactive_ne_consomme_pas_le_plafond_global()
+    {
+        await ActiverAlpha();
+        var adminBeta = await _fixture.ClientConnecteAsync(FixtureApi.AdminBeta);
+
+        var refus = await Task.WhenAll(Enumerable.Range(0, 2 * PlafondsDebit.LocalisationsGlobales + 5)
+            .Select(_ => Localiser(adminBeta)));
+        Assert.All(refus, r => Assert.Equal(HttpStatusCode.Conflict, r.StatusCode));
+        Assert.Contains(SitesController.RefusDesactive, await refus[0].Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.OK, (await Localiser(_admin)).StatusCode);
     }
 
     public static TheoryData<string?, string?, string?> ChampsInvisibles => new()
@@ -241,18 +260,6 @@ public class LocalisationSitesTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.BadRequest, reponse.StatusCode);
         Assert.Contains(SitesController.RefusInvisible, await reponse.Content.ReadAsStringAsync());
         Assert.Empty(_fixture.Fabrique.Geocodage.Requetes);
-    }
-
-    [Fact]
-    public async Task Le_429_du_plafond_global_porte_son_message()
-    {
-        await ActiverAlpha();
-
-        var reponses = await Task.WhenAll(Enumerable.Range(0, 2 * PlafondsDebit.LocalisationsGlobales + 5)
-            .Select(_ => Localiser(_admin)));
-
-        var refusee = reponses.First(r => r.StatusCode == HttpStatusCode.TooManyRequests);
-        Assert.Contains(SitesController.RefusSurcharge, await refusee.Content.ReadAsStringAsync());
     }
 
     /// <summary>
