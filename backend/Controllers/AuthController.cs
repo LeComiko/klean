@@ -719,8 +719,7 @@ public class AuthController : ControllerBase
         int parAdresse, TimeSpan fenetreAdresse,
         int? parCompte = null, TimeSpan? fenetreCompte = null)
     {
-        var adresse = HttpContext.Connection.RemoteIpAddress?.ToString()
-                      ?? LimiteurDebit.AdresseInconnue;
+        var adresse = LimiteurDebit.CleDAdresse(HttpContext.Connection.RemoteIpAddress);
 
         if (!_debit.Autoriser($"{operation}:adresse:{adresse}", parAdresse, fenetreAdresse))
         {

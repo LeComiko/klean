@@ -126,6 +126,27 @@ public class LimitationDebitTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Le_plafond_par_adresse_regroupe_l_IPv6_par_son_64()
+    {
+        // Pas sur la connexion d'un seul compte : le plafond par compte s'y déclencherait
+        // d'abord. Quatre courriels distincts, quatre adresses d'un même /64 : seul le
+        // plafond par adresse peut refuser la dernière. Le second facteur utilise la même
+        // fonction ; l'éprouver de bout en bout demanderait vingt et un comptes équipés.
+        for (var essai = 1; essai <= PlafondsDebit.OublisParAdresse; essai++)
+        {
+            var statut = await OubliDepuis($"2001:db8:aaaa:1::{essai}", $"inconnu{essai}@test.local");
+            Assert.Equal((int)HttpStatusCode.Accepted, statut);
+        }
+
+        var suivante = await OubliDepuis("2001:db8:aaaa:1::ffff", "inconnu-de-trop@test.local");
+        Assert.Equal((int)HttpStatusCode.TooManyRequests, suivante);
+
+        // Témoin : un /64 voisin n'est pas touché.
+        var voisin = await OubliDepuis("2001:db8:aaaa:2::1", "inconnu-voisin@test.local");
+        Assert.Equal((int)HttpStatusCode.Accepted, voisin);
+    }
+
+    [Fact]
     public async Task Le_message_de_429_ne_dit_pas_quelle_limite_a_ete_atteinte()
     {
         // Préciser la dimension renseignerait un attaquant sur la forme de la
@@ -197,6 +218,25 @@ public class LimitationDebitTests : IAsyncLifetime
     private static Task<HttpResponseMessage> Connexion(HttpClient client, string email, string motDePasse) =>
         client.PostAsJsonAsync("/api/auth/connexion",
             new ConnexionDto { Email = email, MotDePasse = motDePasse });
+
+    private async Task<int> OubliDepuis(string adresse, string email)
+    {
+        var octets = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new MotDePasseOublieDto { Email = email });
+
+        var contexte = await _fixture.Fabrique.Server.SendAsync(requete =>
+        {
+            requete.Connection.RemoteIpAddress = IPAddress.Parse(adresse);
+            requete.Request.Method = "POST";
+            requete.Request.Scheme = "https";
+            requete.Request.Host = new Microsoft.AspNetCore.Http.HostString("localhost");
+            requete.Request.Path = "/api/auth/mot-de-passe-oublie";
+            requete.Request.ContentType = "application/json";
+            requete.Request.ContentLength = octets.Length;
+            requete.Request.Body = new MemoryStream(octets);
+        });
+
+        return contexte.Response.StatusCode;
+    }
 
     private static Task<HttpResponseMessage> Oubli(HttpClient client, string email) =>
         client.PostAsJsonAsync("/api/auth/mot-de-passe-oublie",

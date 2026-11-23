@@ -380,7 +380,7 @@ public class SecondFacteurController : ControllerBase
 
     private ActionResult? LimiteParAdresse()
     {
-        var adresse = HttpContext.Connection.RemoteIpAddress?.ToString() ?? LimiteurDebit.AdresseInconnue;
+        var adresse = LimiteurDebit.CleDAdresse(HttpContext.Connection.RemoteIpAddress);
 
         return _debit.Autoriser($"code:adresse:{adresse}", PlafondsDebit.CodesParAdresse, PlafondsDebit.FenetreCodes)
             ? null
