@@ -265,7 +265,7 @@ public sealed class ServiceGeocodage
         {
             var categorie = Rune.GetUnicodeCategory(rune);
 
-            if (rune.Value is '\t' or '\n' or '\r'
+            if (rune.Value is '\t' or '\n' or '\r' or '\v' or '\f' or 0x85
                 || categorie is UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator
                     or UnicodeCategory.SpaceSeparator)
             {
@@ -278,7 +278,7 @@ public sealed class ServiceGeocodage
         }
 
         // Les suites d'espaces — celles du texte, comme celles que les remplacements viennent de créer.
-        var propre = string.Join(' ', sb.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries)).Trim();
+        var propre = string.Join(' ', sb.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries));
 
         if (propre.Length <= LongueurMaximaleAdresseTrouvee) return propre;
 

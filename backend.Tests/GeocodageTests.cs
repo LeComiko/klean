@@ -77,6 +77,8 @@ public class GeocodageTests
     {
         { GeocodageDeTest.Trouve(latitude: 91), HttpStatusCode.OK },
         { GeocodageDeTest.Trouve(longitude: -181), HttpStatusCode.OK },
+        { GeocodageDeTest.Trouve(latitude: -91), HttpStatusCode.OK },
+        { GeocodageDeTest.Trouve(longitude: 181), HttpStatusCode.OK },
         { """{"features":[{"geometry":{"coordinates":[2.3]},"properties":{"label":"x"}}]}""", HttpStatusCode.OK },
         { """{"features":[{"geometry":{"coordinates":["2.3","48.8"]},"properties":{"label":"x"}}]}""", HttpStatusCode.OK },
         { """{"features":[{"geometry":{"coordinates":[2.3,48.8]},"properties":{}}]}""", HttpStatusCode.OK },
@@ -219,6 +221,8 @@ public class GeocodageTests
         var trouve = Assert.IsType<ResultatGeocodage.Trouve>(await LocaliserLibelleAsync("Rue de\nla Paix   75002"));
 
         Assert.Equal("Rue de la Paix 75002", trouve.AdresseTrouvee);
+        Assert.Equal("rue Paris", Assert.IsType<ResultatGeocodage.Trouve>(await LocaliserLibelleAsync("rue\u0085Paris")).AdresseTrouvee);
+        Assert.Equal("rue Paris", Assert.IsType<ResultatGeocodage.Trouve>(await LocaliserLibelleAsync("rue\v\fParis")).AdresseTrouvee);
     }
 
     [Fact]
@@ -262,6 +266,21 @@ public class GeocodageTests
         Assert.IsType<ResultatGeocodage.Trouve>(await service.LocaliserAsync(Recherche, null, default));
     }
 
+    /// <summary>Un 429 sans <c>Retry-After</c> : la pause par défaut s'applique.</summary>
+    [Fact]
+    public async Task Un_429_sans_Retry_After_ferme_quand_meme_le_disjoncteur()
+    {
+        var (service, faux) = Construire();
+        faux.Repondre = (_, _) => Task.FromResult(GeocodageDeTest.Json("{}", HttpStatusCode.TooManyRequests));
+
+        Assert.IsType<ResultatGeocodage.Injoignable>(await service.LocaliserAsync(Recherche, null, default));
+        Assert.IsType<ResultatGeocodage.Injoignable>(await service.LocaliserAsync(Recherche, null, default));
+
+        Assert.Single(faux.Requetes);
+    }
+
+    // La borne haute de 30 s n'est pas éprouvée par la série : il faudrait une horloge injectable.
+    // Mesurée par sonde à la relecture.
     /// <summary>La borne basse : un <c>Retry-After</c> de 1 vaut 5 s, car la Géoplateforme bloque 5 s.</summary>
     [Fact]
     public async Task Un_Retry_After_de_1_seconde_garde_quand_meme_la_pause_de_5_secondes()
@@ -287,6 +306,9 @@ public class GeocodageTests
     [Theory]
     [InlineData("12 rue & co #? %+ //hote é Paris", "1&limit=50")]
     [InlineData("3 place du Marché Lyon", "69001")]
+    [InlineData("3 place du Marché Lyon", "1&l=5")]
+    [InlineData("3 place du Marché Lyon", "7500A")]
+    [InlineData("3 place du Marché Lyon", "\u0667\u0665\u0660\u0660\u0667")]
     public async Task La_requete_ne_porte_que_q_limit_index_et_un_code_postal_a_cinq_chiffres(string recherche, string codePostal)
     {
         var (service, faux) = Construire();
@@ -356,7 +378,8 @@ public class GeocodageTests
 
         using var activite = new Activity("essai").SetIdFormat(ActivityIdFormat.W3C).Start();
         var porteur = new Dictionary<string, string>();
-        primaire.ActivityHeadersPropagator?.Inject(activite, porteur,
+        Assert.NotNull(primaire.ActivityHeadersPropagator);
+        primaire.ActivityHeadersPropagator.Inject(activite, porteur,
             (support, cle, valeur) => ((Dictionary<string, string>)support!)[cle] = valeur);
         Assert.Empty(porteur);
     }
