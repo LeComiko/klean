@@ -2,7 +2,9 @@
 # dans /etc/cron.d/klean ; remplacé à chaque mise à jour.
 # À chaque heure, et non à 3 h 30 : ce cron suit le fuseau du serveur, UTC sur un VPS.
 # `klean sauvegarder --nuit` ne sauvegarde qu'à 3 h dans le fuseau KLEAN_FUSEAU de .env,
-# et n'écrit qu'alors son journal, /var/log/klean-sauvegarde.log.
+# et n'écrit qu'alors son journal, /var/log/klean-sauvegarde.log. À chaque passage, la
+# commande retire aussi le code d'installation dès qu'un compte existe, et le dit au
+# journal du système (logger, étiquette klean), pas au courrier de cron.
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 30 * * * * root /usr/local/bin/klean sauvegarder --nuit

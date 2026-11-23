@@ -23,12 +23,28 @@ navigateur ──https──► caddy :443
                                        └─► postgres:5432, jamais exposé
 ```
 
+**Caddy est sur deux réseaux Docker.** `klean`, à l'adresse fixe `172.28.0.10`, le relie à
+l'API ; `api`, `postgres` et `migrer` n'ont que celui-là. `public`, que Caddy est seul à
+rejoindre, reçoit les visiteurs : il a l'IPv6, sur une plage privée `fd91:8576:6d::/64`,
+et c'est lui qui laisse l'API compter chaque visiteur sous sa **vraie adresse**. Sur
+`klean` seul, sans IPv6, Docker retransmet les connexions IPv6 depuis sa passerelle,
+`172.28.0.1` : tous les visiteurs IPv6 partageraient alors une même adresse, donc un même
+plafond de connexion. Pourquoi un second réseau plutôt qu'une option sur le premier :
+Docker refuse de modifier un réseau où un conteneur est branché, et une mise à jour lance
+la migration pendant que Caddy tourne. La plage de `public` n'a pas à être changée : aucune
+adresse IPv4 n'y est fixée, et la plage IPv6 est privée. Si elle chevauche un réseau de la
+machine, voir §9.
+
 ---
 
 ## 1. Ce qu'il faut
 
 - Une machine Linux avec **Docker Engine** et le greffon **Docker Compose v2**
-  (`docker compose version` doit répondre).
+  (`docker compose version` doit répondre). La réception des visiteurs IPv6 sous leur
+  vraie adresse (0.2.1) n'est **mesurée que sous Docker 29**, `ip6tables` actif — le
+  défaut depuis Docker 27. Sur une version plus ancienne, ou avec `"ip6tables": false`
+  dans `daemon.json`, les visiteurs IPv6 peuvent de nouveau arriver sous une adresse
+  commune, sans aucun symptôme : faites la vérification du §9.
 - Un **nom de domaine** dont l'enregistrement DNS pointe sur cette machine.
 - Les ports **80 et 443** ouverts depuis Internet : Let's Encrypt vérifie le
   domaine par le port 80 avant d'émettre le certificat.
@@ -60,6 +76,7 @@ Ouvrez `.env` et renseignez au moins :
 | `POSTGRES_PASSWORD` | le résultat de `openssl rand -hex 32` |
 | `KLEAN_JWT_CLE` | le résultat de `openssl rand -base64 64 \| tr -d '\n'` |
 | `KLEAN_CODE_INSTALLATION` | **première voie** : un code de vingt symboles, tiré par la commande de `.env.example` — l'entreprise et son administrateur se créent dans le navigateur |
+| `KLEAN_IPV6` | `true` (le défaut) ou `false` : l'IPv6 du réseau `public` de Caddy, qui reçoit les visiteurs sous leur vraie adresse. Le script l'écrit d'après la machine à l'installation ; une mise à jour l'ajoute à `true`. `false` pour une machine sans IPv6, à la main (§9) |
 | `KLEAN_ADMIN_EMAIL`, `KLEAN_ADMIN_MOT_DE_PASSE`, `KLEAN_RAISON_SOCIALE` | **seconde voie** : le premier compte, et l'entreprise qu'il administre, créés au démarrage |
 
 ⚠️ Le mot de passe de PostgreSQL doit être **hexadécimal**. Un `;` ou un `=` couperait
@@ -143,7 +160,9 @@ seule sortie si le téléphone se perd (section 10).
 Le troisième geste n'est pas cosmétique. Le code ne sert plus — l'assistant
 répond « déjà installé » dès qu'un compte existe —, mais il resterait un secret en clair
 sur le disque, et dans l'environnement du conteneur. Avec le script, rien à faire :
-`klean` le retire à sa commande suivante, au plus tard à la sauvegarde de la nuit.
+`klean` le retire à sa commande suivante, au plus tard **dans l'heure** : la tâche horaire du
+cron le retire à chaque passage, sans attendre la sauvegarde de 3 h. Ce passage n'écrit
+que s'il a eu quelque chose à faire, au journal du système : `journalctl -t klean`.
 
 Ce que dit le quatrième écran, et qui reste vrai après lui :
 
@@ -280,8 +299,8 @@ Dans cet ordre, et chaque pas s'arrête sans rien changer s'il échoue :
 sont pas dans la sauvegarde : un `revenir` les perd (section 5).
 
 **Depuis une version 0.1.x**, le code d'installation que celle-ci avait écrit reste dans
-`.env` jusqu'à la commande `klean` suivante — `sudo klean etat` suffit — ou jusqu'à la
-sauvegarde de la nuit : la mise à jour est conduite par le `klean` de l'ancienne version,
+`.env` jusqu'à la commande `klean` suivante — `sudo klean etat` suffit — ou jusqu'au passage
+horaire suivant du cron : la mise à jour est conduite par le `klean` de l'ancienne version,
 qui ne le retire pas. Des comptes existant, il n'ouvre plus rien.
 
 **Une mise à jour ratée se relance** par la même commande : elle reprend là où elle
@@ -585,8 +604,8 @@ image (il n'y est pas copié).
 | `KLEAN_ADMIN_MOT_DE_PASSE` | ne pas le tourner : le **vider** (§2.4) | — |
 
 ⚠️ **Le code d'installation est en clair** dans `.env`, et dans l'environnement du conteneur
-de l'API, jusqu'au premier compte. Le script le retire alors, à sa commande suivante, et
-recrée l'API. À la main, c'est à vous de le retirer, puis de recréer l'API : vider `.env`
+de l'API, jusqu'au premier compte. Le script le retire alors, à sa commande suivante ou au
+passage horaire du cron — donc dans l'heure —, et recrée l'API. À la main, c'est à vous de le retirer, puis de recréer l'API : vider `.env`
 seul le laisse dans le conteneur. Avant le premier compte, quiconque le lit peut créer
 l'entreprise à votre place : c'est la seule garde de l'assistant. Après, il n'ouvre plus
 rien, mais reste un secret écrit en clair.
@@ -689,6 +708,11 @@ une erreur serveur, le message affiché à l'utilisateur se termine par
 « Identifiant : » suivi de 32 caractères. Demandez-le-lui et cherchez-le dans le
 journal : il désigne la requête, et l'erreur avec sa pile.
 
+Ce que fait `klean` de lui-même, la tâche horaire du cron comprise, ne passe pas par
+Docker : quand elle retire le code d'installation, elle l'écrit au journal du système,
+étiqueté `klean` — `sudo journalctl -t klean`. Elle ne dit rien quand il n'y avait rien à
+faire. La sauvegarde de 3 h a son propre fichier, `/var/log/klean-sauvegarde.log`.
+
 Les journaux sont plafonnés à cinq fichiers de 10 Mo par conteneur, puis remplacés. Ils
 ne contiennent ni adresse IP, ni identité de l'utilisateur, ni contenu de requête
 (`RGPD.md` §3). Caddy n'écrit **aucun** journal d'accès ; en ajouter un consignerait
@@ -698,11 +722,66 @@ l'adresse IP de chaque visiteur, avec la durée de conservation que cela suppose
 
 ## 9. Cas particuliers
 
+**Une machine sans IPv6.** Le réseau `public` demande l'IPv6 : sur un noyau qui n'en a pas
+(`ipv6.disable=1`, ou `disable_ipv6=1`), sa création peut échouer. Le script l'évite de
+lui-même **à l'installation** : `klean installer` écrit `KLEAN_IPV6=false` si le noyau n'a
+pas l'IPv6, et Docker crée alors `public` en IPv4 seul. **Une mise à jour ne regarde pas
+la machine** : quand `.env` n'a pas encore la ligne, elle ajoute le `true` du modèle — d'où
+la reprise ci-dessous. Une valeur déjà écrite, même vide, n'est jamais réécrite :
+c'est la vôtre. `klean` n'accepte d'office que `true`, `false` ou une valeur vide ; pour
+toute autre, il laisse `docker compose` trancher, et vous dit de corriger la ligne s'il la
+refuse — « oui » ou `1`, par exemple, ne passent pas.
+
+⚠️ **Si une mise à jour vers la 0.2.1 échoue sur une machine sans IPv6** — la mise à jour
+est conduite par le `klean` de l'ancienne version, qui ne regarde pas l'IPv6, et l'échec
+tombe après l'arrêt de l'API et la migration —, la reprise est :
+
+```bash
+sudo nano /opt/klean/.env             # KLEAN_IPV6=false
+sudo klean mettre-a-jour              # reprend là où elle s'était arrêtée
+```
+
+⚠️ **Si `up -d` répond « not connected to the network klean_public »**, un réseau `public`
+resté d'un essai précédent a une autre configuration que celle que `.env` demande, et
+Compose ne le recrée pas : il a été créé avec l'ancienne valeur de `KLEAN_IPV6`, ou par une
+version qui n'est plus celle-ci. Il ne contient rien à garder :
+
+```bash
+sudo docker network rm klean_public   # Docker refuse tant qu'un conteneur s'en sert
+```
+
+puis relancez la commande qui a échoué : `sudo klean mettre-a-jour` reprend une mise à
+jour inachevée ; après un `restaurer`, ou pour appliquer un `KLEAN_IPV6` changé à la main
+sur une instance qui tourne, `cd /opt/klean && sudo docker compose up -d`.
+
+`sudo klean revenir` retire ce réseau de lui-même à la fin d'un retour réussi, pour que la
+mise à jour suivante n'y bute pas.
+
+**Vérifier que les visiteurs IPv6 sont comptés sous leur adresse.** Connectez-vous dans un
+navigateur, depuis une connexion IPv6 — un téléphone sur le réseau mobile, par exemple :
+seule une connexion ouvre une session, une simple requête n'en laisse aucune trace. Puis
+lisez `AdresseIp` de la dernière session :
+
+```bash
+cd /opt/klean && sudo docker compose exec -T postgres psql -U klean -d klean -c 'SELECT "AdresseIp", "DateCreation" FROM "JetonsRafraichissement" ORDER BY "DateCreation" DESC LIMIT 3'
+```
+
+L'adresse IPv6 du téléphone. Ni `172.28.0.1`, ni une adresse du réseau `public` —
+`fd91:8576:6d::` suivi d'un suffixe, ou l'IPv4 de sa passerelle, que donne
+`sudo docker network inspect klean_public` : dans ces trois cas, tous les visiteurs IPv6
+partagent encore une adresse. Cette colonne est la seule adresse IP du produit ;
+sa durée est dans `RGPD.md` §9.2.
+
 **Le réseau `172.28.0.0/24` existe déjà sur la machine.** Changez-le dans
 `docker-compose.yml`, en trois endroits qui doivent rester cohérents : `subnet`,
 `ipv4_address` de Caddy, et `Proxy__Reseaux__0` de l'API. Ce dernier doit désigner
 Caddy **seul**, en `/32`. Plus large, il laisserait un autre conteneur choisir
-l'adresse sous laquelle il est compté par la limitation de débit.
+l'adresse sous laquelle il est compté par la limitation de débit. Le réseau `public` n'a
+rien de tel à changer côté IPv4, Docker l'attribuant de son pool ; seule sa plage IPv6,
+privée, peut chevaucher un réseau de la machine, auquel cas changez le `subnet` de
+`public` en un `fd` d'une autre valeur. ⚠️ Une retouche de `docker-compose.yml` est
+écrasée à chaque mise à jour, qui installe les fichiers de la nouvelle version : elle est à
+refaire après chacune.
 
 **Un réseau interne, sans domaine public ni accès à Let's Encrypt.** Avec
 `KLEAN_DOMAINE=localhost`, Caddy émet un certificat depuis sa propre autorité, que

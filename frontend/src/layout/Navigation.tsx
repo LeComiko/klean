@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
 
 import { useAuth } from '../auth/contexte'
 import { aUnRole } from '../types/auth'
@@ -9,6 +9,61 @@ import './Navigation.css'
 export function Navigation() {
   const { profil, deconnecter } = useAuth()
   const [sortie, setSortie] = useState(false)
+  const liste = useRef<HTMLUListElement>(null)
+  const [suiteGauche, setSuiteGauche] = useState(false)
+  const [suiteDroite, setSuiteDroite] = useState(false)
+  const { pathname } = useLocation()
+
+  // Où la liste déborde : le fondu n'apparaît que du côté où des noms continuent, et
+  // jamais quand tout tient — il rendrait illisible un nom entièrement visible.
+  const mesurer = useCallback(() => {
+    const element = liste.current
+    if (element === null) return
+    setSuiteGauche(element.scrollLeft > 1)
+    setSuiteDroite(element.scrollLeft + element.clientWidth < element.scrollWidth - 1)
+  }, [])
+
+  // La section courante reste visible. `nearest` sur les deux axes : la liste défile
+  // juste ce qu'il faut, et la page ne bouge pas en hauteur.
+  useEffect(() => {
+    liste.current
+      ?.querySelector('[aria-current="page"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    mesurer()
+  }, [pathname, profil, mesurer])
+
+  // Un lien atteint au clavier ne reste pas sous le fondu : son contour de focus y serait
+  // rogné. Le scroll-padding de la liste le garde hors de la zone du masque. Écouteur posé
+  // ici plutôt qu'en `onFocus` sur la liste, qui n'est pas un élément interactif ; et sur
+  // `profil`, comme l'observateur : sans profil, la liste n'est pas montée.
+  useEffect(() => {
+    const element = liste.current
+    if (element === null) return
+    const amener = (evenement: FocusEvent) => {
+      if (evenement.target instanceof HTMLElement) {
+        evenement.target.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+      }
+    }
+    element.addEventListener('focusin', amener)
+    return () => element.removeEventListener('focusin', amener)
+  }, [profil])
+
+  // La boîte de la liste ne change pas quand Figtree arrive après le premier affichage :
+  // seule la largeur des noms change. D'où la seconde mesure, une fois les polices prêtes.
+  useEffect(() => {
+    const element = liste.current
+    if (element === null) return
+    let actif = true
+    const observateur = new ResizeObserver(mesurer)
+    observateur.observe(element)
+    void document.fonts?.ready.then(() => {
+      if (actif) mesurer()
+    })
+    return () => {
+      actif = false
+      observateur.disconnect()
+    }
+  }, [profil, mesurer])
 
   if (profil === null) return null
 
@@ -34,7 +89,17 @@ export function Navigation() {
 
       {/* Les sections en mots, sur une ligne (étape 33). Sous la largeur qu'il faut,
           la liste défile à l'horizontale : un nom n'est jamais tronqué (§12). */}
-      <ul className="navigation__liste">
+      <ul
+        ref={liste}
+        onScroll={mesurer}
+        className={[
+          'navigation__liste',
+          suiteGauche && 'navigation__liste--suite-gauche',
+          suiteDroite && 'navigation__liste--suite-droite',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
         {visibles.map((section) => (
           <li key={section.chemin}>
             {/* NavLink pose aria-current="page" : l'état actif est annoncé, il ne

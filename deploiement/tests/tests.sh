@@ -373,6 +373,37 @@ verifier 'un chemin qui remonte est refusé' faux fuseau_valide ../../../etc/pas
 verifier 'un fuseau vide est refusé' faux fuseau_valide ''
 verifier 'un chemin absolu est refusé' faux fuseau_valide /usr/share/zoneinfo/UTC
 
+# ---- IPv6 --------------------------------------------------------------------
+
+# ipv6_disponible reçoit les deux fichiers de /proc qu'elle lit : disable_ipv6, puis
+# if_inet6 — une ligne par adresse IPv6 de la machine, vide sous disable_ipv6=1.
+dossier=$(mktemp -d)
+printf '0\n' > "$dossier/actif"
+printf '1\n' > "$dossier/desactive"
+: > "$dossier/vide"
+printf '00000000000000000000000000000001 01 80 10 80       lo\n' > "$dossier/interfaces"
+verifier 'IPv6 disponible' ipv6_disponible "$dossier/actif" "$dossier/interfaces"
+verifier 'sans disable_ipv6, pas d’IPv6' faux ipv6_disponible "$dossier/absent" "$dossier/interfaces"
+verifier 'IPv6 désactivé : pas d’IPv6' faux ipv6_disponible "$dossier/desactive" "$dossier/vide"
+verifier 'disable_ipv6=1 suffit à dire non' faux ipv6_disponible "$dossier/desactive" "$dossier/interfaces"
+verifier 'aucune adresse IPv6 : pas d’IPv6' faux ipv6_disponible "$dossier/actif" "$dossier/vide"
+verifier 'sans if_inet6, pas d’IPv6' faux ipv6_disponible "$dossier/actif" "$dossier/absent"
+# Un fichier de /proc annonce une taille nulle, quel que soit son contenu : `[ -s ]` le
+# dirait vide. /proc/self/status est toujours là, et jamais vide.
+verifier 'un fichier de /proc se lit, il ne se mesure pas' ipv6_disponible "$dossier/actif" /proc/self/status
+rm -rf "$dossier"
+
+# Ce que docker compose lit à coup sûr dans enable_ipv6. Vide, le compose retombe sur true.
+# Les autres valeurs ne sont pas refusées ici : klean les soumet à compose.
+verifier 'KLEAN_IPV6=true est reconnu' reglage_ipv6_reconnu true
+verifier 'KLEAN_IPV6=false est reconnu' reglage_ipv6_reconnu false
+verifier 'KLEAN_IPV6 vide est reconnu' reglage_ipv6_reconnu ''
+verifier 'KLEAN_IPV6=oui n’est pas reconnu d’office' faux reglage_ipv6_reconnu oui
+verifier 'KLEAN_IPV6=1 n’est pas reconnu d’office' faux reglage_ipv6_reconnu 1
+verifier 'KLEAN_IPV6 suivi d’un commentaire n’est pas reconnu d’office' faux reglage_ipv6_reconnu 'false # pas d’IPv6'
+# Une mise à jour l'ajoute, avec ce défaut, aux .env qui ne l'ont pas.
+verifier 'env.modele ajoute KLEAN_IPV6=true' egal "$(lire_env "$ici/../env.modele" KLEAN_IPV6)" true
+
 # ---- Installation ------------------------------------------------------------
 
 verifier 'des comptes : installée' egal "$(etat_installation 3)" installee

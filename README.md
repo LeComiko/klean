@@ -71,8 +71,9 @@ sur le serveur**.
   contient ni I, ni L, ni O, ni 0, ni 1. `sudo klean code` le réaffiche tant qu'aucun
   compte n'existe.
 - Il ne sert qu'une fois. Dès que le premier compte existe, la commande `klean` suivante
-  le retire de la configuration — `sudo klean etat` suffit —, et la sauvegarde de la nuit
-  le fait au plus tard.
+  le retire de la configuration — `sudo klean etat` suffit —, et la tâche horaire du cron
+  le fait au plus tard : dans l'heure. Ce qu'elle fait s'écrit au journal du système,
+  `sudo journalctl -t klean`.
 - Ne le mettez dans aucune adresse ni aucun lien : il finirait dans l'historique du
   navigateur.
 

@@ -31,14 +31,6 @@ export function SousNavigation({ onglets }: Proprietes) {
       <ul className="sous-navigation__liste">
         {onglets.map((onglet, index) => (
           <li key={onglet.chemin} className="sous-navigation__element">
-            {/* Le chevron dit la dépendance, pas seulement la suite : un site
-                appartient à un client. Décoratif pour un lecteur d'écran, qui
-                entend déjà l'ordre de la liste. */}
-            {index > 0 && (
-              <span className="sous-navigation__fleche" aria-hidden="true">
-                ›
-              </span>
-            )}
             <NavLink
               to={onglet.chemin}
               className={({ isActive }) =>
@@ -48,6 +40,15 @@ export function SousNavigation({ onglets }: Proprietes) {
             >
               {onglet.libelle}
             </NavLink>
+            {/* Le chevron dit la dépendance, pas seulement la suite : un site
+                appartient à un client. Placé **après** son onglet : quand la liste
+                revient à la ligne, une ligne finit par « › » au lieu d'en commencer
+                une. Décoratif pour un lecteur d'écran, qui entend déjà l'ordre. */}
+            {index < onglets.length - 1 && (
+              <span className="sous-navigation__fleche" aria-hidden="true">
+                ›
+              </span>
+            )}
           </li>
         ))}
       </ul>
