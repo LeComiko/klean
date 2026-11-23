@@ -35,7 +35,10 @@ public class EntreprisesController : ControllerBase
                 RaisonSociale = e.RaisonSociale,
                 Siret = e.Siret,
                 DateCreation = e.DateCreation,
-                Territoire = e.Territoire.ToString()
+                Territoire = e.Territoire.ToString(),
+                GeocodageActif = e.GeocodageActif,
+                GeocodageActiveLe = e.GeocodageActiveLe,
+                GeocodageDesactiveLe = e.GeocodageDesactiveLe
             })
             .ToListAsync();
 
@@ -61,7 +64,10 @@ public class EntreprisesController : ControllerBase
                 RaisonSociale = e.RaisonSociale,
                 Siret = e.Siret,
                 DateCreation = e.DateCreation,
-                Territoire = e.Territoire.ToString()
+                Territoire = e.Territoire.ToString(),
+                GeocodageActif = e.GeocodageActif,
+                GeocodageActiveLe = e.GeocodageActiveLe,
+                GeocodageDesactiveLe = e.GeocodageDesactiveLe
             })
             .FirstOrDefaultAsync();
 
@@ -88,6 +94,15 @@ public class EntreprisesController : ControllerBase
         entreprise.RaisonSociale = dto.RaisonSociale;
         entreprise.Siret = dto.Siret;
         entreprise.Territoire = Enum.Parse<Territoire>(dto.Territoire);
+
+        // ⚠️ Une date par sens, posée au seul changement d'état : un PUT qui ne change pas le
+        // réglage — enregistrer la raison sociale — ne doit rien dater.
+        if (dto.GeocodageActif != entreprise.GeocodageActif)
+        {
+            if (dto.GeocodageActif) entreprise.GeocodageActiveLe = DateTime.UtcNow;
+            else entreprise.GeocodageDesactiveLe = DateTime.UtcNow;
+            entreprise.GeocodageActif = dto.GeocodageActif;
+        }
 
         try
         {
