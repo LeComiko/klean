@@ -757,6 +757,28 @@ sur une instance qui tourne, `cd /opt/klean && sudo docker compose up -d`.
 `sudo klean revenir` retire ce réseau de lui-même à la fin d'un retour réussi, pour que la
 mise à jour suivante n'y bute pas.
 
+⚠️ **Une machine qui reçoit sa route IPv6 des annonces du routeur** peut perdre son IPv6
+quelques heures après l'activation du réseau `public`. Un réseau Docker IPv6 exige le
+transfert IPv6 (`net.ipv6.conf.all.forwarding=1`), et une interface dont `accept_ra` vaut
+`1` cesse alors de suivre ces annonces : la route par défaut expire, et le domaine ne répond
+plus en IPv6. Non mesuré — aucune machine de ce genre n'était à disposition —, mais c'est le
+comportement documenté du noyau. La vérification, avant la mise à jour :
+
+```bash
+ip -6 route show default                          # « proto ra » : la route vient des annonces
+cat /proc/sys/net/ipv6/conf/<interface>/accept_ra  # l'interface de cette route
+```
+
+Une route `proto static` ou `proto kernel`, ou `accept_ra` à `0` ou `2`, ne sont pas
+concernées : c'est le cas de netplan et de systemd-networkd, qui traitent les annonces
+eux-mêmes. Sinon — typiquement ifupdown en `inet6 auto` —, faites suivre les annonces malgré
+le transfert, puis rechargez :
+
+```bash
+echo 'net.ipv6.conf.<interface>.accept_ra = 2' | sudo tee /etc/sysctl.d/90-klean-ipv6.conf
+sudo sysctl --system
+```
+
 **Vérifier que les visiteurs IPv6 sont comptés sous leur adresse.** Connectez-vous dans un
 navigateur, depuis une connexion IPv6 — un téléphone sur le réseau mobile, par exemple :
 seule une connexion ouvre une session, une simple requête n'en laisse aucune trace. Puis
