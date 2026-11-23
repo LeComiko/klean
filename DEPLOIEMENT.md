@@ -752,7 +752,7 @@ sudo docker network rm klean_public   # Docker refuse tant qu'un conteneur s'en 
 
 puis relancez la commande qui a échoué : `sudo klean mettre-a-jour` reprend une mise à
 jour inachevée ; après un `restaurer`, ou pour appliquer un `KLEAN_IPV6` changé à la main
-sur une instance qui tourne, `cd /opt/klean && sudo docker compose up -d`.
+sur une instance qui tourne, `sudo docker compose --project-directory /opt/klean up -d`.
 
 `sudo klean revenir` retire ce réseau de lui-même à la fin d'un retour réussi, pour que la
 mise à jour suivante n'y bute pas.
@@ -785,7 +785,7 @@ seule une connexion ouvre une session, une simple requête n'en laisse aucune tr
 lisez `AdresseIp` de la dernière session :
 
 ```bash
-cd /opt/klean && sudo docker compose exec -T postgres psql -U klean -d klean -c 'SELECT "AdresseIp", "DateCreation" FROM "JetonsRafraichissement" ORDER BY "DateCreation" DESC LIMIT 3'
+sudo docker compose --project-directory /opt/klean exec -T postgres psql -U klean -d klean -c 'SELECT "AdresseIp", "DateCreation" FROM "JetonsRafraichissement" ORDER BY "DateCreation" DESC LIMIT 3'
 ```
 
 L'adresse IPv6 du téléphone. Ni `172.28.0.1`, ni une adresse du réseau `public` —
@@ -986,7 +986,8 @@ L'assistant ne la reprend pas, et n'offre pas de la contourner : en changer le S
 laisserait l'orpheline en base. Elle se retire à la main.
 
 **Le rapport d'abord.** Il ne modifie rien. Depuis le dossier de KLEAN — `/opt/klean`
-pour une installation par le script :
+pour une installation par le script, que le script crée en mode 700 : en root, donc, par
+`sudo -i` d'abord :
 
 ```bash
 cd /opt/klean
