@@ -34,6 +34,16 @@ verifier 'le code fait 20 symboles de l’alphabet sans ambiguïté' \
   bash -c '[[ "$1" =~ ^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{20}$ ]]' _ "$code"
 verifier 'deux codes diffèrent' bash -c '[ "$1" != "$2" ]' _ "$code" "$(generer_code)"
 
+# Un contrat entre le script et l'API : un code que l'API refuse l'empêche de démarrer,
+# comptes ou non (CodeInstallation.Lire). Lus dans le code de l'API, jamais recopiés.
+code_api="$ici/../../backend/Services/CodeInstallation.cs"
+alphabet_api=$(sed -n 's/.*const string Alphabet = "\([^"]*\)";.*/\1/p' "$code_api")
+longueur_api=$(sed -n 's/.*const int Longueur = \([0-9][0-9]*\);.*/\1/p' "$code_api")
+verifier 'l’alphabet du script est celui de l’API' egal "$ALPHABET_CODE" "$alphabet_api"
+verifier 'le code tiré a la longueur que l’API attend' egal "${#code}" "$longueur_api"
+dans_l_alphabet_api() { [ -n "$alphabet_api" ] && [[ "$code" =~ ^["$alphabet_api"]+$ ]]; }
+verifier 'le code tiré n’emploie que l’alphabet de l’API' dans_l_alphabet_api
+
 verifier 'un secret de 32 octets fait 64 chiffres hexadécimaux' \
   bash -c '[[ "$1" =~ ^[0-9a-f]{64}$ ]]' _ "$(generer_secret 32)"
 
@@ -383,7 +393,13 @@ cles_a_retirer() { cles_d_installation_a_retirer "$env" "$1" | tr '\n' ' '; }
 printf 'KLEAN_DOMAINE=klean.exemple.fr\nKLEAN_CODE_INSTALLATION=%s\nKLEAN_ADMIN_EMAIL=patron@exemple.fr\nKLEAN_ADMIN_MOT_DE_PASSE=\nKLEAN_RAISON_SOCIALE=Propre\n' "$code" > "$env"
 verifier 'des comptes : le code et les restes d’amorçage partent' \
   egal "$(cles_a_retirer 1)" 'KLEAN_CODE_INSTALLATION KLEAN_ADMIN_EMAIL KLEAN_RAISON_SOCIALE '
-verifier 'aucun compte : rien ne part' egal "$(cles_a_retirer 0)" ''
+# Le statut à part, et non à travers un tube : un échec y passerait pour « rien ».
+rien_sans_compte() {
+  local sortie
+  sortie=$(cles_d_installation_a_retirer "$env" 0) || { printf '       échec\n'; return 1; }
+  egal "$sortie" ''
+}
+verifier 'aucun compte : rien ne part' rien_sans_compte
 verifier 'un nombre de comptes illisible ne retire rien' faux cles_d_installation_a_retirer "$env" ''
 # Le mot de passe provisoire d'une installation 0.1.x inachevée n'a pas encore été montré :
 # montrer_puis_retirer_mot_de_passe a besoin de lui, et de l'adresse qu'il ouvre.
@@ -391,7 +407,12 @@ printf 'KLEAN_CODE_INSTALLATION=%s\nKLEAN_ADMIN_EMAIL=patron@exemple.fr\nKLEAN_A
 verifier 'un mot de passe provisoire pas encore montré garde l’amorçage' \
   egal "$(cles_a_retirer 1)" 'KLEAN_CODE_INSTALLATION '
 printf 'KLEAN_DOMAINE=klean.exemple.fr\nKLEAN_CODE_INSTALLATION=\nKLEAN_ADMIN_EMAIL=\n' > "$env"
-verifier 'rien à retirer : rien ne part' egal "$(cles_a_retirer 4)" ''
+rien_a_retirer() {
+  local sortie
+  sortie=$(cles_d_installation_a_retirer "$env" 4) || { printf '       échec\n'; return 1; }
+  egal "$sortie" ''
+}
+verifier 'rien à retirer : rien ne part' rien_a_retirer
 printf 'KLEAN_ADMIN_EMAIL=patron@exemple.fr\n' > "$env"
 verifier 'un reste d’amorçage part même sans code' egal "$(cles_a_retirer 1)" 'KLEAN_ADMIN_EMAIL '
 rm -rf "$dossier"

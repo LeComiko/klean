@@ -115,28 +115,34 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: shellcheck
-        run: shellcheck -x deploiement/installer.sh deploiement/klean deploiement/fonctions.sh deploiement/publier.sh deploiement/tests/tests.sh deploiement/tests/lancer.sh
+        run: shellcheck -x deploiement/installer.sh deploiement/klean deploiement/fonctions.sh deploiement/publier.sh deploiement/tests/tests.sh deploiement/tests/lancer.sh deploiement/tests/commande.sh
 
       - name: Série
         run: bash deploiement/tests/tests.sh
+
+      # Les gestes de `klean` autour du code d'installation, compose et psql simulés.
+      - name: Commande
+        run: bash deploiement/tests/commande.sh
 
       # Le compose qu'un serveur reçoit n'a plus de build: ; il doit rester lisible
       # par docker compose, et désigner les images de la version. Et il passe le code
       # d'installation à l'API sous son nom : KLEAN_CODE_INSTALLATION et Installation__Code
       # sont un contrat entre une version et la suivante (deploiement/klean).
       #
-      # Le code est tiré ici, jamais écrit dans le dépôt. `cut` et non `head -c` : sous
-      # pipefail, un `head` qui ferme le tube avant la fin fait échouer `tr` sur SIGPIPE.
+      # Le code est tiré ici, jamais écrit dans le dépôt, d'une façon robuste même sous
+      # pipefail : `cut` lit tout, alors qu'un `head -c 20` fermerait le tube avant la fin,
+      # et `tr` sortirait en erreur sur SIGPIPE.
       - name: Le compose d'une version publiée est valide
         run: |
           deploiement/publier.sh 0.0.0 essai/klean "$RUNNER_TEMP/dist"
           mkdir "$RUNNER_TEMP/version"
           tar xzf "$RUNNER_TEMP/dist/klean-0.0.0.tar.gz" -C "$RUNNER_TEMP/version"
           code=$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'ABCDEFGHJKMNPQRSTUVWXYZ23456789' | cut -c 1-20)
-          [[ $code =~ ^[A-Z2-9]{20}$ ]]
+          [[ $code =~ ^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{20}$ ]]
           printf 'KLEAN_DOMAINE=exemple.fr\nPOSTGRES_PASSWORD=x\nKLEAN_JWT_CLE=y\nKLEAN_IMAGES=ghcr.io/essai/klean\nKLEAN_VERSION=0.0.0\nKLEAN_CODE_INSTALLATION=%s\n' "$code" > "$RUNNER_TEMP/version/.env"
           docker compose --project-directory "$RUNNER_TEMP/version" -f "$RUNNER_TEMP/version/docker-compose.yml" config -q
-          docker compose --project-directory "$RUNNER_TEMP/version" -f "$RUNNER_TEMP/version/docker-compose.yml" config | grep -q "Installation__Code: $code"
+          docker compose --project-directory "$RUNNER_TEMP/version" -f "$RUNNER_TEMP/version/docker-compose.yml" config --format json |
+            jq -er '.services.api.environment.Installation__Code' | grep -qx "$code"
           docker compose --project-directory "$RUNNER_TEMP/version" -f "$RUNNER_TEMP/version/docker-compose.yml" config --images | sort -u > "$RUNNER_TEMP/images.txt"
           cat "$RUNNER_TEMP/images.txt"
           grep -qx 'ghcr.io/essai/klean-api:0.0.0' "$RUNNER_TEMP/images.txt"

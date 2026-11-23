@@ -2155,9 +2155,10 @@ docker compose up -d
 Le script d'installation (`deploiement/`, étape 34) :
 
 ```bash
-deploiement/tests/lancer.sh           # la série, dans un conteneur Debian 12 (Docker requis)
+deploiement/tests/lancer.sh           # les deux séries, dans un conteneur Debian 12 (Docker requis)
 shellcheck -x deploiement/installer.sh deploiement/klean deploiement/fonctions.sh \
-    deploiement/publier.sh deploiement/tests/tests.sh deploiement/tests/lancer.sh
+    deploiement/publier.sh deploiement/tests/tests.sh deploiement/tests/lancer.sh \
+    deploiement/tests/commande.sh
 
 # Publier une version : une étiquette, poussée par l'utilisateur — jamais par un agent.
 # publication.yml rejoue le CI, publie les deux images sur ghcr.io, puis la version.

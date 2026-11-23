@@ -336,12 +336,18 @@ cmd_code() {
   # Sans attente : le code s'écrit peut-être dans .env, qu'une mise à jour écrit aussi.
   verrouiller
   local comptes etat
+  # L'API est arrêtée exprès, et seule la commande inachevée la redémarre : tirer un code
+  # la recréerait sur une base peut-être vide, ou à moitié migrée.
+  case "$(operation_inachevee)" in
+    retour) echouer "Un retour à la version précédente n'a pas abouti. Terminez-le d'abord : sudo klean revenir, puis relancez : sudo klean code" ;;
+    maj) echouer "Une mise à jour n'a pas abouti. Terminez d'abord : sudo klean mettre-a-jour, ou sudo klean revenir, puis relancez : sudo klean code" ;;
+  esac
   retirer_code_si_installe
   # Une sortie vide n'est pas « zéro compte » : PostgreSQL muet ne prouve pas que KLEAN
   # n'est pas installé, ni qu'il l'est.
   comptes=$(nombre_de_comptes) || comptes=''
   etat=$(etat_installation "$comptes") ||
-    echouer "PostgreSQL ne répond pas : impossible de savoir si KLEAN est installé. Voir : sudo klean etat"
+    echouer "PostgreSQL ne répond pas : impossible de savoir si KLEAN est installé. Voir : sudo klean etat, puis relancez : sudo klean code"
   if [ "$etat" = installee ]; then
     dire "KLEAN est déjà installé : le code d'installation ne sert plus."
     return
@@ -351,17 +357,32 @@ cmd_code() {
   if [ -n "$CODE_TIRE" ]; then
     # L'API vient d'être recréée, peut-être après des heures de refus : un seul essai
     # tomberait sur son démarrage. L'attente de l'installation, et ses diagnostics.
-    verifier_https || echouer "KLEAN ne répond pas encore en HTTPS : voir sudo klean etat"
+    verifier_https ||
+      echouer "KLEAN ne répond pas encore en HTTPS : voir sudo klean etat, puis relancez : sudo klean code"
   else
-    [ "$(sonde_https)" = 200 ] || echouer "KLEAN ne répond pas encore en HTTPS : voir sudo klean etat"
+    [ "$(sonde_https)" = 200 ] ||
+      echouer "KLEAN ne répond pas encore en HTTPS : voir sudo klean etat, puis relancez : sudo klean code"
   fi
   montrer_code_installation
 }
 
+# « retour » ou « maj » si un retour ou une mise à jour n'a pas abouti — KLEAN_RETOUR_EN_COURS
+# ou KLEAN_MAJ_EN_COURS dans .env —, rien sinon. L'API est alors arrêtée exprès, sur une base
+# peut-être vide ou à moitié migrée : seule la commande inachevée la redémarre.
+operation_inachevee() {
+  if [ -n "$(lire_env "$ENV" KLEAN_RETOUR_EN_COURS)" ]; then
+    printf 'retour\n'
+  elif [ -n "$(lire_env "$ENV" KLEAN_MAJ_EN_COURS)" ]; then
+    printf 'maj\n'
+  fi
+}
+
 # Rempli par assurer_code_installation : CODE_TIRE si elle vient d'en tirer un,
-# ASSISTANT_OUVERT si la base n'a aucun compte.
+# ASSISTANT_OUVERT si la base n'a aucun compte ni entreprise, ENTREPRISE_ORPHELINE si elle
+# a une entreprise sans compte — l'assistant ne la reprend pas.
 CODE_TIRE=''
 ASSISTANT_OUVERT=''
+ENTREPRISE_ORPHELINE=''
 
 # Aucun compte, et aucun code dans .env : en tirer un (generer_code), sinon l'API refuserait
 # de démarrer (AmorcageService). Une sauvegarde prise avant le premier compte, restaurée
@@ -369,13 +390,20 @@ ASSISTANT_OUVERT=''
 #   $1 = api : recréer l'API, qui ne lit son environnement qu'à sa création. Vide :
 #        l'appelant la démarre juste après.
 #   $2 : la phrase qui dit comment reprendre, si PostgreSQL ne répond pas.
+#
+# Une entreprise orpheline reçoit un code aussi : sans lui, l'API refuserait de démarrer, et
+# c'est elle qui dit à l'écran quoi faire.
 assurer_code_installation() {
-  local comptes etat code
+  local comptes entreprises etat code
   comptes=$(nombre_de_comptes) || comptes=''
-  etat=$(etat_installation "$comptes") ||
+  entreprises=$(nombre_d_entreprises) || entreprises=''
+  etat=$(etat_installation "$comptes" "$entreprises") ||
     echouer "PostgreSQL ne répond pas : impossible de savoir si un compte existe. Voir : sudo klean etat. $2"
-  [ "$etat" = a-faire ] || return 0
-  ASSISTANT_OUVERT=1
+  case "$etat" in
+    installee) return 0 ;;
+    orpheline) ENTREPRISE_ORPHELINE=1 ;;
+    *) ASSISTANT_OUVERT=1 ;;
+  esac
   [ -z "$(lire_env "$ENV" KLEAN_CODE_INSTALLATION)" ] || return 0
   code=$(generer_code) ||
     echouer "Le code d'installation n'a pas pu être tiré : rien n'a changé. $2"
@@ -391,18 +419,37 @@ assurer_code_installation() {
 # conteneur gardait le code dans son environnement. Silencieuse s'il n'y a rien à retirer,
 # si PostgreSQL ne répond pas — elle ne sait alors pas, et la prochaine fois saura —, ou si
 # une autre commande klean tient le verrou : celle-là écrit peut-être .env.
+#
+# ⚠️ Une commande d'état ne défait pas un arrêt voulu. .env est vidé dans tous les cas,
+# mais l'API n'est recréée que si elle tourne, et qu'aucune mise à jour ni aucun retour
+# n'est inachevé : arrêtée sur un schéma à moitié migré, après une révocation de sessions
+# ratée, ou à la main, elle reste arrêtée, et lira .env à son prochain démarrage.
 retirer_code_si_installe() {
-  local comptes cles cle paires=()
+  local comptes cles cle paires=() enmarche
   comptes=$(nombre_de_comptes 2> /dev/null) || comptes=''
   cles=$(cles_d_installation_a_retirer "$ENV" "$comptes") || return 0
   [ -n "$cles" ] || return 0
   prendre_verrou -n || return 0
+  # Relus sous le verrou : la commande qui le tenait a peut-être changé .env, ou la base.
+  comptes=$(nombre_de_comptes 2> /dev/null) || comptes=''
+  cles=$(cles_d_installation_a_retirer "$ENV" "$comptes") || return 0
+  [ -n "$cles" ] || return 0
   while IFS= read -r cle; do
     paires+=("$cle" '')
   done <<< "$cles"
   ecrire_env "${paires[@]}"
   dire "KLEAN a ses comptes : ce qui ne servait qu'à l'installation est retiré de la configuration (${cles//$'\n'/, })."
-  compose up -d api ||
+  if [ -n "$(operation_inachevee)" ]; then
+    dire "L'API, arrêtée tant que l'opération inachevée ne reprend pas, n'est pas redémarrée : elle lira la configuration à sa reprise."
+    return 0
+  fi
+  enmarche=$(compose ps --status running --services 2> /dev/null) || enmarche=''
+  if ! grep -qx api <<< "$enmarche"; then
+    dire "L'API est arrêtée : elle n'est pas redémarrée, et lira la configuration à son prochain démarrage."
+    return 0
+  fi
+  # --no-deps : recréer l'API seule, sans démarrer ce qu'on aurait arrêté à côté.
+  compose up -d --no-deps api ||
     avertir "L'API n'a pas redémarré après le retrait du code d'installation. Voir : sudo klean journaux"
 }
 
@@ -427,7 +474,7 @@ montrer_code_installation() {
   code=$(lire_env "$ENV" KLEAN_CODE_INSTALLATION)
   [ -n "$code" ] || echouer "Aucun code d'installation dans $ENV. Pour en tirer un : sudo klean code"
   dire ''
-  dire "KLEAN est installé : ouvrez https://$(lire_env "$ENV" KLEAN_DOMAINE) — un assistant crée votre entreprise et votre compte."
+  dire "Dernière étape : ouvrez https://$(lire_env "$ENV" KLEAN_DOMAINE) — un assistant y crée votre entreprise et votre compte administrateur."
   dire "Il demande ce code : $(code_lisible "$code")"
   dire "Il reste lisible par : sudo klean code — jusqu'à la création du premier compte."
 }
@@ -579,11 +626,15 @@ restaurer_base() {
   # Une sauvegarde prise avant le premier compte : sans code, l'API refuserait de démarrer,
   # et l'ancien code a été retiré de .env depuis. Sans recréer l'API : elle démarre ici.
   ASSISTANT_OUVERT=''
+  ENTREPRISE_ORPHELINE=''
   assurer_code_installation '' "La base est restaurée, mais l'API reste arrêtée. $annuler"
   compose up -d ||
     echouer "La base est restaurée, mais les services n'ont pas démarré. Voir : sudo klean etat, puis sudo klean journaux. $annuler"
-  [ -z "$ASSISTANT_OUVERT" ] ||
+  if [ -n "$ASSISTANT_OUVERT" ]; then
     dire "Cette sauvegarde n'a aucun compte : l'assistant d'installation est ouvert. Son code : sudo klean code"
+  elif [ -n "$ENTREPRISE_ORPHELINE" ]; then
+    avertir "Cette sauvegarde a une entreprise sans aucun compte, que l'assistant ne reprend pas : DEPLOIEMENT.md, « Une entreprise sans compte »."
+  fi
 }
 
 # **Toujours fusionné**, jamais « seulement si le volume est vide » : l'API crée une clé
@@ -1032,9 +1083,16 @@ afficher_fin() {
 #   - Le compose reste lisible par le plugin docker compose de l'installation : rien ne
 #     le met à jour de lui-même.
 #   - Le code d'installation (lot A2) : le compose le lit sous le nom
-#     KLEAN_CODE_INSTALLATION, et le passe à l'API en Installation__Code. Le compose lit
-#     toujours KLEAN_ADMIN_EMAIL, KLEAN_ADMIN_MOT_DE_PASSE, KLEAN_RAISON_SOCIALE et
-#     KLEAN_SIRET, la voie manuelle de DEPLOIEMENT.md : N les écrivait encore en 0.1.x.
+#     KLEAN_CODE_INSTALLATION, et le passe à l'API en Installation__Code. L'API de N+1
+#     accepte un code de 20 symboles de ALPHABET_CODE, et démarre normalement si un code
+#     reste dans .env alors que des comptes existent (0.1.x n'en retire aucun) : un code
+#     qu'elle refuserait l'empêcherait de démarrer, comptes ou non. tests/tests.sh compare
+#     ALPHABET_CODE et la longueur de generer_code à backend/Services/CodeInstallation.cs.
+#   - Le compose lit toujours KLEAN_ADMIN_EMAIL, KLEAN_ADMIN_MOT_DE_PASSE et
+#     KLEAN_RAISON_SOCIALE, que 0.1.x écrivait, et KLEAN_SIRET, de la voie manuelle de
+#     DEPLOIEMENT.md, qu'aucune version du script n'écrit.
+#   - La base : N lit la table "AspNetUsers" du schéma de N+1, pour compter les comptes, et
+#     sa colonne "MotDePasseProvisoire" (comptes_utilises).
 #   - N conduit la mise à jour avec ses propres fonctions : ce que N+1 fait de neuf après
 #     la bascule — retirer le code, par exemple — n'a lieu qu'à la commande suivante.
 
@@ -1222,7 +1280,6 @@ cmd_mettre_a_jour() {
     dire "Aucune nouvelle sauvegarde n'est prise — elle serait celle d'une base à moitié transformée. Celle d'avant la mise à jour reste : $(lire_env "$ENV" KLEAN_SAUVEGARDE_AVANT_MAJ)"
     basculer_vers "$en_cours" "$(lire_env "$ENV" KLEAN_VERSION_PRECEDENTE)" \
       "$(lire_env "$ENV" KLEAN_SAUVEGARDE_AVANT_MAJ)" reprise
-    retirer_code_si_installe
     return
   fi
 
@@ -1295,11 +1352,6 @@ cmd_mettre_a_jour() {
   dire "Sauvegarde d'avant la mise à jour. Si elle échoue, tout s'arrête là, sans rien changer."
   cmd_sauvegarder "avant-$cible"
   basculer_vers "$cible" "$actuelle" "$DERNIERE_SAUVEGARDE"
-  # Après la bascule réussie — basculer_vers s'arrête sur tout échec. ⚠️ Ce geste est celui
-  # du `klean` qui conduit la mise à jour, donc de la version d'avant : une 0.1.x ne le
-  # connaît pas, et le code reste dans .env jusqu'au prochain `klean etat`, ou jusqu'à la
-  # sauvegarde de la nuit.
-  retirer_code_si_installe
 }
 
 # De l'arrêt de l'API à son redémarrage sous la version $1 ; $2 la version d'avant, $3 sa
@@ -1333,6 +1385,11 @@ basculer_vers() {
   # La mise à jour est faite : un défaut d'HTTPS ne doit pas bloquer la suivante.
   poser_env "$ENV" KLEAN_MAJ_EN_COURS '' ||
     avertir "KLEAN tourne en version $cible, mais la configuration n'a pas pu le noter : la prochaine commande reprendra une mise à jour déjà faite, sans dommage."
+  # La base a ses comptes : le code ne sert plus. Avant la sonde, qui attend alors l'API
+  # recréée. ⚠️ Ce geste est celui du `klean` qui conduit la mise à jour, donc de la version
+  # d'avant : une 0.1.x ne le connaît pas, et le code reste dans .env jusqu'au prochain
+  # `klean etat`, ou jusqu'à la sauvegarde de la nuit.
+  retirer_code_si_installe
   verifier_https ||
     echouer "KLEAN est passé en version $cible, mais ne répond pas en HTTPS (voir ci-dessus). Si cela vient de la nouvelle version : sudo klean revenir"
   dire "KLEAN est passé de la version $precedente à la version $cible."
