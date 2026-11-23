@@ -387,7 +387,8 @@ s'exécute.
   neuve, avec `IConfiguration` ; `CreateHandler("geocodage")`, puis la chaîne des
   `InnerHandler` jusqu'au gestionnaire primaire, qui doit être un `SocketsHttpHandler` avec
   `AllowAutoRedirect = false`, `UseCookies = false`, le propagateur sans sortie et
-  `AutomaticDecompression = None`. **Un sabotage par ligne**, chacun le fait rougir — c'est le
+  `AutomaticDecompression = None`. **Un sabotage par ligne**, chacun le fait rougir — sauf
+  `AutomaticDecompression`, déjà `None` par défaut, gardée comme déclaration explicite — c'est le
   seul test qui le prouve : le faux gestionnaire ne suit rien, ne garde aucun cookie et n'ajoute
   aucun en-tête de lui-même.
 - **La requête sortante**, avec une saisie hostile — `&`, `#`, `?`, `%`, `+`, `//hote`,
