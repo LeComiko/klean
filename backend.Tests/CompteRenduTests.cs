@@ -541,6 +541,7 @@ public class CompteRenduTests : IAsyncLifetime
         public Guid? ChefEquipeId => null;
         public bool FiltrageActif => true;
         public void DesactiverFiltrage() => throw new InvalidOperationException("Pas dans ce test.");
+        public Guid PoserEntrepriseInstallation() => throw new InvalidOperationException("Pas dans ce test.");
     }
 
     private async Task<T> LireAsync<T>(Func<KleanDbContext, Task<T>> lecture)

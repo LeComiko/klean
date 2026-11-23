@@ -9,7 +9,8 @@ public interface ITenantContext
 {
     /// <summary>
     /// Entreprise du jeton, ou null hors requête authentifiée — amorçage,
-    /// série de tests, endpoints anonymes.
+    /// série de tests, endpoints anonymes —, sauf après
+    /// <see cref="PoserEntrepriseInstallation"/>, qui en pose une pour l'assistant d'installation.
     /// </summary>
     Guid? EntrepriseId { get; }
 
@@ -43,6 +44,19 @@ public interface ITenantContext
     /// <summary>
     /// Utilisé par l'amorçage, qui doit créer la première entreprise avant
     /// qu'aucun tenant n'existe.
+    ///
+    /// ⚠️ <b>Jamais sous un <c>HttpContext</c></b> : l'appel lève. Une route ne tourne jamais en
+    /// propriétaire des tables, et la démonstration, qui joue des identités sur un
+    /// <c>HttpContext</c>, reste sous la RLS.
     /// </summary>
     void DesactiverFiltrage();
+
+    /// <summary>
+    /// Tire l'identifiant de l'entreprise que crée l'assistant d'installation (SPEC.md, étape 34,
+    /// lot A2) et en fait l'entreprise de cette requête anonyme : la connexion passe sous
+    /// <c>klean_app</c> avec ce réglage, et la politique d'<c>Entreprises</c> accepte l'insertion.
+    /// Une fois par requête, jamais sur une requête authentifiée, jamais avec un identifiant venu
+    /// d'ailleurs. Seul <c>InstallationController</c> l'appelle (un test le vérifie).
+    /// </summary>
+    Guid PoserEntrepriseInstallation();
 }

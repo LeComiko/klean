@@ -26,6 +26,9 @@ public class FabriqueApi : WebApplicationFactory<Program>
     private const string CleTest =
         "cle-de-signature-reservee-aux-tests-automatises-48-octets-minimum";
 
+    /// <summary>Tiré à chaque exécution : aucune valeur littérale d'un code ne circule dans le dépôt.</summary>
+    public static readonly string CodeDInstallation = CodeInstallation.Tirer();
+
     /// <summary>
     /// ⚠️ Les valeurs de test passent par des **variables d'environnement**, et
     /// non par <c>ConfigureAppConfiguration</c>. Avec le modèle d'hébergement
@@ -51,6 +54,8 @@ public class FabriqueApi : WebApplicationFactory<Program>
         Poser("Amorcage__MotDePasseAdmin", "AmorcageTest2026");
         Poser("Amorcage__RaisonSocialeEntreprise", "Amorçage Test");
         Poser("Amorcage__SiretEntreprise", "00000000000001");
+        // La base de la série a toujours des comptes : il ne sert qu'aux tests qui la vident.
+        Poser("Installation__Code", CodeDInstallation);
 
         // Surface HTTP (étape 16). Une seule origine déclarée : il en faut une
         // pour prouver qu'elle passe, et son unicité prouve que les autres non.
@@ -85,6 +90,9 @@ public class FabriqueApi : WebApplicationFactory<Program>
     /// <summary>Horloge de la génération. Libérée par la fixture entre chaque test.</summary>
     public HorlogeDeTest Horloge { get; } = new();
 
+    /// <summary>Rôle et entreprise des connexions, relevés sous chaque commande. Inactive par défaut.</summary>
+    public SondeInstallation Sonde { get; } = new();
+
     private readonly string _environnement;
 
     /// <summary>
@@ -112,6 +120,10 @@ public class FabriqueApi : WebApplicationFactory<Program>
 
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Horloge);
+
+            // Relève le rôle et l'entreprise de la connexion sous les requêtes de l'assistant
+            // (étape 34, lot A2). S'ajoute à BasculeRoleApplicatif sans le remplacer (EF Core 10).
+            services.ConfigureDbContext<KleanDbContext>(options => options.AddInterceptors(Sonde));
         });
     }
 

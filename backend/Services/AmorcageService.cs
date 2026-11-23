@@ -6,29 +6,42 @@ using Microsoft.EntityFrameworkCore;
 namespace Klean.Api.Services;
 
 /// <summary>
-/// Crée les rôles au démarrage, puis une entreprise et un compte administrateur
-/// si aucun utilisateur n'existe. Idempotent : sans effet sur une base déjà amorcée.
+/// Crée les rôles au démarrage, puis décide de ce que fait une base sans aucun compte
+/// (SPEC.md, étape 34, lot A2) :
+/// <list type="bullet">
+///   <item>les trois variables d'amorçage renseignées : l'entreprise et l'administrateur sont
+///   créés, par <see cref="ServiceInstallation"/>, en une transaction ;</item>
+///   <item>sinon, un code d'installation configuré : l'API démarre et attend l'assistant ;</item>
+///   <item>sinon, le démarrage est refusé, en nommant les deux sorties.</item>
+/// </list>
+/// Idempotent : sans effet sur une base qui a déjà un compte, sinon noter l'installation.
 /// </summary>
 public class AmorcageService
 {
     private readonly KleanDbContext _db;
-    private readonly UserManager<Utilisateur> _utilisateurs;
     private readonly RoleManager<IdentityRole<Guid>> _roles;
     private readonly IConfiguration _configuration;
     private readonly ITenantContext _tenant;
+    private readonly ServiceInstallation _installation;
+    private readonly CodeInstallation _code;
+    private readonly EtatInstallation _etat;
 
     public AmorcageService(
         KleanDbContext db,
-        UserManager<Utilisateur> utilisateurs,
         RoleManager<IdentityRole<Guid>> roles,
         IConfiguration configuration,
-        ITenantContext tenant)
+        ITenantContext tenant,
+        ServiceInstallation installation,
+        CodeInstallation code,
+        EtatInstallation etat)
     {
         _db = db;
-        _utilisateurs = utilisateurs;
         _roles = roles;
         _configuration = configuration;
         _tenant = tenant;
+        _installation = installation;
+        _code = code;
+        _etat = etat;
     }
 
     public async Task ExecuterAsync()
@@ -46,73 +59,74 @@ public class AmorcageService
                 if (!creation.Succeeded)
                 {
                     throw new InvalidOperationException(
-                        $"Création du rôle « {role} » impossible : {Messages(creation)}");
+                        $"Création du rôle « {role} » impossible : {ServiceInstallation.Messages(creation)}");
                 }
             }
         }
 
         if (await _db.Users.AnyAsync())
         {
+            _etat.Installee = true;
             return;
         }
+
+        // Au propriétaire, toutes les entreprises se voient : une entreprise sans compte est le
+        // reste d'un amorçage interrompu d'avant le lot A2, qui n'était pas transactionnel.
+        var orpheline = await _db.Entreprises.AnyAsync();
 
         var email = _configuration["Amorcage:EmailAdmin"];
         var motDePasse = _configuration["Amorcage:MotDePasseAdmin"];
         var raisonSociale = _configuration["Amorcage:RaisonSocialeEntreprise"];
+        var renseignees = new[] { email, motDePasse, raisonSociale }.Count(v => !string.IsNullOrWhiteSpace(v));
 
-        if (string.IsNullOrWhiteSpace(email)
-            || string.IsNullOrWhiteSpace(motDePasse)
-            || string.IsNullOrWhiteSpace(raisonSociale))
+        if (renseignees == 3)
         {
-            throw new InvalidOperationException(
-                "Amorçage incomplet : renseigner Amorcage:EmailAdmin, "
-                + "Amorcage:MotDePasseAdmin et Amorcage:RaisonSocialeEntreprise. "
-                + "Voir README.md, section Installation.");
+            if (orpheline) throw new InvalidOperationException(EtatInstallation.MessageOrpheline);
+
+            var resultat = await _installation.CreerAsync(new NouvelleInstallation(
+                raisonSociale!, _configuration["Amorcage:SiretEntreprise"] ?? "00000000000000",
+                Territoire.Metropole, email!, "Administrateur", string.Empty, motDePasse!,
+                // Écrit en clair dans .env : il ne sert qu'une fois (SPEC.md, étape 24).
+                MotDePasseProvisoire: true), CancellationToken.None);
+
+            // Un autre processus, démarré en même temps sur la même base, a créé le compte pendant
+            // que celui-ci attendait le verrou : l'instance est installée, rien n'a échoué.
+            if (resultat.Issue == IssueInstallation.DejaInstallee)
+            {
+                _etat.Installee = true;
+                return;
+            }
+
+            // Creee : ServiceInstallation a noté l'installation lui-même.
+            if (resultat.Issue != IssueInstallation.Creee)
+            {
+                throw new InvalidOperationException($"Amorçage impossible ({resultat.Issue}) : {resultat.Message}");
+            }
+
+            return;
         }
 
-        var entreprise = new Entreprise
+        if (_code.Configure)
         {
-            RaisonSociale = raisonSociale,
-            Siret = _configuration["Amorcage:SiretEntreprise"] ?? "00000000000000",
-            DateCreation = DateTime.UtcNow
-        };
-
-        _db.Entreprises.Add(entreprise);
-        await _db.SaveChangesAsync();
-
-        var admin = new Utilisateur
-        {
-            // Identity refuse la création si UserName est vide : il doit porter
-            // la même valeur que Email (CLAUDE.md §6).
-            UserName = email,
-            Email = email,
-            EmailConfirmed = true,
-            EntrepriseId = entreprise.Id,
-            Nom = "Administrateur",
-            Prenom = string.Empty,
-            DateCreation = DateTime.UtcNow,
-            Actif = true,
-            // Le mot de passe de l'amorçage est écrit en clair dans `.env` : il ne doit
-            // servir qu'une fois. La première connexion impose d'en choisir un autre
-            // (SPEC.md, étape 24), au lieu de compter sur DEPLOIEMENT.md pour le dire.
-            MotDePasseProvisoire = true
-        };
-
-        var resultat = await _utilisateurs.CreateAsync(admin, motDePasse);
-        if (!resultat.Succeeded)
-        {
-            throw new InvalidOperationException(
-                $"Création du compte administrateur impossible : {Messages(resultat)}");
+            // L'API démarre et attend l'assistant. Des variables partielles sont ignorées : c'est
+            // le .env d'un serveur installé en 0.1.x, mot de passe déjà retiré.
+            _etat.EntrepriseOrpheline = orpheline;
+            return;
         }
 
-        var affectation = await _utilisateurs.AddToRoleAsync(admin, RolesKlean.Administrateur);
-        if (!affectation.Succeeded)
+        if (renseignees > 0)
         {
             throw new InvalidOperationException(
-                $"Affectation du rôle Administrateur impossible : {Messages(affectation)}");
+                "Amorçage incomplet : renseigner Amorcage:EmailAdmin, Amorcage:MotDePasseAdmin et "
+                + "Amorcage:RaisonSocialeEntreprise, ou aucune des trois et le code d'installation. "
+                + "Voir DEPLOIEMENT.md.");
         }
+
+        throw new InvalidOperationException(
+            "Aucun compte, et rien pour en créer un. Deux sorties : le code d'installation "
+            + "(Installation:Code — KLEAN_CODE_INSTALLATION, posé par le script ; sudo klean code en "
+            + "tire un), pour créer l'entreprise dans le navigateur ; ou les trois variables "
+            + "d'amorçage (Amorcage:EmailAdmin, Amorcage:MotDePasseAdmin, "
+            + "Amorcage:RaisonSocialeEntreprise). Voir DEPLOIEMENT.md.");
     }
-
-    private static string Messages(IdentityResult resultat) =>
-        string.Join(" ; ", resultat.Errors.Select(e => e.Description));
 }

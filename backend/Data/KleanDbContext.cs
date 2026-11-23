@@ -31,7 +31,10 @@ public class KleanDbContext : IdentityDbContext<Utilisateur, IdentityRole<Guid>,
     /// </summary>
     internal bool SousLaSecuriteDesLignes => _tenant?.FiltrageActif == true;
 
-    /// <summary>L'entreprise que les politiques comparent. Nulle : aucune ligne.</summary>
+    /// <summary>
+    /// L'entreprise que les politiques comparent : celle du jeton, ou, sur la requête anonyme de
+    /// l'assistant d'installation, celle que <c>PoserEntrepriseInstallation</c> a tirée. Nulle : aucune ligne.
+    /// </summary>
     internal Guid? EntrepriseDuJeton => _tenant?.EntrepriseId;
 
     // Le filtre global doit traverser des propriétés d'INSTANCE du DbContext.

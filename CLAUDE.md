@@ -96,7 +96,7 @@ KLEAN/
 ├── CLAUDE.md, SPEC.md, README.md, RGPD.md, DEPLOIEMENT.md, LICENSE
 ├── docker-compose.yml   postgres, api, migrer (profil outils), caddy
 ├── .env.example         le seul endroit où un exploitant écrit un secret
-├── deploiement/         l'installation et l'exploitation par script (étape 34, lot A1)
+├── deploiement/         l'installation et l'exploitation par script (étape 34, lots A1, A2)
 │   ├── installer.sh     le premier geste : Docker, archive vérifiée, /opt/klean
 │   ├── klean            la commande : installer, mettre-a-jour, revenir, sauvegarder,
 │   │                    restaurer, etat, journaux, code
@@ -104,7 +104,10 @@ KLEAN/
 │   ├── publier.sh       fabrique l'archive, l'installateur et leurs empreintes (CI)
 │   ├── klean.cron       la sauvegarde de la nuit, posée dans /etc/cron.d/klean
 │   ├── env.modele       les variables non secrètes qu'une version ajoute à .env
-│   └── tests/           tests.sh, et lancer.sh qui le joue dans un conteneur Debian 12
+│   └── tests/           deux séries : tests.sh, les fonctions pures de fonctions.sh ;
+│                        commande.sh, les gestes de klean autour du code d'installation,
+│                        compose, psql et la sonde HTTPS simulés ; et lancer.sh, qui
+│                        les joue toutes deux dans un conteneur Debian 12
 ├── .github/workflows/   ci.yml, et publication.yml — l'étiquette vX.Y.Z publie la version
 ├── backend/
 │   ├── Dockerfile       l'API ET son bundle de migration, une seule image
@@ -115,12 +118,14 @@ KLEAN/
 │   │                    migrations, sans Program.cs)
 │   ├── DTOs/            un fichier par entité, XxxDto + XxxCreateDto
 │   ├── Controllers/     un par entité + Auth + SecondFacteur + Planning
+│   │                    + Installation, l'assistant du premier lancement
 │   ├── Services/        AffectationService, RemplacementService,
 │   │                    PlanningService, ServiceGeneration, JoursFeries,
 │   │                    ServiceStock, ServicePrevisionStock,
 │   │                    ServicePassage, MetadonneesJpeg,
 │   │                    JwtService, ServiceSession, ServiceSecondFacteur, Totp,
-│   │                    AmorcageService, TenantContext, LimiteurDebit,
+│   │                    AmorcageService, ServiceInstallation, CodeInstallation,
+│   │                    EtatInstallation, TenantContext, LimiteurDebit,
 │   │                    ServiceCourrielSmtp, DescripteurErreursFrancais,
 │   │                    ListeTypePrestations
 │   ├── Middleware/      VerificationCsrf, EnTetesSecurite, LimiteCorpsRequete,
@@ -149,12 +154,15 @@ KLEAN/
         ├── auth/        AuthContext, RouteProtegee, motDePasse.ts
         ├── comptes/     comptes.ts — l'état, les gestes et la création d'un compte
         ├── composants/  un .tsx + un .css par composant
+        ├── installation/ installation.ts — les refus et le corps de l'assistant, et où
+        │                mène un refus du serveur
         ├── journal/     journal.ts — les noms, la période et la requête du journal d'accès
         ├── layout/      Navigation, Disposition, sections.ts
         ├── pages/       un fichier par écran, plus Reference.tsx, Compte.tsx — le sien —
         │                et Comptes.tsx — ceux de l'entreprise ; MaJournee.tsx pour
         │                l'agent, Anomalies.tsx pour les rôles internes ;
-        │                JournalAcces.tsx pour l'administrateur
+        │                JournalAcces.tsx pour l'administrateur ; Installation.tsx,
+        │                l'assistant, public tant qu'aucun compte n'existe
         ├── passage/     passage.ts — gestes, preuves, checklist —, photo.ts — la réduction
         ├── reference/   descriptions.ts, valeurs.ts — le motif liste-et-formulaire
         ├── stock/       mouvements.ts, prevision.ts — la saisie et la lecture du stock
@@ -291,13 +299,123 @@ les écrans de référence (§11), et ce que lit un humain. Ce que la générati
   alimente le multi-tenant.
 - Cinq rôles dans une classe statique `RolesKlean` : Administrateur,
   Responsable, ChefEquipe, Agent, ClientSyndic.
-- Amorçage au démarrage : crée les rôles, puis une entreprise et un compte
-  administrateur si aucun utilisateur n'existe. Lit
-  `Amorcage:EmailAdmin`, `Amorcage:MotDePasseAdmin`,
-  `Amorcage:RaisonSocialeEntreprise`. Ce compte est marqué **provisoire**, comme tout
-  compte créé : son mot de passe a été écrit dans un fichier, et la première connexion
-  le fait remplacer (voir *Comptes de l'entreprise* plus bas). ⚠️ Non éprouvé par un
-  test — la série ne peut pas offrir une base sans aucun compte.
+- **Amorçage au démarrage** (`AmorcageService`, réécrit au lot A2 de l'étape 34) : il crée
+  les rôles, puis, si `AspNetUsers` est vide, choisit entre trois issues, dans cet ordre.
+  - **Les trois variables d'amorçage renseignées** — `Amorcage:EmailAdmin`,
+    `Amorcage:MotDePasseAdmin`, `Amorcage:RaisonSocialeEntreprise` : l'entreprise et
+    l'administrateur sont créés par `ServiceInstallation`, en une transaction. Ce compte est
+    marqué **provisoire**, comme tout compte créé : son mot de passe a été écrit dans un
+    fichier, et la première connexion le fait remplacer (voir *Comptes de l'entreprise*
+    plus bas). C'est la voie du développement, de la série de tests et du parcours manuel
+    de `DEPLOIEMENT.md`.
+  - **Sinon, un code d'installation configuré** (`Installation:Code`) : l'API démarre et
+    attend l'assistant, plus bas. Des variables **partielles** sont alors ignorées : c'est
+    le `.env` d'un serveur installé en 0.1.x, dont le script a déjà retiré le mot de passe.
+  - **Sinon, le démarrage est refusé** : « amorçage incomplet » si une ou deux variables
+    sont là, et sinon un message qui nomme les deux sorties.
+
+  Sur une base qui a des comptes, l'amorçage ne fait que le noter
+  (`EtatInstallation.Installee`).
+
+  ⚠️ **Une entreprise sans aucun compte** est le reste d'un amorçage interrompu d'avant le
+  lot A2, qui n'était pas transactionnel. L'amorçage la voit, puisqu'il lit au
+  propriétaire. Avec les variables, il refuse de démarrer et renvoie à `DEPLOIEMENT.md`,
+  « Une entreprise sans compte ». Avec le code, il démarre et la note dans
+  `EtatInstallation.EntrepriseOrpheline`, pour que l'assistant réponde 409 : sous la RLS,
+  la route ne pourrait pas la découvrir elle-même.
+
+  ⚠️ **`DejaInstallee` est un succès de l'amorçage**, pas un échec : un autre processus,
+  démarré en même temps sur la même base, a créé le compte pendant que celui-ci attendait
+  le verrou.
+
+  Éprouvé par `AmorcageTests`, qui vide `klean_test` (`FixtureApi.ViderAsync`) et construit
+  l'amorçage à la main sur une configuration propre à chaque cas.
+- **La création de l'entreprise et du premier administrateur** (`ServiceInstallation`,
+  lot A2) est commune à l'amorçage, au propriétaire, et à l'assistant, sous la RLS : jamais
+  recopiée, deux créations finiraient par diverger. Le service l'écrit en une transaction :
+  - **ReadCommitted**, explicitement. Sous repeatable read, l'instantané serait pris à la
+    première lecture — le verrou —, donc avant de l'obtenir, et la relecture des comptes ne
+    verrait pas ceux de l'installation qui l'a précédée ;
+  - **un verrou consultatif** `(34, 0)`, puis **la relecture d'`AspNetUsers`**, hors de la
+    RLS : un compte existe, l'issue est `DejaInstallee`. Aucune contrainte ne remplace ce
+    verrou — rien n'interdit deux entreprises ;
+  - l'entreprise, puis l'administrateur et son rôle. Un SIRET déjà pris rend `SiretPris`, le
+    signe d'une orpheline que la RLS cache ; un refus d'Identity rend `Refusee`, et la
+    transaction se défait en sortant : aucune entreprise sans compte.
+
+  Trois choses à savoir avant d'y toucher :
+  - ⚠️ **Une connexion déjà ouverte est refusée**, avant toute écriture. Le réglage de la RLS
+    se pose à l'ouverture de la connexion (§7, point 4) : une transaction de l'appelant
+    porterait celui d'avant ;
+  - ⚠️ **Toute sortie sans validation vide le `ChangeTracker`**. Sinon l'entreprise et le
+    compte resteraient « Added » dans le contexte, et le prochain `SaveChanges` de la même
+    portée les réécrirait, hors de la transaction défaite ;
+  - **`EtatInstallation.Installee` est posé par le service**, juste après la validation.
+    L'amorçage et l'assistant n'ont pas à s'en souvenir. Ce drapeau ne revient jamais en
+    arrière dans la vie du processus.
+- **L'assistant d'installation** (lot A2) : `GET` et `POST /api/installation`,
+  `InstallationController`, deux routes **anonymes** gardées par le **code d'installation**.
+  Les journaux de transparence des certificats publient un domaine en quelques minutes :
+  sans code, quiconque le lirait pourrait s'emparer de l'entreprise avant son patron.
+  - **Le code** (`CodeInstallation`) compte vingt symboles de
+    `ABCDEFGHJKMNPQRSTUVWXYZ23456789` — ni I, ni L, ni O, ni 0, ni 1 —, soit environ
+    100 bits. La saisie est normalisée — casse, blancs, dix sortes de tirets —, puis comparée
+    par empreinte SHA-256, en temps constant. Un code configuré hors de cette forme **fait
+    refuser le démarrage** : configuré à moitié, comme un SMTP incomplet (§2). Il n'entre
+    **jamais dans une URL**, ni à l'écran ni dans le script : une URL se journalise et se
+    range dans l'historique.
+  - **`GET`** rend `{ installee }`, et rien d'autre. Une fois un compte vu, la base n'est
+    plus interrogée.
+  - **`POST` contrôle dans cet ordre**, et l'ordre est figé par des tests :
+    1. le code est évalué, sans coût, parce qu'il décide du plafond par adresse ;
+    2. le plafond par adresse ;
+    3. une session ou un compte existant : 409 « KLEAN est déjà installé : connectez-vous. »,
+       avant même les champs. Un code faux sur une instance installée rend donc 409, pas 400 ;
+    4. un code faux passe le **plafond global des codes faux** : 400 s'il reste de la place,
+       429 sinon ;
+    5. les champs, refusés en français. Un caractère de contrôle dans la raison sociale, le
+       nom ou le prénom est refusé : `\u0000` finissait en 500, PostgreSQL refusant NUL dans
+       un texte (22021) ;
+    6. l'orpheline notée au démarrage : 409, qui renvoie à `DEPLOIEMENT.md` ;
+    7. `PoserEntrepriseInstallation`, puis `ServiceInstallation.CreerAsync` : 201.
+  - **Les plafonds**, dans `PlafondsDebit`, sur quinze minutes : dix `POST` par adresse,
+    vingt pour un bon code — le patron s'y reprend sur un SIRET ou un mot de passe refusé —,
+    et trente codes faux pour toute l'instance. La lecture de l'état a le sien, soixante par
+    minute et par adresse. Tous les 429 portent `Retry-After`, en secondes.
+
+    ⚠️ **Le plafond global ne compte que les codes faux.** Compté sur tous les `POST`, un
+    inconnu le garderait plein indéfiniment, et bloquerait l'installation légitime. Un bon
+    code ne le traverse jamais.
+
+    ⚠️ **Le `GET` n'a pas de plafond global**, et c'est un écart assumé au cadrage, qui en
+    demandait un sur les deux routes (`SPEC.md`, lot A2, point 1). La lecture ne rend que
+    `{ installee }`, et ne lit plus la base une fois un compte vu ; un 429 n'y empêche
+    rien — la connexion affiche alors son formulaire, et l'assistant reste.
+    Un plafond global donnerait seulement à un inconnu le moyen de produire ce 429 pour
+    tout le monde.
+
+    ⚠️ **Le 429 du plafond global commence encore par « Code d'installation incorrect »**,
+    et nomme `sudo klean code`. Le propriétaire qui se trompe d'un caractère pendant qu'un
+    inconnu remplit le plafond doit apprendre que son code est faux, et non attendre ;
+    l'écran se sert de ce début pour revenir au premier écran.
+  - ⚠️ **Le `POST` n'ouvre aucune session**, ni cookie. La connexion qui suit fait équiper
+    le second facteur, par le parcours de l'étape 23. Le mot de passe est choisi par le
+    patron : il n'est pas provisoire.
+  - ⚠️ **`InstallationDto` n'a que des `string?`, et aucune annotation** : voir le piège
+    correspondant en §10.
+  - **L'écran** (`pages/Installation.tsx`) compte quatre étapes : le code, l'entreprise, le
+    compte, puis ce que le patron doit savoir — double authentification à la première
+    connexion, responsabilité du traitement, note aux agents de `RGPD.md` §7, durées de
+    conservation à valider, localisation des sites désactivée. Toute la validation passe
+    par `installation/installation.ts` avant l'appel, et `refusDInstallation` dit où mène
+    un refus du serveur : au premier écran sur un code faux, à la connexion sur le 409
+    « déjà installé », **à l'arrêt** sur tout autre 409, sur place sinon. Tant que le serveur
+    dit `installee: false`, la connexion renvoie à l'assistant.
+
+    ⚠️ **L'orpheline bloque l'assistant, sans retour à l'entreprise ni lien vers la
+    connexion.** Changer de SIRET contournerait le blocage et laisserait l'orpheline en
+    base. Et sans aucun compte, la connexion renvoie à l'assistant, saisie perdue : vu au
+    navigateur. L'écran dit seulement de recharger la page une fois l'entreprise retirée.
 - Règles de mot de passe : 10 caractères minimum, majuscule, minuscule,
   chiffre. Pas de caractère spécial exigé. Verrouillage après 5 échecs
   pendant 15 minutes.
@@ -567,6 +685,24 @@ la quatrième est la base, qui refuse quand l'une d'elles manque :
    du token via `IHttpContextAccessor`. Expose aussi `DesactiverFiltrage()`,
    utilisé par l'amorçage qui doit créer la première entreprise avant
    qu'aucun tenant n'existe.
+
+   ⚠️ **`DesactiverFiltrage` lève sous un `HttpContext`** (étape 34, lot A2) : une route ne
+   tourne jamais en propriétaire des tables. Il ne sert que hors requête — l'amorçage, la
+   fixture de test —, et la commande de démonstration, qui joue ses identités sur un
+   `HttpContext`, reste sous la RLS. C'est un **fil-piège** contre l'appel involontaire, pas
+   une garantie : un travail lancé hors du flux de la requête n'a pas de `HttpContext`, et
+   l'appel y passerait.
+
+   **`PoserEntrepriseInstallation()`** est l'entreprise de la seule requête anonyme qui en a
+   une : l'assistant d'installation (§6). Elle **tire elle-même** l'identifiant de la future
+   entreprise — jamais reçu d'ailleurs — et en fait l'`EntrepriseId` de la requête ; la
+   connexion passe alors sous `klean_app` avec ce réglage, et la politique d'`Entreprises`
+   accepte l'insertion. Une fois par requête, jamais sur une requête authentifiée, jamais
+   hors requête : chaque cas lève. Seul `InstallationController` l'appelle, et un test qui
+   parcourt les sources le vérifie.
+
+   ⚠️ Elle se pose **avant** toute connexion tenue ouverte : le réglage de la RLS se pose à
+   l'ouverture (point 4), et `ServiceInstallation` refuse une connexion déjà ouverte.
 
 2. **Filtres globaux EF Core**, **vingt et un** au total :
    ```csharp
@@ -1410,6 +1546,24 @@ avant la construction de l'hôte. Et la fabrique doit vérifier la base
 effectivement atteinte avant la première écriture : c'est le seul endroit du
 projet où une erreur de configuration détruit des données.
 
+⚠️ **La première écriture est la migration, pas le vidage**, et elle crée la base qui
+manque. Depuis le lot A2 de l'étape 34, `FixtureApi` lit donc le nom de la base dans la
+chaîne, sans connexion, **avant** `MigrateAsync`, et refuse tout autre nom que
+`klean_test`. Puis elle lit `current_database()` sur le serveur, après la migration et
+avant le `TRUNCATE`. Les deux lectures sont nécessaires : sur un poste neuf, la base
+n'existe qu'après la migration, et une `KLEAN_TEST_CONNECTION` visant une base inexistante
+la créerait sans la première. Deux sabotages l'ont montré.
+
+⚠️ **La fixture vide `klean_test` avant de démarrer l'hôte**, donc avant l'amorçage. Une
+série précédente a pu laisser la base vide, ou avec une entreprise sans compte
+(`AmorcageTests`, `InstallationTests`) : l'amorçage refuserait alors de démarrer, et
+toute la série échouerait d'un coup. Le vidage nomme **toutes** les tables, dont
+`AccesJournalises`, qui ne porte aucune clé étrangère et que la cascade n'atteint donc
+pas : elle comptait 12 775 lignes accumulées de série en série. `Le_vidage_n_oublie_aucune_table`
+vérifie qu'après le vidage, toutes les tables de `public` sont vides, sauf
+`__EFMigrationsHistory` et `AspNetRoles` : une table ajoutée demain sans être nommée le
+fait rougir.
+
 **`JwtBearerEvents.OnMessageReceived` ne ferme pas l'en-tête `Authorization`.**
 Poser `contexte.Token` depuis un cookie ne suffit pas : si la valeur est vide ou
 nulle, `JwtBearerHandler` **retombe sur l'en-tête `Authorization`** juste après.
@@ -1542,6 +1696,13 @@ traduire. La parade côté interface est de rendre ce refus inatteignable —
 `required` et `maxLength` sur la saisie, que le navigateur applique dans sa propre
 langue. D'où `longueurMax` dans chaque description, et la série qui vérifie qu'un
 champ de texte ne peut pas l'oublier.
+
+⚠️ **Et sans aucune annotation, un `string` non nullable suffit à la déclencher.** Avec
+`<Nullable>enable</Nullable>`, ASP.NET traite une propriété `string` comme obligatoire :
+un `null` JSON y rend un 400 **en anglais**, avant le contrôleur. Mesuré à la relecture du
+plan du lot A2 de l'étape 34. C'est pourquoi `InstallationDto` n'a que des `string?`, sans
+annotation, et le contrôleur vérifie tout, en français. Sur une route anonyme, aucun écran
+ne filtre la requête avant : n'importe qui peut envoyer `null`.
 
 **La surface HTTP ne s'éprouve pas comme le métier, et quatre choses la rendent
 verte à l'envers.** Chacune a été rencontrée à l'étape 16. Le point commun : un
@@ -1705,7 +1866,9 @@ et la cause est la concurrence.
 Une seule exécution à la fois, donc — y compris en intégration continue, où deux travaux
 parallèles visant la même base produiraient exactement ce symptôme. Pour s'en sortir,
 vider `klean_test` entièrement, `AspNetUsers` et `Entreprises` comprises, et laisser la
-fixture ré-amorcer.
+fixture ré-amorcer. Depuis le lot A2 de l'étape 34, la fixture fait ce vidage elle-même,
+avant de démarrer l'hôte : une série relancée seule s'en remet. C'est éprouvé sur une base
+laissée avec une entreprise sans compte, pas sur une collision de deux séries.
 
 **`dotnet test` en français met une espace insécable avant ses deux-points.** La ligne de
 bilan s'écrit « échec : 0 » et « total : 476 » avec une espace **insécable** avant « : ».
@@ -1789,7 +1952,7 @@ Npgsql cherche `libgssapi_krb5`, absente de l'image .NET, et écrit « Error: �
 open shared object file » au premier démarrage. Sans conséquence, mais c'est la première
 ligne qu'un exploitant lirait.
 
-**Six pièges du script d'installation** (`deploiement/`, étape 34), chacun rencontré en
+**Huit pièges du script d'installation** (`deploiement/`, étape 34), chacun rencontré en
 l'écrivant ou en le relisant :
 
 - **Un fichier de `/etc/cron.d` dont le nom porte un point est ignoré par cron**, sans
@@ -1814,10 +1977,46 @@ l'écrivant ou en le relisant :
   de la nouvelle. Ce que la version N exige de la version N+1 — le manifeste `FICHIERS`
   de l'archive, les noms de ses ressources et de son `.sha256`, les services du compose, les
   variables `KLEAN_VERSION` et `KLEAN_IMAGES`, `/home/app/.aspnet`, les variables d'état
-  d'une mise à jour — est un **contrat** : le changer casse la mise à jour de tous les
-  serveurs restés en N. La liste complète est le commentaire « Ce que la version installée
-  N exige de la version N+1 » de `deploiement/klean` : la lire avant de toucher à l'un de
-  ces points, et ne pas la recopier ici.
+  d'une mise à jour, et depuis le lot A2 le nom et le format du code d'installation — est
+  un **contrat** : le changer casse la mise à jour de tous les serveurs restés en N. La
+  liste complète est le commentaire « Ce que la version installée N exige de la version
+  N+1 » de `deploiement/klean` : la lire avant de toucher à l'un de ces points, et ne pas la
+  recopier ici.
+- **Le code d'installation ne sert que jusqu'au premier compte, et l'API ne l'oublie qu'à
+  sa recréation** (lot A2). Elle ne lit son environnement qu'à la création de son
+  conteneur : vider `.env` ne suffit pas, le conteneur garderait le code. C'est ce que
+  fait `retirer_code_si_installe`, appelée par `installer`, `etat`, `code`, après la bascule
+  d'une mise à jour, après un `revenir`, et après la sauvegarde de la nuit. Quatre choses à
+  savoir avant d'y toucher :
+  - ⚠️ **Une commande d'état ne défait pas un arrêt voulu.** `.env` est vidé dans tous les
+    cas, mais l'API n'est recréée — `compose up -d --no-deps api` — que si elle tourne, et
+    qu'aucune mise à jour ni aucun retour n'est inachevé. `klean code` refuse dans ces deux
+    états, et nomme la commande à terminer.
+  - ⚠️ **Une API arrêtée garde le code à sa relance**, sauf par `compose up` : un
+    `docker compose start`, un `restart` ou un redémarrage de la machine relancent le même
+    conteneur, avec l'environnement de sa création. D'où `rattraper_code_de_l_api` : quand
+    `.env` n'a plus rien à retirer, que des comptes existent, que l'API tourne et qu'aucune
+    opération n'est inachevée, mais que `printenv Installation__Code` y rend encore une
+    valeur, l'API est recréée. La valeur n'est jamais affichée.
+  - ⚠️ **Les restes de l'amorçage d'une 0.1.x restent tant que leur mot de passe
+    provisoire n'a pas été montré.** `KLEAN_ADMIN_*` et `KLEAN_RAISON_SOCIALE` ne partent
+    qu'avec un `KLEAN_ADMIN_MOT_DE_PASSE` vide : une installation 0.1.x inachevée ne l'a pas
+    encore affiché, et le retirer perdrait le seul accès au compte. Le code, lui, part.
+  - Une mise à jour depuis 0.1.x est conduite par l'ancien `klean`, qui ne retire rien : le
+    code reste dans `.env` jusqu'au prochain `klean etat`, ou jusqu'à la sauvegarde de la
+    nuit.
+
+  Ces gestes sont éprouvés par `deploiement/tests/commande.sh`, qui source `klean` et
+  remplace compose, psql et la sonde HTTPS par des doublures.
+- **`tr -dc … < /dev/urandom | head -c 20` échoue sous `pipefail`, et le `tr` de macOS
+  échoue sans `LC_ALL=C`.** `head` ferme le tube après vingt octets, `tr` reçoit SIGPIPE et
+  sort en 141, et `pipefail` fait de ce 141 le statut du tube : mesuré cinq fois sur cinq
+  dans Debian. Le `tr` BSD de macOS, lui, refuse en locale UTF-8 des octets aléatoires qui
+  ne forment pas de caractères. Dans un script, tirer un code par `generer_code`
+  (`fonctions.sh`), ou comme le CI : `head -c 4096 /dev/urandom | LC_ALL=C tr -dc … | cut -c 1-20`,
+  où `cut` lit tout, puis vérifier la longueur. La forme à `head -c 20` de `.env.example`
+  et du refus de démarrer de l'API vaut pour un terminal, sans `pipefail`, et porte
+  `LC_ALL=C`.
 
 ---
 
@@ -1972,6 +2171,14 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   sur neuf sabotages, une date lue en UTC ne rougit pas sous `TZ=UTC`, « +24 heures » et
   l'heure affichée en UTC ne rougissent qu'à Paris. Elle lit aussi les deux énumérations
   dans `backend/Models/AccesJournalise.cs` : un geste ajouté sans libellé la fait rougir.
+
+  Et pour `src/installation/installation.ts` (étape 34, lot A2) : les refus du code, de
+  l'entreprise et du compte, le corps envoyé, et où mène un refus du serveur. Le serveur
+  compte les codes faux : un refus local épargne un essai. ⚠️ Elle recopie des constantes du
+  serveur — l'alphabet et la longueur du code, les tirets de `Normaliser`, les bornes des
+  champs, les messages qui commencent un refus de code ou disent « déjà installé » —, et sa
+  série lit `CodeInstallation.cs` et `InstallationController.cs` pour les comparer : une
+  divergence la fait rougir, au lieu d'envoyer l'écran sur la mauvaise étape.
 - **Un QR code se dessine noir sur blanc dans les deux thèmes.** `--qr-fond` et
   `--qr-module` ne sont pas écrits en `light-dark()`, et c'est délibéré : un QR
   inversé n'est pas lu par toutes les applications. C'est le seul dessin du produit
@@ -2142,7 +2349,8 @@ cd backend
 dotnet ef migrations add NomDeLaMigration
 dotnet ef database update
 
-# Jeu de démonstration — instance neuve seulement, mots de passe affichés une fois
+# Jeu de démonstration — instance neuve seulement, après l'assistant ou l'amorçage,
+# mots de passe affichés une fois
 cd backend && dotnet run -- demonstration
 docker compose run --rm api demonstration
 
@@ -2155,14 +2363,22 @@ docker compose up -d
 Le script d'installation (`deploiement/`, étape 34) :
 
 ```bash
-deploiement/tests/lancer.sh           # la série, dans un conteneur Debian 12 (Docker requis)
+deploiement/tests/lancer.sh           # tests.sh puis commande.sh, dans un conteneur Debian 12 (Docker requis)
 shellcheck -x deploiement/installer.sh deploiement/klean deploiement/fonctions.sh \
-    deploiement/publier.sh deploiement/tests/tests.sh deploiement/tests/lancer.sh
+    deploiement/publier.sh deploiement/tests/tests.sh deploiement/tests/lancer.sh \
+    deploiement/tests/commande.sh
 
 # Publier une version : une étiquette, poussée par l'utilisateur — jamais par un agent.
 # publication.yml rejoue le CI, publie les deux images sur ghcr.io, puis la version.
 git tag vX.Y.Z && git push origin vX.Y.Z
 ```
+
+La série du déploiement compte **deux fichiers** : `tests.sh` éprouve les fonctions pures de
+`fonctions.sh` ; `commande.sh` éprouve les gestes de `klean` autour du code d'installation,
+avec compose, psql et la sonde HTTPS simulés. `lancer.sh` joue les deux, même si la
+première échoue, et le CI les lance séparément. Ni l'une ni l'autre ne se lance directement
+sur macOS : son bash 3.2 n'est pas celui des serveurs visés, et `commande.sh` lit le verrou
+dans `/proc`.
 
 ⚠️ **Les migrations construisent leur contexte par `Data/FabriqueDeConception.cs`,
 sans `Program.cs`** (étape 26). `dotnet ef` et le bundle préfèrent une fabrique de

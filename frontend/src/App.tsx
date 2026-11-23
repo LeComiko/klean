@@ -12,6 +12,7 @@ import { Chantier } from './pages/Chantier'
 import { Compte } from './pages/Compte'
 import { Comptes } from './pages/Comptes'
 import { Connexion } from './pages/Connexion'
+import { Installation } from './pages/Installation'
 import { JournalAcces } from './pages/JournalAcces'
 import { MaJournee } from './pages/MaJournee'
 import { Planning } from './pages/Planning'
@@ -88,6 +89,10 @@ export default function App() {
       <FournisseurAuth>
         <Routes>
           <Route path="/connexion" element={<Connexion />} />
+
+          {/* Publique, sans RouteProtegee : aucun compte n'existe encore. Le serveur la
+              ferme dès qu'un compte existe, et l'écran renvoie alors à la connexion. */}
+          <Route path="/installation" element={<Installation />} />
 
           {/* Route de disposition sans chemin : elle garde l'accès une seule
               fois pour toutes les sections, et pose la charpente. */}

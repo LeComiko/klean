@@ -816,7 +816,7 @@ const ConsommationsType: DescriptionRessource = {
 }
 
 /** `Territoire`, miroir de `backend/Models/Entreprise.cs`. */
-const Territoires = [
+export const Territoires = [
   'Metropole',
   'AlsaceMoselle',
   'Guadeloupe',
@@ -826,7 +826,7 @@ const Territoires = [
   'Mayotte',
 ] as const
 
-const LibellesTerritoire: Readonly<Record<(typeof Territoires)[number], string>> = {
+export const LibellesTerritoire: Readonly<Record<(typeof Territoires)[number], string>> = {
   Metropole: 'Métropole',
   AlsaceMoselle: 'Alsace-Moselle',
   Guadeloupe: 'Guadeloupe',

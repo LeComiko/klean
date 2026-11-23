@@ -33,9 +33,18 @@ public class LimiteurDebit : IDisposable
     /// indéfiniment sa propre punition en réessayant, ce qui transforme la
     /// limitation en verrouillage définitif.
     /// </summary>
-    public bool Autoriser(string cle, int maximum, TimeSpan fenetre)
+    public bool Autoriser(string cle, int maximum, TimeSpan fenetre) =>
+        Autoriser(cle, maximum, fenetre, out _);
+
+    /// <summary>
+    /// La même, qui dit aussi, sur un refus, combien de temps attendre avant qu'un essai repasse :
+    /// la sortie du plus ancien horodatage de la fenêtre. <see cref="TimeSpan.Zero"/> sur une
+    /// autorisation.
+    /// </summary>
+    public bool Autoriser(string cle, int maximum, TimeSpan fenetre, out TimeSpan attente)
     {
         var maintenant = DateTime.UtcNow;
+        attente = TimeSpan.Zero;
 
         var horodatages = _cache.GetOrCreate(cle, entree =>
         {
@@ -50,7 +59,12 @@ public class LimiteurDebit : IDisposable
             var debut = maintenant - fenetre;
             horodatages.RemoveAll(h => h < debut);
 
-            if (horodatages.Count >= maximum) return false;
+            if (horodatages.Count >= maximum)
+            {
+                // À défaut d'horodatage (maximum nul), la fenêtre entière.
+                attente = horodatages.Count > 0 ? horodatages.Min() + fenetre - maintenant : fenetre;
+                return false;
+            }
 
             horodatages.Add(maintenant);
             return true;
@@ -67,6 +81,21 @@ public class LimiteurDebit : IDisposable
     {
         var ancien = Interlocked.Exchange(ref _cache, Neuf());
         ancien.Dispose();
+    }
+
+    /// <summary>
+    /// La clé d'une adresse : IPv4 telle quelle (une IPv4 encapsulée en IPv6 ramenée à IPv4),
+    /// IPv6 regroupée par son /64 — un seul hôte en possède des milliards, et tournerait dedans.
+    /// </summary>
+    public static string CleDAdresse(System.Net.IPAddress? adresse)
+    {
+        if (adresse is null) return AdresseInconnue;
+        if (adresse.IsIPv4MappedToIPv6) adresse = adresse.MapToIPv4();
+        if (adresse.AddressFamily != System.Net.Sockets.AddressFamily.InterNetworkV6) return adresse.ToString();
+
+        var octets = adresse.GetAddressBytes();
+        Array.Clear(octets, 8, 8);
+        return new System.Net.IPAddress(octets) + "/64";
     }
 
     public void Dispose()
@@ -138,4 +167,20 @@ public static class PlafondsDebit
     public const int CodesParAdresse = 20;
     public const int CodesParCompte = 10;
     public static TimeSpan FenetreCodes => TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Assistant d'installation (étape 34, lot A2). Le code porte environ 100 bits : ces plafonds
+    /// bornent le bruit, ils ne le protègent pas. Par adresse sur tout POST, plus large pour un bon
+    /// code — le patron s'y reprend sur un SIRET ou un mot de passe refusé. Le global ne compte
+    /// <b>que les codes faux</b> : compté sur tous, un inconnu le garderait plein indéfiniment et
+    /// bloquerait l'installation légitime (relecture du 22 novembre 2026).
+    /// </summary>
+    public const int InstallationsParAdresse = 10;
+    public const int InstallationsBonCodeParAdresse = 20;
+    public const int CodesFauxGlobaux = 30;
+    public static TimeSpan FenetreInstallations => TimeSpan.FromMinutes(15);
+
+    /// <summary>L'état de l'installation, lu à chaque ouverture de l'écran de connexion. Par adresse seulement.</summary>
+    public const int LecturesInstallationParAdresse = 60;
+    public static TimeSpan FenetreLecturesInstallation => TimeSpan.FromMinutes(1);
 }

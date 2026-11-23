@@ -56,16 +56,29 @@ Connecté en root, sur un serveur où `sudo` n'existe pas encore : la même comm
 `| bash` à la fin au lieu de `| sudo bash`.
 
 Elle installe Docker s'il manque, télécharge KLEAN, puis pose ses questions : le nom de
-domaine, la raison sociale de l'entreprise, l'adresse électronique de l'administrateur, et un
-serveur de courriel si vous en avez un (facultatif).
+domaine, et un serveur de courriel si vous en avez un (facultatif).
 **Toutes les questions sont posées avant la moindre écriture** : un Ctrl-C à ce stade ne
 laisse rien. Le reste se fait seul, jusqu'à l'obtention du certificat HTTPS, qui peut
 prendre quelques minutes.
 
-À la fin, la commande affiche **une seule fois** le mot de passe provisoire de
-l'administrateur. Notez-le, puis tapez `NOTE` : il est alors retiré du fichier de
-configuration. La première connexion le fait remplacer, puis équiper la double
-authentification (`DEPLOIEMENT.md` §2.4).
+À la fin, une fois le certificat obtenu, la commande affiche **l'adresse de KLEAN et un
+code d'installation**, en groupes de cinq caractères. Ouvrez l'adresse : un assistant
+demande ce code, puis crée votre entreprise et votre compte administrateur. Vous y
+choisissez vous-même votre mot de passe, et **aucun mot de passe de compte n'est écrit
+sur le serveur**.
+
+- Le code se recopie tel qu'affiché, tirets compris ou non, en majuscules ou non. Il ne
+  contient ni I, ni L, ni O, ni 0, ni 1. `sudo klean code` le réaffiche tant qu'aucun
+  compte n'existe.
+- Il ne sert qu'une fois. Dès que le premier compte existe, la commande `klean` suivante
+  le retire de la configuration — `sudo klean etat` suffit —, et la sauvegarde de la nuit
+  le fait au plus tard.
+- Ne le mettez dans aucune adresse ni aucun lien : il finirait dans l'historique du
+  navigateur.
+
+**Connectez-vous tout de suite** après l'assistant, pour équiper la double
+authentification : la première connexion l'impose à l'administrateur. Prévoyez un
+téléphone portant une application d'authentification (`DEPLOIEMENT.md` §2.4).
 
 Une installation interrompue — réseau coupé, domaine pas encore prêt, `ssh` fermé —
 **reprend en relançant la même commande**, sans régénérer aucun secret. La commande
@@ -205,8 +218,8 @@ dotnet user-secrets set "Jwt:Audience" "klean"
 ```
 
 Au premier démarrage, si aucun utilisateur n'existe, l'application crée les
-cinq rôles, une entreprise et un compte administrateur à partir de ces
-valeurs :
+cinq rôles, puis une entreprise et un compte administrateur à partir de ces
+valeurs — en une transaction : un refus ne laisse aucune entreprise sans compte :
 
 ```bash
 dotnet user-secrets set "Amorcage:EmailAdmin" "admin@votre-domaine.fr"
@@ -218,6 +231,18 @@ dotnet user-secrets set "Amorcage:SiretEntreprise" "00000000000000"
 Le mot de passe doit faire au moins dix caractères et contenir une majuscule,
 une minuscule et un chiffre. Aucun caractère spécial n'est exigé. Un compte se
 verrouille quinze minutes après cinq échecs de connexion.
+
+Pour essayer plutôt l'assistant d'installation, celui d'une instance installée par le
+script, ne posez pas ces trois valeurs, mais un code de vingt symboles :
+
+```bash
+dotnet user-secrets set "Installation:Code" "$(LC_ALL=C tr -dc 'ABCDEFGHJKMNPQRSTUVWXYZ23456789' < /dev/urandom | head -c 20)"
+```
+
+L'API démarre alors sans entreprise, et <https://localhost:5173> mène à l'assistant tant
+qu'aucun compte n'existe. Avec les trois valeurs, le code n'est pas lu. Sans l'un ni
+l'autre, l'API refuse de démarrer sur une base sans compte, et dit pourquoi. Une ou deux
+valeurs d'amorçage seulement, sans code, la font aussi refuser de démarrer.
 
 `appsettings.example.json` montre la forme attendue de la configuration.
 En production, utiliser des variables d'environnement, par exemple
@@ -258,7 +283,8 @@ dotnet run -- demonstration
 
 La commande démarre comme l'API : elle crée l'entreprise et l'administrateur de
 l'étape 3 s'ils n'existent pas encore. Elle remplit ensuite cette entreprise, puis elle
-s'arrête sans servir de requête.
+s'arrête sans servir de requête. Avec le code d'installation seul, aucune entreprise
+n'existe encore : passez d'abord par l'assistant, sinon la commande refuse et le dit.
 
 Le jeu se construit autour du jour de l'installation, et il contient :
 - deux clients, cinq sites, six agents ;
@@ -363,9 +389,11 @@ réamorcée avec **deux entreprises** avant chaque test — tout test d'isolatio
 besoin d'un tenant témoin.
 
 La fabrique de test pose ses propres valeurs de configuration par variables
-d'environnement : chaîne de connexion, clé JWT, comptes d'amorçage. Elle vérifie
-avant toute écriture que la base visée est bien `klean_test`, et refuse de
-continuer sinon. Sur un exécuteur d'intégration continue, surcharger
+d'environnement : chaîne de connexion, clé JWT, comptes d'amorçage, code
+d'installation. Elle vérifie avant toute écriture — la migration comprise, qui
+créerait une base manquante — que la base visée est bien `klean_test`, et refuse de
+continuer sinon. Puis elle vide toutes les tables, sauf l'historique des migrations et
+les rôles, avant de démarrer l'API. Sur un exécuteur d'intégration continue, surcharger
 `KLEAN_TEST_CONNECTION`.
 
 Aucune de ces dépendances de test n'est ajoutée au projet de production.
@@ -434,8 +462,8 @@ KLEAN/
 │   ├── Models/         entités métier
 │   ├── Data/           KleanDbContext, filtres multi-tenant
 │   ├── DTOs/           un fichier par entité
-│   ├── Controllers/    un par entité, plus Auth et Planning
-│   ├── Services/       affectation, remplacement, planning, JWT, amorçage
+│   ├── Controllers/    un par entité, plus Auth, Planning et Installation
+│   ├── Services/       affectation, remplacement, planning, JWT, amorçage, installation
 │   └── Migrations/
 └── frontend/           React 19, TypeScript, Vite
     └── src/

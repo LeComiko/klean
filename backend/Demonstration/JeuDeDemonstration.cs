@@ -146,7 +146,7 @@ public sealed class JeuDeDemonstration
 
     /// <summary>
     /// L'entreprise unique de l'instance, et son premier administrateur actif. Lus au
-    /// propriétaire, hors de tout tenant : c'est l'amorçage qui les a posés.
+    /// propriétaire, hors de tout tenant : c'est l'amorçage ou l'assistant d'installation qui les a posés.
     /// </summary>
     private static async Task<(Guid Entreprise, Guid Administrateur)> CibleAsync(
         IServiceProvider racine, CancellationToken annulation)
@@ -157,11 +157,20 @@ public sealed class JeuDeDemonstration
         var db = portee.ServiceProvider.GetRequiredService<KleanDbContext>();
         var entreprises = await db.Entreprises.Select(e => e.Id).ToListAsync(annulation);
 
+        if (entreprises.Count == 0)
+        {
+            // Depuis le lot A2 de l'étape 34, une instance démarre sans entreprise quand le code
+            // d'installation est configuré : elle attend l'assistant.
+            throw new RefusDemonstration(
+                "L'instance ne compte aucune entreprise. Créez d'abord l'entreprise : l'assistant "
+                + "d'installation dans le navigateur, ou les variables d'amorçage.");
+        }
+
         if (entreprises.Count != 1)
         {
             throw new RefusDemonstration(
                 $"L'instance compte {entreprises.Count} entreprises. Le jeu de démonstration "
-                + "s'installe dans l'entreprise unique d'une instance neuve, celle de l'amorçage.");
+                + "s'installe dans l'entreprise unique d'une instance neuve.");
         }
 
         var utilisateurs = portee.ServiceProvider.GetRequiredService<UserManager<Utilisateur>>();

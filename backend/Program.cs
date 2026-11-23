@@ -219,6 +219,10 @@ builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
 var jwt = new JwtService(builder.Configuration);
 builder.Services.AddSingleton(jwt);
 builder.Services.AddScoped<AmorcageService>();
+// La création de l'entreprise et de son premier administrateur, commune à l'amorçage et à
+// l'assistant d'installation ; et ce que l'API sait de son installation, partagé entre eux.
+builder.Services.AddScoped<ServiceInstallation>();
+builder.Services.AddSingleton<EtatInstallation>();
 builder.Services.AddScoped<ServiceSession>();
 builder.Services.AddScoped<ServiceSecondFacteur>();
 
@@ -226,6 +230,11 @@ builder.Services.AddScoped<ServiceSecondFacteur>();
 // configuration SMTP est lue une fois pour toutes.
 builder.Services.AddSingleton<LimiteurDebit>();
 builder.Services.AddSingleton<IServiceCourriel, ServiceCourrielSmtp>();
+
+// Le code de l'assistant d'installation (SPEC.md, étape 34, lot A2). Lu avant la construction :
+// un code mal formé refuse le démarrage, comme une configuration SMTP incomplète.
+builder.Services.AddSingleton(CodeInstallation.Lire(builder.Configuration));
+
 builder.Services.AddScoped<AffectationService>();
 builder.Services.AddScoped<RemplacementService>();
 builder.Services.AddScoped<PlanningService>();
@@ -393,7 +402,7 @@ if (demonstration) builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Data
 
 var app = builder.Build();
 
-// Rôles, puis entreprise et administrateur si aucun utilisateur n'existe.
+// Rôles, puis, sans aucun compte : l'amorçage par variables, l'attente de l'assistant, ou le refus.
 using (var portee = app.Services.CreateScope())
 {
     await portee.ServiceProvider.GetRequiredService<AmorcageService>().ExecuterAsync();

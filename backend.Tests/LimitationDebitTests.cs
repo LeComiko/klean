@@ -202,3 +202,30 @@ public class LimitationDebitTests : IAsyncLifetime
         client.PostAsJsonAsync("/api/auth/mot-de-passe-oublie",
             new MotDePasseOublieDto { Email = email });
 }
+
+/// <summary>
+/// La clé d'adresse des plafonds de l'assistant d'installation (SPEC.md, étape 34, lot A2) :
+/// une IPv6 compte pour son /64, sinon un seul hôte tournerait dans ses milliards d'adresses.
+/// </summary>
+public class CleDAdresseTests
+{
+    private static string Cle(string? adresse) =>
+        LimiteurDebit.CleDAdresse(adresse is null ? null : IPAddress.Parse(adresse));
+
+    [Fact]
+    public void Une_IPv4_est_sa_propre_cle() => Assert.Equal("192.0.2.1", Cle("192.0.2.1"));
+
+    [Fact]
+    public void Une_IPv4_encapsulee_est_ramenee_a_l_IPv4() => Assert.Equal("192.0.2.1", Cle("::ffff:192.0.2.1"));
+
+    [Fact]
+    public void Deux_IPv6_du_meme_64_ont_la_meme_cle() =>
+        Assert.Equal(Cle("2001:db8:1:2:aaaa::1"), Cle("2001:db8:1:2:bbbb::9"));
+
+    [Fact]
+    public void Une_IPv6_d_un_autre_64_a_une_autre_cle() =>
+        Assert.NotEqual(Cle("2001:db8:1:2::1"), Cle("2001:db8:1:3::1"));
+
+    [Fact]
+    public void Sans_adresse_la_cle_est_l_adresse_inconnue() => Assert.Equal(LimiteurDebit.AdresseInconnue, Cle(null));
+}

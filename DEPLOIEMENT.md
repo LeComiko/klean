@@ -59,15 +59,36 @@ Ouvrez `.env` et renseignez au moins :
 | `KLEAN_DOMAINE` | le nom de domaine, sans `https://` |
 | `POSTGRES_PASSWORD` | le résultat de `openssl rand -hex 32` |
 | `KLEAN_JWT_CLE` | le résultat de `openssl rand -base64 64 \| tr -d '\n'` |
-| `KLEAN_ADMIN_EMAIL`, `KLEAN_ADMIN_MOT_DE_PASSE`, `KLEAN_RAISON_SOCIALE` | le premier compte, et l'entreprise qu'il administre |
+| `KLEAN_CODE_INSTALLATION` | **première voie** : un code de vingt symboles, tiré par la commande de `.env.example` — l'entreprise et son administrateur se créent dans le navigateur |
+| `KLEAN_ADMIN_EMAIL`, `KLEAN_ADMIN_MOT_DE_PASSE`, `KLEAN_RAISON_SOCIALE` | **seconde voie** : le premier compte, et l'entreprise qu'il administre, créés au démarrage |
 
 ⚠️ Le mot de passe de PostgreSQL doit être **hexadécimal**. Un `;` ou un `=` couperait
 la chaîne de connexion, et l'API échouerait au démarrage sur une erreur qui ne parle
 pas de mot de passe.
 
-Le mot de passe administrateur suit les règles de KLEAN : **dix caractères au moins,
-une majuscule, une minuscule, un chiffre**. Sinon l'API refuse de démarrer, et dit
-pourquoi dans `docker compose logs api`.
+**Une des deux voies, au choix**, pour créer l'entreprise et son premier administrateur.
+Elles ne servent que sur une base sans aucun compte :
+
+- **Le code d'installation** est la voie du script, et la seule où aucun mot de passe
+  n'est écrit sur le disque : vous le choisissez dans le navigateur. Le code se tire
+  ainsi, jamais recopié d'un exemple :
+
+  ```bash
+  LC_ALL=C tr -dc 'ABCDEFGHJKMNPQRSTUVWXYZ23456789' < /dev/urandom | head -c 20; echo
+  ```
+
+  Vingt symboles de cet alphabet exactement, sinon l'API refuse de démarrer : un code
+  plus court serait configuré à moitié. Ne le passez dans aucune adresse ni aucun lien :
+  il finirait dans l'historique du navigateur.
+- **Les trois variables d'amorçage** créent l'entreprise et l'administrateur dès le
+  démarrage. Le mot de passe suit les règles de KLEAN : **dix caractères au moins, une
+  majuscule, une minuscule, un chiffre**. Sinon l'API refuse de démarrer, et dit pourquoi
+  dans `docker compose logs api`. `KLEAN_SIRET`, facultative, donne le SIRET de
+  l'entreprise ; sans elle, quatorze zéros.
+
+Avec les trois variables, le code n'est pas lu. **Sans l'une ni l'autre voie, l'API refuse
+de démarrer** sur une base sans compte, en nommant les deux. Une ou deux variables
+d'amorçage seulement, sans code, la font aussi refuser : l'amorçage est incomplet.
 
 ### 2.2 Construire et démarrer
 
@@ -93,16 +114,67 @@ répond, `docker compose logs caddy` dit en général pourquoi le certificat n'a
 
 ### 2.4 Première connexion
 
-1. Ouvrez `https://VOTRE-DOMAINE` et connectez-vous avec le compte de `.env`. Ayez sous la
-   main un téléphone portant une application d'authentification (Aegis, FreeOTP, Google
-   ou Microsoft Authenticator…). La connexion enchaîne deux étapes :
+Ayez sous la main un téléphone portant une application d'authentification (Aegis,
+FreeOTP, Google ou Microsoft Authenticator…) : le rôle administrateur impose la **double
+authentification**, et la première connexion la fait équiper. Elle affiche un QR code,
+puis remet **dix codes de récupération** : rangez-les hors de cette machine, ils sont la
+seule sortie si le téléphone se perd (section 10).
+
+#### Par le code d'installation
+
+1. Ouvrez `https://VOTRE-DOMAINE`. Tant qu'aucun compte n'existe, KLEAN ouvre
+   l'**assistant d'installation** au lieu de la connexion. Il compte quatre écrans :
+   - **le code** de `.env`, tel quel, tirets et majuscules sans importance ;
+   - **l'entreprise** : raison sociale, SIRET à quatorze chiffres, et territoire, qui
+     fixe les jours fériés et l'heure de la journée ;
+   - **votre compte** : adresse, nom, prénom, et le mot de passe, que vous choisissez —
+     dix caractères au moins, une majuscule, une minuscule, un chiffre ;
+   - **ce que vous devez savoir**, recopié ci-dessous, puisque cet écran ne se revoit pas.
+2. **Connectez-vous tout de suite**, par *Se connecter*. Le mot de passe choisi dans
+   l'assistant n'est pas provisoire : la connexion passe directement à la double
+   authentification.
+3. **Videz** dans `.env` la ligne `KLEAN_CODE_INSTALLATION`, puis recréez l'API, qui le
+   garde sinon dans son environnement :
+
+   ```bash
+   docker compose up -d api
+   ```
+
+Le troisième geste n'est pas cosmétique. Le code ne sert plus — l'assistant
+répond « déjà installé » dès qu'un compte existe —, mais il resterait un secret en clair
+sur le disque, et dans l'environnement du conteneur. Avec le script, rien à faire :
+`klean` le retire à sa commande suivante, au plus tard à la sauvegarde de la nuit.
+
+Ce que dit le quatrième écran, et qui reste vrai après lui :
+
+- **Vous êtes responsable du traitement** des données de vos salariés et de vos clients.
+- **La note d'information aux agents** se remet avant d'importer leurs données, et avant
+  qu'ils utilisent *Ma journée*. Son modèle est en `RGPD.md` §7 ; la section 11 dit le
+  reste.
+- **Les durées de conservation** proposées en `RGPD.md` §5 sont à valider (section 7).
+- **La localisation automatique des sites est désactivée** : les coordonnées se
+  saisissent à la main. Elle se proposera avec une prochaine version, sur votre choix.
+  Le script d'installation écrit déjà `KLEAN_GEOCODAGE=false` dans `.env`, que la
+  version 0.2.0 ne lit pas encore.
+- **La double authentification s'équipe dès la première connexion**, comme ci-dessus.
+
+Un code refusé ramène au premier écran. Au-delà de trente codes faux reçus par le serveur
+en quinze minutes, de qui que ce soit, l'assistant le dit et demande de réessayer quelques
+minutes plus tard. Un code juste n'est jamais retenu par ce plafond. Si l'assistant
+s'arrête sur « Une entreprise existe déjà sans aucun compte », voyez la section 12.
+
+⚠️ **Ce parcours a été joué au navigateur sur une base jetable, pas encore sur l'instance
+d'essai.**
+
+#### Par les variables d'amorçage
+
+1. Ouvrez `https://VOTRE-DOMAINE` et connectez-vous avec le compte de `.env`. La connexion
+   enchaîne deux étapes :
    - **Choisir votre mot de passe.** Celui de `.env` est provisoire : la connexion
      impose de le remplacer, et refuse de le reprendre tel quel.
-   - **La double authentification**, que le rôle administrateur impose. La connexion
-     affiche un QR code, puis remet **dix codes de récupération** : rangez-les hors de
-     cette machine, ils sont la seule sortie si le téléphone se perd (section 10).
-2. **Videz** dans `.env` les quatre lignes `KLEAN_ADMIN_*`, `KLEAN_RAISON_SOCIALE`
-   et `KLEAN_SIRET`.
+   - **La double authentification**, comme ci-dessus.
+2. **Videz** dans `.env` les quatre lignes `KLEAN_ADMIN_EMAIL`,
+   `KLEAN_ADMIN_MOT_DE_PASSE`, `KLEAN_RAISON_SOCIALE` et `KLEAN_SIRET`.
 
 Le second geste n'est pas cosmétique. Ces valeurs ne servent que si la base n'a
 **aucun** compte ; ensuite elles ne servent plus à rien, et le mot de passe initial
@@ -110,9 +182,10 @@ resterait écrit en clair sur le disque. Il n'est plus valable après la premiè
 connexion, mais un mot de passe initial est souvent réemployé ailleurs.
 
 ⚠️ **Le remplacement imposé du mot de passe initial n'a pas encore été vu sur une instance
-neuve** : la série de tests ne peut pas offrir une base sans aucun compte. Si la première
-connexion passe directement au QR code sans demander de mot de passe, changez-le à la main
-à l'écran **Compte**, et signalez-le.
+neuve.** La série de tests éprouve désormais que l'amorçage marque ce compte provisoire
+(`AmorcageTests`), et le parcours d'un compte provisoire est celui de tout compte créé.
+Si la première connexion passe pourtant directement au QR code sans demander de mot de
+passe, changez-le à la main à l'écran **Compte**, et signalez-le.
 
 Les comptes suivants se créent à l'écran **Comptes**, section *Entreprise*. Aucun mot de
 passe n'y est saisi : KLEAN en tire un, l'affiche **une seule fois**, et la personne le
@@ -127,13 +200,15 @@ avoir été informés avant, et le CSE consulté s'il existe.
 ### 2.5 Une instance de démonstration, facultative
 
 Cette étape sert à montrer KLEAN rempli : à un client, à une équipe, avant de choisir.
-Jouez-la juste après la section 2.2, avant toute saisie :
+Jouez-la juste après la création de l'entreprise — par l'assistant ou par les variables
+d'amorçage, section 2.4 —, avant toute saisie :
 
 ```bash
 docker compose run --rm api demonstration
 ```
 
-La commande remplit l'entreprise de `.env` avec :
+Par le code d'installation, aucune entreprise n'existe avant l'assistant : la commande
+refuse alors, et le dit. La commande remplit l'entreprise de l'instance avec :
 - deux clients, cinq sites et six agents fictifs ;
 - six semaines de vacations autour du jour même ;
 - des remplacements, des passages pointés avec leurs anomalies, et un stock.
@@ -159,6 +234,10 @@ base seule, puis reprenez la section 2.2 :
 docker compose down
 docker volume rm klean_postgres     # la base, et rien d'autre
 ```
+
+La base neuve n'a aucun compte : remettez dans `.env` un code d'installation neuf, ou les
+variables d'amorçage, que vous aviez vidés à la section 2.4. Sans l'un ni l'autre, l'API
+refuse de démarrer.
 
 Évitez `down -v` : il emporte aussi le trousseau `cles-api` et les certificats de Caddy,
 et Let's Encrypt plafonne les émissions par domaine.
@@ -199,6 +278,11 @@ Dans cet ordre, et chaque pas s'arrête sans rien changer s'il échoue :
 
 ⚠️ **Les saisies faites entre la sauvegarde et l'arrêt de l'API** — quelques secondes — ne
 sont pas dans la sauvegarde : un `revenir` les perd (section 5).
+
+**Depuis une version 0.1.x**, le code d'installation que celle-ci avait écrit reste dans
+`.env` jusqu'à la commande `klean` suivante — `sudo klean etat` suffit — ou jusqu'à la
+sauvegarde de la nuit : la mise à jour est conduite par le `klean` de l'ancienne version,
+qui ne le retire pas. Des comptes existant, il n'ouvre plus rien.
 
 **Une mise à jour ratée se relance** par la même commande : elle reprend là où elle
 s'était arrêtée, **sans nouvelle sauvegarde** — celle d'une base à moitié transformée
@@ -363,6 +447,11 @@ nouveau ouvert ; un mot de passe changé depuis est de nouveau l'ancien ; les
 pseudonymisations et les purges faites depuis sont défaites — rejouez-les (section 7).
 Tout ce qui a été saisi après la sauvegarde est perdu.
 
+**Une sauvegarde prise avant le premier compte rouvre l'assistant d'installation.** L'ancien
+code a quitté `.env` depuis : la commande en tire un neuf avant de redémarrer l'API, et
+`sudo klean code` le montre. Une sauvegarde qui porte une entreprise sans compte est
+signalée : voir la section 12.
+
 ### Restaurer, à la main
 
 ```bash
@@ -444,6 +533,9 @@ introduite.
 - **Un retour raté se relance** par `sudo klean revenir`, qui reprend : tant qu'il n'a pas
   abouti, la base est peut-être vide, et une mise à jour est refusée. `sudo klean etat` le
   signale.
+- Une fois la base remise et KLEAN redémarré, si cette base a ses comptes, le code
+  d'installation resté dans `.env` en est retiré, et l'API recréée sans lui — comme après
+  une mise à jour.
 
 ### À la main
 
@@ -489,7 +581,15 @@ image (il n'y est pas copié).
 | `KLEAN_JWT_CLE` | une fois par an, ou si `.env` a pu être lu | **aucun pour les utilisateurs** — voir ci-dessous |
 | `POSTGRES_PASSWORD` | si `.env` a pu être lu | aucun, si l'ordre est respecté — voir ci-dessous |
 | `KLEAN_SMTP_MOT_DE_PASSE` | selon votre fournisseur | aucun |
+| `KLEAN_CODE_INSTALLATION` | s'il a pu être lu **avant** le premier compte : en tirer un autre (§2.1), puis `docker compose up -d api`. Après le premier compte : le **vider** (§2.4) | l'ancien code ne passe plus |
 | `KLEAN_ADMIN_MOT_DE_PASSE` | ne pas le tourner : le **vider** (§2.4) | — |
+
+⚠️ **Le code d'installation est en clair** dans `.env`, et dans l'environnement du conteneur
+de l'API, jusqu'au premier compte. Le script le retire alors, à sa commande suivante, et
+recrée l'API. À la main, c'est à vous de le retirer, puis de recréer l'API : vider `.env`
+seul le laisse dans le conteneur. Avant le premier compte, quiconque le lit peut créer
+l'entreprise à votre place : c'est la seule garde de l'assistant. Après, il n'ouvre plus
+rien, mais reste un secret écrit en clair.
 
 ### La clé de session
 
@@ -761,3 +861,76 @@ CSE et aux salariés : `RGPD.md`, T7, explique pourquoi cela changerait le trait
 
 **Ordonnancez `purge-pointages.sql`** dès la mise en service (section 7) : un an de
 pointages, c'est la durée retenue, pas un plafond qui s'applique seul.
+
+---
+
+## 12. Une entreprise sans compte
+
+C'est le reste d'une installation interrompue par une version 0.1.x. L'entreprise et son
+administrateur n'y étaient pas créés d'un seul geste : un administrateur refusé — un mot de
+passe hors des règles, par exemple — laissait l'entreprise seule en base. Depuis, ils sont créés en une transaction, et ce reste ne
+se produit plus ; il peut encore se trouver dans une base ancienne, ou dans une
+sauvegarde.
+
+**Le symptôme dépend de la voie** de la section 2.1 :
+
+- **Par le code d'installation**, l'API démarre, mais l'assistant s'arrête sur « Une
+  entreprise existe déjà sans aucun compte » (réponse 409), sans rien créer.
+  `sudo klean installer`, `sudo klean restaurer` et `sudo klean code` le signalent aussi,
+  et ne montrent pas le code : il n'ouvrirait que ce refus.
+- **Par les variables d'amorçage**, l'API refuse de démarrer, et
+  `docker compose logs api` porte le même message.
+
+L'assistant ne la reprend pas, et n'offre pas de la contourner : en changer le SIRET
+laisserait l'orpheline en base. Elle se retire à la main.
+
+**Le rapport d'abord.** Il ne modifie rien. Depuis le dossier de KLEAN — `/opt/klean`
+pour une installation par le script :
+
+```bash
+cd /opt/klean
+docker compose exec -T postgres psql -U klean -d klean -c \
+ 'SELECT e."Id", e."RaisonSociale",
+    (SELECT count(*) FROM "AspNetUsers"     u WHERE u."EntrepriseId" = e."Id") AS comptes,
+    (SELECT count(*) FROM "Clients"         c WHERE c."EntrepriseId" = e."Id") AS clients,
+    (SELECT count(*) FROM "Agents"          a WHERE a."EntrepriseId" = e."Id") AS agents,
+    (SELECT count(*) FROM "Produits"        p WHERE p."EntrepriseId" = e."Id") AS produits,
+    (SELECT count(*) FROM "Emplacements"    m WHERE m."EntrepriseId" = e."Id") AS emplacements,
+    (SELECT count(*) FROM "TypesPrestation" t WHERE t."EntrepriseId" = e."Id") AS types_prestation
+  FROM "Entreprises" e;'
+```
+
+**Toutes les colonnes à zéro** : une entreprise orpheline, que la commande suivante
+retire. **Sinon, ne supprimez rien** : ce sont des données sans compte, pas un reste
+d'installation. Demandez de l'aide, en joignant le rapport.
+
+```bash
+docker compose exec -T postgres psql -U klean -d klean -c \
+ 'DELETE FROM "Entreprises" e
+   WHERE NOT EXISTS (SELECT 1 FROM "AspNetUsers"     WHERE "EntrepriseId" = e."Id")
+     AND NOT EXISTS (SELECT 1 FROM "Clients"         WHERE "EntrepriseId" = e."Id")
+     AND NOT EXISTS (SELECT 1 FROM "Agents"          WHERE "EntrepriseId" = e."Id")
+     AND NOT EXISTS (SELECT 1 FROM "Produits"        WHERE "EntrepriseId" = e."Id")
+     AND NOT EXISTS (SELECT 1 FROM "Emplacements"    WHERE "EntrepriseId" = e."Id")
+     AND NOT EXISTS (SELECT 1 FROM "TypesPrestation" WHERE "EntrepriseId" = e."Id");'
+docker compose restart api
+```
+
+`psql` répond `DELETE 1` pour une orpheline retirée, et `DELETE 0` s'il n'a rien trouvé à
+retirer. Le redémarrage est nécessaire : l'API ne cherche l'orpheline qu'au démarrage.
+Ensuite, rechargez la page de l'assistant ; avec le script, `sudo klean code` montre le
+code.
+
+⚠️ **Les clés vers `Entreprises` sont en cascade** : clients, agents, produits,
+emplacements et types de prestation, et par eux tout le reste. Un `DELETE` sans ces
+conditions emporterait toutes les données de l'entreprise, en silence, et sans demander
+de confirmation. Ne le raccourcissez pas. Les comptes, eux, ne sont pas rattachés à
+l'entreprise par une clé : sans la première condition, un compte survivrait à son
+entreprise, et n'ouvrirait plus rien.
+
+Ce rapport et ce `DELETE` ont été joués tels quels le 23 novembre 2026, sur une base
+jetable au schéma des migrations. Il y avait cinq entreprises : une orpheline vide, puis
+quatre autres portant chacune une seule chose, un client, un type de prestation, un
+emplacement ou un compte. Seule l'orpheline est partie (`DELETE 1`), et une seconde
+exécution n'a rien retiré (`DELETE 0`). Le catalogue de la base confirme que les cinq
+tables nommées plus haut sont les seules à pointer vers `Entreprises`.

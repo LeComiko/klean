@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 
 import { activerSecondFacteur, preparerSecondFacteur } from '../api/secondFacteur'
 import { ErreurApi } from '../api/client'
+import { lireEtatInstallation } from '../api/installation'
 import { useAuth } from '../auth/contexte'
 import { refusPremierMotDePasse } from '../auth/motDePasse'
 import { LibellesEtape, saisieDe } from '../auth/secondFacteur'
@@ -41,6 +42,46 @@ export function Connexion() {
   const [envoi, setEnvoi] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
 
+  // L'instance a-t-elle un compte ? `null` tant que la lecture court ; `'inconnu'` si elle a
+  // échoué — panne, 429 —, et le formulaire s'affiche alors normalement : cette lecture ne
+  // bloque jamais une connexion.
+  const [installee, setInstallee] = useState<boolean | 'inconnu' | null>(null)
+  const sansProfil = profil === null
+
+  // Lancé au montage, en parallèle de la restauration de session, et avant tout `return`
+  // anticipé. Avec un profil, rien à lire : la redirection vers l'application suit.
+  useEffect(() => {
+    if (!sansProfil) return
+
+    // ⚠️ Un seul contrôleur et une minuterie, jamais `AbortSignal.any` ni `AbortSignal.timeout` :
+    // absents de Safari avant 17.4 (iOS 16), de Chrome avant 116 et de Firefox avant 124, ils y
+    // levaient une exception au montage, et la page de connexion restait blanche pour tous.
+    const controleur = new AbortController()
+    // Le démontage se distingue de l'expiration par ce drapeau, pas par `signal.aborted`,
+    // que les deux posent.
+    let demonte = false
+
+    // Cinq secondes au plus : un serveur qui ne répond pas ne retient pas le formulaire.
+    const minuterie = window.setTimeout(() => controleur.abort(), 5000)
+
+    lireEtatInstallation(controleur.signal)
+      .then((etat) => {
+        if (!demonte) setInstallee(etat.installee)
+      })
+      .catch(() => {
+        // Un abandon au démontage — le `StrictMode` monte deux fois — n'est ni une erreur ni
+        // un `false`. L'expiration, elle, vaut « inconnu » : le formulaire s'affiche.
+        if (!demonte) setInstallee('inconnu')
+      })
+      .finally(() => window.clearTimeout(minuterie))
+
+    return () => {
+      demonte = true
+      window.clearTimeout(minuterie)
+      controleur.abort()
+    }
+  }, [sansProfil])
+
   // Écran demandé avant la redirection, posé par RouteProtegee — ou laissé par la
   // déconnexion du compte précédent : `destinationApresConnexion` ne l'honore que si le
   // rôle de celui-ci l'ouvre.
@@ -55,6 +96,12 @@ export function Connexion() {
     setRecuperation(false)
     setErreur(message)
   }
+
+  const attente = (
+    <main className="connexion">
+      <output className="connexion__attente">Vérification de la session…</output>
+    </main>
+  )
 
   async function soumettreMotDePasse(evenement: FormEvent<HTMLFormElement>) {
     evenement.preventDefault()
@@ -144,15 +191,16 @@ export function Connexion() {
     }
   }
 
-  if (restauration) {
-    return (
-      <main className="connexion">
-        <output className="connexion__attente">Vérification de la session…</output>
-      </main>
-    )
-  }
+  if (restauration) return attente
 
   if (profil !== null) return <Navigate to={destinationApresConnexion(depuis, profil.roles)} replace />
+
+  // ⚠️ L'attente dure jusqu'à la réponse, pour que le formulaire ne s'affiche jamais une
+  // fraction de seconde avant le départ vers l'assistant. Pas de boucle : l'assistant ne
+  // renvoie ici que si le serveur dit « installée ».
+  if (installee === null) return attente
+
+  if (installee === false) return <Navigate to="/installation" replace />
 
   // Le mot « Erreur » est écrit, et role="alert" le fait annoncer par un lecteur
   // d'écran : la couleur ne porte pas seule l'information.
@@ -332,6 +380,15 @@ export function Connexion() {
         <button className="connexion__bouton" type="submit" disabled={envoi}>
           {envoi ? 'Connexion…' : 'Se connecter'}
         </button>
+
+        {/* La lecture de l'état a échoué : une instance jamais installée n'aurait sinon aucune
+            sortie, sans compte pour se connecter. L'assistant renvoie de lui-même ici si
+            l'instance est installée. Jamais affiché quand le serveur a répondu. */}
+        {installee === 'inconnu' && (
+          <Link className="connexion__lien" to="/installation">
+            Première installation ?
+          </Link>
+        )}
       </form>
     </main>
   )

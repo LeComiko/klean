@@ -34,32 +34,27 @@ verifier 'le code fait 20 symboles de l’alphabet sans ambiguïté' \
   bash -c '[[ "$1" =~ ^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{20}$ ]]' _ "$code"
 verifier 'deux codes diffèrent' bash -c '[ "$1" != "$2" ]' _ "$code" "$(generer_code)"
 
+# Un contrat entre le script et l'API : un code que l'API refuse l'empêche de démarrer,
+# comptes ou non (CodeInstallation.Lire). Lus dans le code de l'API, jamais recopiés.
+code_api="$ici/../../backend/Services/CodeInstallation.cs"
+alphabet_api=$(sed -n 's/.*const string Alphabet = "\([^"]*\)";.*/\1/p' "$code_api")
+longueur_api=$(sed -n 's/.*const int Longueur = \([0-9][0-9]*\);.*/\1/p' "$code_api")
+verifier 'l’alphabet du script est celui de l’API' egal "$ALPHABET_CODE" "$alphabet_api"
+verifier 'le code tiré a la longueur que l’API attend' egal "${#code}" "$longueur_api"
+dans_l_alphabet_api() { [ -n "$alphabet_api" ] && [[ "$code" =~ ^["$alphabet_api"]+$ ]]; }
+verifier 'le code tiré n’emploie que l’alphabet de l’API' dans_l_alphabet_api
+
 verifier 'un secret de 32 octets fait 64 chiffres hexadécimaux' \
   bash -c '[[ "$1" =~ ^[0-9a-f]{64}$ ]]' _ "$(generer_secret 32)"
 
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-  verifier 'le mot de passe provisoire passe les règles d’Identity' \
-    bash -c '[[ "$1" =~ ^[A-HJKMNP-Za-hjkmnp-z2-9]{16}$ && "$1" =~ [A-Z] && "$1" =~ [a-z] && "$1" =~ [0-9] ]]' _ "$(generer_mot_de_passe)"
-done
-
-# Dix tirages ne prouvent pas la règle : un mot sans chiffre sort environ une fois sur
-# quatorze, donc la boucle de rejet retirée resterait verte une fois sur deux. Ici
-# l'aléa est imposé — seize « a », puis A, a, 2 en boucle —, et le premier mot doit
-# être rejeté. Le compteur vit dans un fichier : chaque appel est un sous-shell.
-mot_de_passe_sans_chiffre_rejete() (
-  compteur=$(mktemp)
-  echo 0 >"$compteur"
-  octet_aleatoire() {
-    local n
-    n=$(cat "$compteur")
-    echo $((n + 1)) >"$compteur"
-    if [ "$n" -lt 16 ]; then echo 23; else echo $(((n % 3) * 23 + (n % 3 == 2 ? 1 : 0))); fi
-  }
-  mot=$(generer_mot_de_passe)
-  rm -f "$compteur"
-  [ "$mot" != aaaaaaaaaaaaaaaa ] && [[ "$mot" =~ [A-Z] && "$mot" =~ [a-z] && "$mot" =~ [0-9] ]]
-)
-verifier 'un mot de passe sans chiffre est tiré de nouveau' mot_de_passe_sans_chiffre_rejete
+# Par groupes de cinq, pour être lu à l'écran et recopié ; l'API retire les tirets.
+verifier 'le code se lit en quatre groupes de cinq' \
+  bash -c '[[ "$1" =~ ^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}(-[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}){3}$ ]]' _ "$(code_lisible "$code")"
+lisible=$(code_lisible "$code")
+verifier 'sans ses tirets, le code lisible est le code' egal "${lisible//-/}" "$code"
+verifier 'un dernier groupe court reste court' egal "$(code_lisible ABCDEFG)" ABCDE-FG
+verifier 'cinq symboles font un seul groupe' egal "$(code_lisible ABCDE)" ABCDE
+verifier 'un code vide donne une ligne vide' egal "$(code_lisible '' | od -An -c | tr -d ' ')" '\n'
 
 # ---- .env --------------------------------------------------------------------
 
@@ -136,20 +131,17 @@ verifier 'domaine sans extension refusé' refuse normaliser_domaine klean
 verifier 'domaine avec un chemin refusé' refuse normaliser_domaine klean.exemple.fr/connexion
 verifier 'domaine vide refusé' refuse normaliser_domaine ''
 
-verifier 'l’apostrophe droite de la raison sociale devient typographique' \
-  accepte normaliser_raison_sociale "  Nettoyage de l'Ouest " 'Nettoyage de l’Ouest'
+# Le seul test de l'apostrophe typographique dans poser_env : elle s'écrit, et se relit.
 apostrophe_ecrivable() {
   local f
   f=$(mktemp)
-  poser_env "$f" KLEAN_RAISON_SOCIALE "$(normaliser_raison_sociale "Propreté d'Arvor")" &&
-    egal "$(lire_env "$f" KLEAN_RAISON_SOCIALE)" 'Propreté d’Arvor'
+  poser_env "$f" X 'Propreté d’Arvor' &&
+    egal "$(lire_env "$f" X)" 'Propreté d’Arvor'
   local r=$?
   rm -f "$f"
   return "$r"
 }
-verifier 'une raison sociale à apostrophe s’écrit dans .env' apostrophe_ecrivable
-verifier 'raison sociale vide refusée' refuse normaliser_raison_sociale '   '
-verifier 'raison sociale de 201 caractères refusée' refuse normaliser_raison_sociale "$(printf 'a%.0s' {1..201})"
+verifier 'une apostrophe typographique s’écrit dans .env' apostrophe_ecrivable
 
 verifier 'adresse plausible' accepte adresse_plausible ' patron@propre-sarl.fr ' patron@propre-sarl.fr
 verifier 'adresse sans domaine refusée' refuse adresse_plausible patron@exemple
@@ -380,6 +372,50 @@ verifier 'un fuseau mal écrit est refusé' faux fuseau_valide Europe/Pari
 verifier 'un chemin qui remonte est refusé' faux fuseau_valide ../../../etc/passwd
 verifier 'un fuseau vide est refusé' faux fuseau_valide ''
 verifier 'un chemin absolu est refusé' faux fuseau_valide /usr/share/zoneinfo/UTC
+
+# ---- Installation ------------------------------------------------------------
+
+verifier 'des comptes : installée' egal "$(etat_installation 3)" installee
+verifier 'aucun compte : à faire' egal "$(etat_installation 0)" a-faire
+verifier 'aucun compte et aucune entreprise : à faire' egal "$(etat_installation 0 0)" a-faire
+verifier 'aucun compte mais une entreprise : orpheline' egal "$(etat_installation 0 1)" orpheline
+verifier 'des comptes : installée, quelles que soient les entreprises' egal "$(etat_installation 2 '')" installee
+# PostgreSQL muet ne dit ni « installée » ni « à faire » : un code tiré, ou montré, sur une
+# instance qui a ses comptes.
+verifier 'un nombre de comptes vide est illisible' faux etat_installation ''
+verifier 'un message d’erreur n’est pas un nombre de comptes' faux etat_installation 'psql: error'
+verifier 'un nombre d’entreprises vide est illisible' faux etat_installation 0 ''
+
+dossier=$(mktemp -d)
+env="$dossier/.env"
+cles_a_retirer() { cles_d_installation_a_retirer "$env" "$1" | tr '\n' ' '; }
+# Un code tiré, jamais écrit en clair dans le dépôt : il serait valable pour l'API.
+printf 'KLEAN_DOMAINE=klean.exemple.fr\nKLEAN_CODE_INSTALLATION=%s\nKLEAN_ADMIN_EMAIL=patron@exemple.fr\nKLEAN_ADMIN_MOT_DE_PASSE=\nKLEAN_RAISON_SOCIALE=Propre\n' "$code" > "$env"
+verifier 'des comptes : le code et les restes d’amorçage partent' \
+  egal "$(cles_a_retirer 1)" 'KLEAN_CODE_INSTALLATION KLEAN_ADMIN_EMAIL KLEAN_RAISON_SOCIALE '
+# Le statut à part, et non à travers un tube : un échec y passerait pour « rien ».
+rien_sans_compte() {
+  local sortie
+  sortie=$(cles_d_installation_a_retirer "$env" 0) || { printf '       échec\n'; return 1; }
+  egal "$sortie" ''
+}
+verifier 'aucun compte : rien ne part' rien_sans_compte
+verifier 'un nombre de comptes illisible ne retire rien' faux cles_d_installation_a_retirer "$env" ''
+# Le mot de passe provisoire d'une installation 0.1.x inachevée n'a pas encore été montré :
+# montrer_puis_retirer_mot_de_passe a besoin de lui, et de l'adresse qu'il ouvre.
+printf 'KLEAN_CODE_INSTALLATION=%s\nKLEAN_ADMIN_EMAIL=patron@exemple.fr\nKLEAN_ADMIN_MOT_DE_PASSE=Provisoire2026\nKLEAN_RAISON_SOCIALE=Propre\n' "$code" > "$env"
+verifier 'un mot de passe provisoire pas encore montré garde l’amorçage' \
+  egal "$(cles_a_retirer 1)" 'KLEAN_CODE_INSTALLATION '
+printf 'KLEAN_DOMAINE=klean.exemple.fr\nKLEAN_CODE_INSTALLATION=\nKLEAN_ADMIN_EMAIL=\n' > "$env"
+rien_a_retirer() {
+  local sortie
+  sortie=$(cles_d_installation_a_retirer "$env" 4) || { printf '       échec\n'; return 1; }
+  egal "$sortie" ''
+}
+verifier 'rien à retirer : rien ne part' rien_a_retirer
+printf 'KLEAN_ADMIN_EMAIL=patron@exemple.fr\n' > "$env"
+verifier 'un reste d’amorçage part même sans code' egal "$(cles_a_retirer 1)" 'KLEAN_ADMIN_EMAIL '
+rm -rf "$dossier"
 
 # ---- Bilan -------------------------------------------------------------------
 

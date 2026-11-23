@@ -73,6 +73,7 @@ const Indifferentes = [
   { fichier: 'src/comptes/comptes.test.ts', libelle: 'comptes.ts — gestes et création' },
   { fichier: 'src/passage/passage.test.ts', libelle: 'passage.ts — gestes, preuves et checklist' },
   { fichier: 'src/apparence/apparence.test.ts', libelle: 'apparence.ts — thème et stockage' },
+  { fichier: 'src/installation/installation.test.ts', libelle: 'installation.ts — assistant' },
 ]
 
 let echecs = 0
