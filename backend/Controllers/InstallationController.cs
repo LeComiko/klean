@@ -49,7 +49,7 @@ public partial class InstallationController(
         if (!debit.Autoriser($"installation-lecture:adresse:{Adresse}",
                 PlafondsDebit.LecturesInstallationParAdresse, PlafondsDebit.FenetreLecturesInstallation, out var attente))
         {
-            return TropDeTentatives(attente, PlafondsDebit.FenetreLecturesInstallation);
+            return this.TropDeTentatives(attente, PlafondsDebit.FenetreLecturesInstallation);
         }
 
         return new EtatInstallationDto(await InstalleeAsync(annulation));
@@ -65,7 +65,7 @@ public partial class InstallationController(
                 codeJuste ? PlafondsDebit.InstallationsBonCodeParAdresse : PlafondsDebit.InstallationsParAdresse,
                 PlafondsDebit.FenetreInstallations, out var attente))
         {
-            return TropDeTentatives(attente, PlafondsDebit.FenetreInstallations);
+            return this.TropDeTentatives(attente, PlafondsDebit.FenetreInstallations);
         }
 
         // Inatteignable par l'API, une session suppose un compte ; défense en profondeur, la garde
@@ -79,7 +79,7 @@ public partial class InstallationController(
             return debit.Autoriser("installation:codes-faux:global", PlafondsDebit.CodesFauxGlobaux,
                     PlafondsDebit.FenetreInstallations, out var attenteGlobale)
                 ? BadRequest($"{DebutRefusCode}. Il s'affiche à la fin de l'installation sur le serveur, et par : sudo klean code")
-                : TropDeTentatives(attenteGlobale, PlafondsDebit.FenetreInstallations,
+                : this.TropDeTentatives(attenteGlobale, PlafondsDebit.FenetreInstallations,
                     $"{DebutRefusCode}, ou trop de codes faux reçus par ce serveur. Vérifiez le code (sudo klean code), puis réessayez dans quelques minutes.");
         }
 
@@ -117,18 +117,6 @@ public partial class InstallationController(
         // AspNetUsers est hors de la RLS (CLAUDE.md §7) : sous klean_app, cette lecture voit tous les comptes.
         if (!etat.Installee && await db.Users.AnyAsync(annulation)) etat.Installee = true;
         return etat.Installee;
-    }
-
-    /// <summary>
-    /// 429 avec <c>Retry-After</c>, en secondes : l'attente restante, à défaut la fenêtre. Posé ici,
-    /// dans l'action qui écrit la réponse : aucun gestionnaire d'exception ne la vide ensuite.
-    /// </summary>
-    private ObjectResult TropDeTentatives(TimeSpan attente, TimeSpan fenetre,
-        string message = "Trop de tentatives. Réessayer dans quelques minutes.")
-    {
-        var secondes = attente > TimeSpan.Zero ? attente : fenetre;
-        Response.Headers.RetryAfter = ((int)Math.Ceiling(secondes.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
-        return StatusCode(StatusCodes.Status429TooManyRequests, message);
     }
 
     /// <summary>La saisie, normalisée une seule fois ; <c>null</c> vaut vide.</summary>

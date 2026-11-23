@@ -183,4 +183,15 @@ public static class PlafondsDebit
     /// <summary>L'état de l'installation, lu à chaque ouverture de l'écran de connexion. Par adresse seulement.</summary>
     public const int LecturesInstallationParAdresse = 60;
     public static TimeSpan FenetreLecturesInstallation => TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// La localisation d'un site (0.3.0). Le service compte par adresse IP, donc par instance : toutes
+    /// les entreprises d'un serveur partagent ses 50 requêtes par seconde. Le plafond par compte borne un
+    /// compte, et ne protège pas ce quota seul — trente requêtes peuvent partir dans la même seconde, et
+    /// un administrateur peut en créer d'autres. Le global, dix par seconde, le protège.
+    /// </summary>
+    public const int LocalisationsParCompte = 30;
+    public static TimeSpan FenetreLocalisations => TimeSpan.FromMinutes(15);
+    public const int LocalisationsGlobales = 10;
+    public static TimeSpan FenetreLocalisationsGlobales => TimeSpan.FromSeconds(1);
 }
