@@ -235,6 +235,9 @@ builder.Services.AddSingleton<IServiceCourriel, ServiceCourrielSmtp>();
 // un code mal formé refuse le démarrage, comme une configuration SMTP incomplète.
 builder.Services.AddSingleton(CodeInstallation.Lire(builder.Configuration));
 
+// La localisation des sites (0.3.0). Une configuration invalide fait refuser le démarrage.
+ServiceGeocodage.Enregistrer(builder.Services, builder.Configuration);
+
 builder.Services.AddScoped<AffectationService>();
 builder.Services.AddScoped<RemplacementService>();
 builder.Services.AddScoped<PlanningService>();
