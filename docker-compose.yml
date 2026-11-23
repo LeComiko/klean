@@ -80,9 +80,9 @@ services:
     environment:
       <<: *configuration-api
 
-      # Le code de l'assistant d'installation (étape 34, lot A2). Le script le retire de .env dès
-      # qu'un compte existe. Sans lui ni variables d'amorçage, l'API refuse de démarrer sur une
-      # base vide.
+      # Le code de l'assistant d'installation (étape 34, lot A2). Le script le retire de .env à
+      # la commande klean suivante qui voit un compte, au plus tard à la sauvegarde de la nuit.
+      # Sans lui ni variables d'amorçage, l'API refuse de démarrer sur une base vide.
       Installation__Code: "${KLEAN_CODE_INSTALLATION:-}"
 
       # L'autre voie, celle de DEPLOIEMENT.md : lues seulement si la base n'a aucun compte.

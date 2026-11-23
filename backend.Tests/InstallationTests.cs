@@ -177,6 +177,8 @@ public class InstallationTests : IAsyncLifetime
         var reponse = await Poster(Corps(siret: siret, code: codeFaux ? CodeFaux() : null));
 
         Assert.Equal(HttpStatusCode.Conflict, reponse.StatusCode);
+        // L'écran compare ce corps à l'égalité stricte pour mener à la connexion.
+        Assert.Equal(InstallationController.DejaInstallee, await reponse.Content.ReadAsStringAsync());
         Assert.DoesNotContain(await EntreprisesAsync(), e => e.RaisonSociale == "Delta Propreté");
         Assert.Equal(2, await ComptesAsync());
     }
@@ -193,6 +195,7 @@ public class InstallationTests : IAsyncLifetime
         var reponse = await Poster(Corps(), administrateur);
 
         Assert.Equal(HttpStatusCode.Conflict, reponse.StatusCode);
+        Assert.Equal(InstallationController.DejaInstallee, await reponse.Content.ReadAsStringAsync());
         Assert.Equal(2, (await EntreprisesAsync()).Count);
     }
 
@@ -317,6 +320,7 @@ public class InstallationTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.Created, premiere.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, seconde.StatusCode);
+        Assert.Equal(InstallationController.DejaInstallee, await seconde.Content.ReadAsStringAsync());
         Assert.Single(await EntreprisesAsync());
         Assert.Equal(1, await ComptesAsync());
     }
@@ -505,9 +509,13 @@ public class InstallationTests : IAsyncLifetime
             }
         }
 
-        var statuts = (await Task.WhenAll(premier, second)).Select(r => (int)r.StatusCode).Order().ToArray();
+        var reponses = await Task.WhenAll(premier, second);
+        var statuts = reponses.Select(r => (int)r.StatusCode).Order().ToArray();
 
         Assert.Equal([StatusCodes.Status201Created, StatusCodes.Status409Conflict], statuts);
+        // Le refus de la relecture, sous le verrou : l'autre chemin du même message.
+        var refus = reponses.Single(r => r.StatusCode == HttpStatusCode.Conflict);
+        Assert.Equal(InstallationController.DejaInstallee, await refus.Content.ReadAsStringAsync());
         Assert.Single(await EntreprisesAsync());
         Assert.Equal(1, await ComptesAsync());
     }

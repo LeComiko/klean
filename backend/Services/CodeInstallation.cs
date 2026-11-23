@@ -19,7 +19,8 @@ namespace Klean.Api.Services;
 ///
 /// ⚠️ Seule l'empreinte est gardée <b>par cette classe</b> ; la valeur brute reste dans
 /// <c>IConfiguration</c> et dans l'environnement du conteneur tant que le script ne l'a pas
-/// retirée de <c>.env</c>, ce qu'il fait dès qu'un compte existe.
+/// retirée de <c>.env</c> : la commande <c>klean</c> suivante qui voit un compte le fait, au
+/// plus tard la sauvegarde de la nuit.
 /// </summary>
 public sealed class CodeInstallation
 {

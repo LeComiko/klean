@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 
 import { activerSecondFacteur, preparerSecondFacteur } from '../api/secondFacteur'
 import { ErreurApi } from '../api/client'
@@ -53,20 +53,33 @@ export function Connexion() {
   useEffect(() => {
     if (!sansProfil) return
 
+    // ⚠️ Un seul contrôleur et une minuterie, jamais `AbortSignal.any` ni `AbortSignal.timeout` :
+    // absents de Safari avant 17.4 (iOS 16), de Chrome avant 116 et de Firefox avant 124, ils y
+    // levaient une exception au montage, et la page de connexion restait blanche pour tous.
     const controleur = new AbortController()
+    // Le démontage se distingue de l'expiration par ce drapeau, pas par `signal.aborted`,
+    // que les deux posent.
+    let demonte = false
 
     // Cinq secondes au plus : un serveur qui ne répond pas ne retient pas le formulaire.
-    lireEtatInstallation(AbortSignal.any([controleur.signal, AbortSignal.timeout(5000)]))
+    const minuterie = window.setTimeout(() => controleur.abort(), 5000)
+
+    lireEtatInstallation(controleur.signal)
       .then((etat) => {
-        if (!controleur.signal.aborted) setInstallee(etat.installee)
+        if (!demonte) setInstallee(etat.installee)
       })
       .catch(() => {
         // Un abandon au démontage — le `StrictMode` monte deux fois — n'est ni une erreur ni
         // un `false`. L'expiration, elle, vaut « inconnu » : le formulaire s'affiche.
-        if (!controleur.signal.aborted) setInstallee('inconnu')
+        if (!demonte) setInstallee('inconnu')
       })
+      .finally(() => window.clearTimeout(minuterie))
 
-    return () => controleur.abort()
+    return () => {
+      demonte = true
+      window.clearTimeout(minuterie)
+      controleur.abort()
+    }
   }, [sansProfil])
 
   // Écran demandé avant la redirection, posé par RouteProtegee — ou laissé par la
@@ -367,6 +380,15 @@ export function Connexion() {
         <button className="connexion__bouton" type="submit" disabled={envoi}>
           {envoi ? 'Connexion…' : 'Se connecter'}
         </button>
+
+        {/* La lecture de l'état a échoué : une instance jamais installée n'aurait sinon aucune
+            sortie, sans compte pour se connecter. L'assistant renvoie de lui-même ici si
+            l'instance est installée. Jamais affiché quand le serveur a répondu. */}
+        {installee === 'inconnu' && (
+          <Link className="connexion__lien" to="/installation">
+            Première installation ?
+          </Link>
+        )}
       </form>
     </main>
   )

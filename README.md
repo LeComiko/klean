@@ -64,8 +64,8 @@ prendre quelques minutes.
 À la fin, une fois le certificat obtenu, la commande affiche **l'adresse de KLEAN et un
 code d'installation**, en groupes de cinq caractères. Ouvrez l'adresse : un assistant
 demande ce code, puis crée votre entreprise et votre compte administrateur. Vous y
-choisissez vous-même votre mot de passe, et **aucun mot de passe n'est écrit sur le
-serveur**.
+choisissez vous-même votre mot de passe, et **aucun mot de passe de compte n'est écrit
+sur le serveur**.
 
 - Le code se recopie tel qu'affiché, tirets compris ou non, en majuscules ou non. Il ne
   contient ni I, ni L, ni O, ni 0, ni 1. `sudo klean code` le réaffiche tant qu'aucun

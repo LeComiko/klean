@@ -387,6 +387,13 @@ les écrans de référence (§11), et ce que lit un humain. Ce que la générati
     inconnu le garderait plein indéfiniment, et bloquerait l'installation légitime. Un bon
     code ne le traverse jamais.
 
+    ⚠️ **Le `GET` n'a pas de plafond global**, et c'est un écart assumé au cadrage, qui en
+    demandait un sur les deux routes (`SPEC.md`, lot A2, point 1). La lecture ne rend que
+    `{ installee }`, et ne lit plus la base une fois un compte vu ; un 429 n'y empêche
+    rien — la connexion affiche alors son formulaire, et l'assistant reste.
+    Un plafond global donnerait seulement à un inconnu le moyen de produire ce 429 pour
+    tout le monde.
+
     ⚠️ **Le 429 du plafond global commence encore par « Code d'installation incorrect »**,
     et nomme `sudo klean code`. Le propriétaire qui se trompe d'un caractère pendant qu'un
     inconnu remplit le plafond doit apprendre que son code est faux, et non attendre ;
@@ -1979,13 +1986,18 @@ l'écrivant ou en le relisant :
   sa recréation** (lot A2). Elle ne lit son environnement qu'à la création de son
   conteneur : vider `.env` ne suffit pas, le conteneur garderait le code. C'est ce que
   fait `retirer_code_si_installe`, appelée par `installer`, `etat`, `code`, après la bascule
-  d'une mise à jour, et après la sauvegarde de la nuit. Trois choses à savoir avant d'y
-  toucher :
+  d'une mise à jour, après un `revenir`, et après la sauvegarde de la nuit. Quatre choses à
+  savoir avant d'y toucher :
   - ⚠️ **Une commande d'état ne défait pas un arrêt voulu.** `.env` est vidé dans tous les
     cas, mais l'API n'est recréée — `compose up -d --no-deps api` — que si elle tourne, et
-    qu'aucune mise à jour ni aucun retour n'est inachevé : arrêtée sur un schéma à moitié
-    migré, elle lira `.env` à son prochain démarrage. `klean code` refuse dans ces deux
+    qu'aucune mise à jour ni aucun retour n'est inachevé. `klean code` refuse dans ces deux
     états, et nomme la commande à terminer.
+  - ⚠️ **Une API arrêtée garde le code à sa relance**, sauf par `compose up` : un
+    `docker compose start`, un `restart` ou un redémarrage de la machine relancent le même
+    conteneur, avec l'environnement de sa création. D'où `rattraper_code_de_l_api` : quand
+    `.env` n'a plus rien à retirer, que des comptes existent, que l'API tourne et qu'aucune
+    opération n'est inachevée, mais que `printenv Installation__Code` y rend encore une
+    valeur, l'API est recréée. La valeur n'est jamais affichée.
   - ⚠️ **Les restes de l'amorçage d'une 0.1.x restent tant que leur mot de passe
     provisoire n'a pas été montré.** `KLEAN_ADMIN_*` et `KLEAN_RAISON_SOCIALE` ne partent
     qu'avec un `KLEAN_ADMIN_MOT_DE_PASSE` vide : une installation 0.1.x inachevée ne l'a pas

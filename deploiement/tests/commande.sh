@@ -48,11 +48,20 @@ COMPTES=0
 ENTREPRISES=0
 SONDE=200
 EN_MARCHE=$'postgres\napi\ncaddy'
+# Ce que l'environnement du conteneur de l'API porte encore : `printenv` l'écrit, vide ou non ;
+# « absente » le fait échouer, comme une variable que le compose ne pose pas.
+CODE_API=''
 nombre_de_comptes() { [ "$COMPTES" != muet ] || return 1; printf '%s\n' "$COMPTES"; }
 nombre_d_entreprises() { printf '%s\n' "$ENTREPRISES"; }
 compose() {
   printf 'compose %s\n' "$*" >> "$R/journal"
-  case "$*" in *'ps --status running --services'*) printf '%s\n' "$EN_MARCHE" ;; esac
+  case "$*" in
+    *'ps --status running --services'*) printf '%s\n' "$EN_MARCHE" ;;
+    *'exec -T api printenv Installation__Code'*)
+      [ "$CODE_API" != absente ] || return 1
+      printf '%s\n' "$CODE_API"
+      ;;
+  esac
 }
 sonde_https() { printf 'sonde\n' >> "$R/journal"; printf '%s\n' "$SONDE"; }
 verifier_https() { printf 'attente\n' >> "$R/journal"; [ "$SONDE" = 200 ]; }
@@ -71,6 +80,7 @@ neuf() {
   ENTREPRISES=0
   SONDE=200
   EN_MARCHE=$'postgres\napi\ncaddy'
+  CODE_API=''
 }
 
 CODE=$(generer_code)
@@ -166,6 +176,87 @@ COMPTES=1
 sortie=$(cmd_etat 2>&1)
 verifier 'etat : l’API qui tourne est recréée sans le code' recree_l_api
 verifier 'etat ne montre jamais le code' sans "$sortie" "$CODE"
+
+# ---- Le conteneur relancé avec l'ancien code -----------------------------------
+#
+# .env n'a plus de code, mais un `docker compose start`, un `restart` ou un redémarrage de la
+# machine ont relancé le conteneur d'avant le retrait, qui le garde dans son environnement.
+
+neuf "${BASE}KLEAN_CODE_INSTALLATION=\n"
+COMPTES=1
+CODE_API="$CODE"
+sortie=$(retirer_code_si_installe 2>&1)
+verifier 'l’API relancée avec l’ancien code est recréée' recree_l_api
+verifier 'une seule fois, rattrapage compris' egal "$(journal | grep -c 'compose up')" 1
+verifier 'le rattrapage ne montre jamais le code' sans "$sortie" "$CODE"
+verifier 'ni par groupes' sans "$sortie" "$LISIBLE"
+verifier 'le rattrapage se dit' contient "$sortie" 'recréée sans lui'
+
+neuf "${BASE}KLEAN_CODE_INSTALLATION=\n"
+COMPTES=1
+CODE_API="$CODE"
+sortie=$(cmd_etat 2>&1)
+verifier 'etat rattrape l’API relancée avec l’ancien code' recree_l_api
+verifier 'etat ne montre jamais le code rattrapé' sans "$sortie" "$CODE"
+
+neuf "${BASE}KLEAN_CODE_INSTALLATION=\n"
+COMPTES=1
+CODE_API=absente
+retirer_code_si_installe > /dev/null 2>&1
+verifier 'une API qui n’a pas la variable n’est pas recréée' aucun_demarrage
+
+neuf "${BASE}KLEAN_CODE_INSTALLATION=\n"
+COMPTES=0
+CODE_API="$CODE"
+retirer_code_si_installe > /dev/null 2>&1
+verifier 'sans compte, l’API garde son code' aucun_demarrage
+
+neuf "${BASE}KLEAN_CODE_INSTALLATION=\n"
+COMPTES=muet
+CODE_API="$CODE"
+retirer_code_si_installe > /dev/null 2>&1
+verifier 'PostgreSQL muet : rien n’est rattrapé' aucun_demarrage
+
+neuf "${BASE}KLEAN_CODE_INSTALLATION=\n"
+COMPTES=1
+CODE_API="$CODE"
+EN_MARCHE=$'postgres\ncaddy'
+retirer_code_si_installe > /dev/null 2>&1
+verifier 'une API arrêtée n’est pas rattrapée' aucun_demarrage
+verifier 'ni interrogée' sans "$(journal)" printenv
+
+for etat_inacheve in KLEAN_MAJ_EN_COURS KLEAN_RETOUR_EN_COURS; do
+  neuf "${BASE}KLEAN_CODE_INSTALLATION=\n$etat_inacheve=0.2.0\n"
+  COMPTES=1
+  CODE_API="$CODE"
+  retirer_code_si_installe > /dev/null 2>&1
+  verifier "$etat_inacheve posé : rien n’est rattrapé" aucun_demarrage
+done
+
+neuf "${BASE}KLEAN_CODE_INSTALLATION=\n"
+COMPTES=1
+CODE_API="$CODE"
+exec 8> "$KLEAN_VERROU"
+flock -n 8
+retirer_code_si_installe > /dev/null 2>&1
+exec 8>&-
+verifier 'verrou tenu ailleurs : rien n’est rattrapé' aucun_demarrage
+
+# ---- Le mot de passe provisoire d'une 0.1.x inachevée --------------------------
+
+neuf "${BASE}KLEAN_CODE_INSTALLATION=$CODE\nKLEAN_ADMIN_EMAIL=p@exemple.fr\nKLEAN_ADMIN_MOT_DE_PASSE=Provisoire\nKLEAN_RAISON_SOCIALE=Propre\n"
+COMPTES=1
+# La question « tapez NOTE » répondue dans le sous-processus seul : la doublure ne survit pas.
+sortie=$({
+  demander() { REPONSE=NOTE; }
+  montrer_puis_retirer_mot_de_passe && retirer_code_si_installe
+} 2>&1)
+verifier 'le mot de passe provisoire est montré' contient "$sortie" Provisoire
+verifier 'puis retiré' egal "$(valeur KLEAN_ADMIN_MOT_DE_PASSE)" ''
+verifier 'avec l’adresse de l’amorçage' egal "$(valeur KLEAN_ADMIN_EMAIL)" ''
+verifier 'la raison sociale' egal "$(valeur KLEAN_RAISON_SOCIALE)" ''
+verifier 'et le code' egal "$(valeur KLEAN_CODE_INSTALLATION)" ''
+verifier 'l’API n’est recréée qu’une fois' egal "$(journal | grep -c 'compose up')" 1
 
 # ---- Assurer un code -----------------------------------------------------------
 

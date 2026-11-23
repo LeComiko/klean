@@ -77,19 +77,31 @@ export function Installation() {
   useEffect(() => () => envoiEnCours.current?.abort(), [])
 
   useEffect(() => {
+    // Même forme que la connexion : un contrôleur et une minuterie, sans `AbortSignal.any`
+    // ni `AbortSignal.timeout`, absents des navigateurs d'avant 2023-2024.
     const controleur = new AbortController()
+    let demonte = false
+
+    // Cinq secondes au plus : passé ce délai, l'assistant s'affiche, et le POST dira ce
+    // qu'il en est.
+    const minuterie = window.setTimeout(() => controleur.abort(), 5000)
 
     lireEtatInstallation(controleur.signal)
       .then((etat) => {
-        if (!controleur.signal.aborted) setLecture(etat.installee ? 'installee' : 'libre')
+        if (!demonte) setLecture(etat.installee ? 'installee' : 'libre')
       })
       .catch(() => {
-        // Un abandon — le `StrictMode` monte deux fois — n'est ni une erreur ni un état.
-        // Une panne ou un 429 laissent l'assistant : le POST dira ce qu'il en est.
-        if (!controleur.signal.aborted) setLecture('inconnu')
+        // Un abandon au démontage — le `StrictMode` monte deux fois — n'est ni une erreur ni
+        // un état. Une panne, un 429 ou l'expiration laissent l'assistant.
+        if (!demonte) setLecture('inconnu')
       })
+      .finally(() => window.clearTimeout(minuterie))
 
-    return () => controleur.abort()
+    return () => {
+      demonte = true
+      window.clearTimeout(minuterie)
+      controleur.abort()
+    }
   }, [])
 
   // Le focus suit le titre à chaque changement d'écran. Comparé à l'étape vue, et non à un
@@ -236,7 +248,7 @@ export function Installation() {
             aria-current={index === position ? 'step' : undefined}
           >
             <span className="installation__numero">{index + 1}</span> {e.libelle}
-            {index < position && <span className="installation__terminee"> — terminée</span>}
+            {index < position && ' — terminée'}
           </li>
         ))}
       </ol>
@@ -285,8 +297,8 @@ export function Installation() {
               sont à valider.
             </li>
             <li>
-              La <strong>localisation automatique des sites</strong> est désactivée
-              (<code>KLEAN_GEOCODAGE=false</code>) : les coordonnées se saisissent à la main.
+              La <strong>localisation automatique des sites</strong> est désactivée : les
+              coordonnées se saisissent à la main.
               Elle se proposera avec une prochaine version, sur votre choix.
             </li>
           </ul>

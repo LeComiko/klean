@@ -152,9 +152,10 @@ Ce que dit le quatrième écran, et qui reste vrai après lui :
   qu'ils utilisent *Ma journée*. Son modèle est en `RGPD.md` §7 ; la section 11 dit le
   reste.
 - **Les durées de conservation** proposées en `RGPD.md` §5 sont à valider (section 7).
-- **La localisation automatique des sites est désactivée** (`KLEAN_GEOCODAGE=false`) :
-  les coordonnées se saisissent à la main. Elle se proposera avec une prochaine version,
-  sur votre choix.
+- **La localisation automatique des sites est désactivée** : les coordonnées se
+  saisissent à la main. Elle se proposera avec une prochaine version, sur votre choix.
+  Le script d'installation écrit déjà `KLEAN_GEOCODAGE=false` dans `.env`, que la
+  version 0.2.0 ne lit pas encore.
 - **La double authentification s'équipe dès la première connexion**, comme ci-dessus.
 
 Un code refusé ramène au premier écran. Au-delà de trente codes faux reçus par le serveur
@@ -532,6 +533,9 @@ introduite.
 - **Un retour raté se relance** par `sudo klean revenir`, qui reprend : tant qu'il n'a pas
   abouti, la base est peut-être vide, et une mise à jour est refusée. `sudo klean etat` le
   signale.
+- Une fois la base remise et KLEAN redémarré, si cette base a ses comptes, le code
+  d'installation resté dans `.env` en est retiré, et l'API recréée sans lui — comme après
+  une mise à jour.
 
 ### À la main
 
