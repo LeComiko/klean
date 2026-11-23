@@ -18,23 +18,22 @@ interface Proprietes {
  * données ont disparu ».
  */
 export function Pagination({ page, taille, total, chargement, onChanger }: Proprietes) {
+  // Une liste vide a déjà son propre message, sur chaque écran qui pagine : « Aucune
+  // ligne » y ferait un second état vide sous le premier. Ne rien rendre non plus
+  // avant le premier chargement.
+  if (total === 0) return null
+
   const pages = Math.max(1, Math.ceil(total / taille))
-  const premier = total === 0 ? 0 : (page - 1) * taille + 1
+  const premier = (page - 1) * taille + 1
   const dernier = Math.min(page * taille, total)
 
   return (
     <div className="pagination">
       <p className="pagination__compte">
-        {total === 0 ? (
-          'Aucune ligne'
-        ) : (
-          <>
-            <span className="pagination__chiffres">
-              {premier}–{dernier}
-            </span>{' '}
-            sur <span className="pagination__chiffres">{total}</span>
-          </>
-        )}
+        <span className="pagination__chiffres">
+          {premier}–{dernier}
+        </span>{' '}
+        sur <span className="pagination__chiffres">{total}</span>
       </p>
 
       {/* Masqués plutôt que désactivés quand il n'y a qu'une page : deux boutons

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
 
 import { useAuth } from '../auth/contexte'
 import { aUnRole } from '../types/auth'
@@ -9,6 +9,38 @@ import './Navigation.css'
 export function Navigation() {
   const { profil, deconnecter } = useAuth()
   const [sortie, setSortie] = useState(false)
+  const liste = useRef<HTMLUListElement>(null)
+  const [suiteGauche, setSuiteGauche] = useState(false)
+  const [suiteDroite, setSuiteDroite] = useState(false)
+  const { pathname } = useLocation()
+
+  // Où la liste déborde : le fondu n'apparaît que du côté où des noms continuent, et
+  // jamais quand tout tient — il rendrait illisible un nom entièrement visible.
+  const mesurer = useCallback(() => {
+    const element = liste.current
+    if (element === null) return
+    setSuiteGauche(element.scrollLeft > 1)
+    setSuiteDroite(element.scrollLeft + element.clientWidth < element.scrollWidth - 1)
+  }, [])
+
+  // La section courante reste visible. `nearest` sur les deux axes : la liste défile
+  // juste ce qu'il faut, et la page ne bouge pas en hauteur.
+  useEffect(() => {
+    liste.current
+      ?.querySelector('[aria-current="page"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    mesurer()
+  }, [pathname, profil, mesurer])
+
+  useEffect(() => {
+    const element = liste.current
+    if (element === null) return
+    const observateur = new ResizeObserver(mesurer)
+    observateur.observe(element)
+    return () => {
+      observateur.disconnect()
+    }
+  }, [profil, mesurer])
 
   if (profil === null) return null
 
@@ -34,7 +66,17 @@ export function Navigation() {
 
       {/* Les sections en mots, sur une ligne (étape 33). Sous la largeur qu'il faut,
           la liste défile à l'horizontale : un nom n'est jamais tronqué (§12). */}
-      <ul className="navigation__liste">
+      <ul
+        ref={liste}
+        onScroll={mesurer}
+        className={[
+          'navigation__liste',
+          suiteGauche && 'navigation__liste--suite-gauche',
+          suiteDroite && 'navigation__liste--suite-droite',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
         {visibles.map((section) => (
           <li key={section.chemin}>
             {/* NavLink pose aria-current="page" : l'état actif est annoncé, il ne

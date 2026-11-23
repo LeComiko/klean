@@ -43,11 +43,35 @@
   overflow-x: auto;
 }
 
+/* La fin de la zone défilante, marquée sans ombre (§12) : un fondu **du côté où des
+   noms continuent**, et seulement alors. Un masque permanent rendrait pâle un nom
+   entièrement visible. `black` n'est pas une couleur peinte : seul l'alpha compte. */
+.navigation__liste--suite-droite {
+  mask-image: linear-gradient(to right, black calc(100% - var(--espace-6)), transparent);
+}
+
+.navigation__liste--suite-gauche {
+  mask-image: linear-gradient(to right, transparent, black var(--espace-6));
+}
+
+.navigation__liste--suite-gauche.navigation__liste--suite-droite {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black var(--espace-6),
+    black calc(100% - var(--espace-6)),
+    transparent
+  );
+}
+
 .navigation__session {
   display: flex;
   flex-shrink: 0;
   align-items: center;
   gap: var(--espace-1);
+  /* Un filet : les noms passent sous ce groupe, et rien d'autre n'en dit la limite. */
+  padding-left: var(--espace-2);
+  border-left: 1px solid var(--border);
 }
 
 /* Un lien de section, le compte ou la sortie. Le texte plein, pas un gris : §12
