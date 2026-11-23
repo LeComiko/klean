@@ -178,7 +178,7 @@ public sealed class ServiceGeocodage
     }
 
     /// <summary>Réarme le disjoncteur. Réservé à la série, qui partage une instance entre les tests.</summary>
-    public void Rearmer() => Interlocked.Exchange(ref _reprise, 0);
+    internal void Rearmer() => Interlocked.Exchange(ref _reprise, 0);
 
     private void Suspendre(HttpResponseMessage reponse)
     {
@@ -186,10 +186,21 @@ public sealed class ServiceGeocodage
         var pause = entete?.Delta
             ?? (entete?.Date is { } date ? date - DateTimeOffset.UtcNow : PauseParDefaut);
 
-        if (pause <= TimeSpan.Zero) pause = PauseParDefaut;
+        // La Géoplateforme bloque 5 s : relancer avant prolongerait le blocage. Un Retry-After de 0 ou de 1
+        // vaut donc la même pause que l'absence d'en-tête.
+        if (pause < PauseParDefaut) pause = PauseParDefaut;
         if (pause > PauseMaximale) pause = PauseMaximale;
 
-        Interlocked.Exchange(ref _reprise, (DateTime.UtcNow + pause).Ticks);
+        var echeance = (DateTime.UtcNow + pause).Ticks;
+        var actuelle = Interlocked.Read(ref _reprise);
+
+        // Une pause ne se raccourcit pas : seule l'échéance la plus tardive est gardée.
+        while (actuelle < echeance)
+        {
+            var lue = Interlocked.CompareExchange(ref _reprise, echeance, actuelle);
+            if (lue == actuelle) break;
+            actuelle = lue;
+        }
     }
 
     private static ResultatGeocodage Analyser(byte[] corps)
@@ -221,8 +232,9 @@ public sealed class ServiceGeocodage
 
         if (label.Length == 0) return new ResultatGeocodage.Injoignable();
 
+        // Un score hors de [0, 1], ou non fini, est traité comme absent : donc à vérifier.
         double? score = proprietes.TryGetProperty("score", out var s) && s.ValueKind == JsonValueKind.Number
-            && s.TryGetDouble(out var valeur) ? valeur : null;
+            && s.TryGetDouble(out var valeur) && double.IsFinite(valeur) && valeur >= 0 && valeur <= 1 ? valeur : null;
 
         var type = proprietes.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String
             ? t.GetString()
@@ -235,16 +247,41 @@ public sealed class ServiceGeocodage
     }
 
     /// <summary>
-    /// Un texte d'un tiers, renvoyé à l'écran : sans caractère de contrôle ni de bidirectionnalité —
-    /// qui pourraient faire afficher une autre adresse que celle trouvée —, et borné.
+    /// Un texte d'un tiers, renvoyé à l'écran : une seule ligne, sans caractère de contrôle ni de mise en
+    /// forme, et borné. Le filtre se fait par catégorie Unicode : <c>Control</c> et <c>Format</c> couvrent
+    /// la bidirectionnalité — qui pourrait faire afficher une autre adresse que celle trouvée —, les
+    /// espaces de largeur nulle, U+FEFF, U+00AD et U+2060 ; une liste écrite à la main serait redondante.
+    /// Les retours à la ligne et les séparateurs de ligne ou de paragraphe deviennent une espace.
     /// </summary>
     private static string Nettoyer(string brut)
     {
-        var propre = new string(brut.Where(c => !char.IsControl(c)
-            && c is not ('\u200E' or '\u200F' or '\u061C')
-            && c is not (>= '\u202A' and <= '\u202E')
-            && c is not (>= '\u2066' and <= '\u2069')).ToArray()).Trim();
+        var sb = new StringBuilder(brut.Length);
 
-        return propre.Length > LongueurMaximaleAdresseTrouvee ? propre[..LongueurMaximaleAdresseTrouvee] : propre;
+        foreach (var c in brut)
+        {
+            var categorie = CharUnicodeInfo.GetUnicodeCategory(c);
+
+            if (c is '\t' or '\n' or '\r'
+                || categorie is UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator)
+            {
+                sb.Append(' ');
+            }
+            else if (categorie is not (UnicodeCategory.Control or UnicodeCategory.Format))
+            {
+                sb.Append(c);
+            }
+        }
+
+        // Les suites d'espaces — celles du texte, comme celles que les remplacements viennent de créer.
+        var propre = string.Join(' ', sb.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries)).Trim();
+
+        if (propre.Length <= LongueurMaximaleAdresseTrouvee) return propre;
+
+        // Jamais au milieu d'une paire de substituts : un demi-caractère s'afficherait en « � ».
+        var longueur = char.IsHighSurrogate(propre[LongueurMaximaleAdresseTrouvee - 1])
+            ? LongueurMaximaleAdresseTrouvee - 1
+            : LongueurMaximaleAdresseTrouvee;
+
+        return propre[..longueur].TrimEnd();
     }
 }
