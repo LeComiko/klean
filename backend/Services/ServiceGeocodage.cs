@@ -251,24 +251,29 @@ public sealed class ServiceGeocodage
     /// forme, et borné. Le filtre se fait par catégorie Unicode : <c>Control</c> et <c>Format</c> couvrent
     /// la bidirectionnalité — qui pourrait faire afficher une autre adresse que celle trouvée —, les
     /// espaces de largeur nulle, U+FEFF, U+00AD et U+2060 ; une liste écrite à la main serait redondante.
-    /// Les retours à la ligne et les séparateurs de ligne ou de paragraphe deviennent une espace.
+    /// Les retours à la ligne, les séparateurs de ligne ou de paragraphe et les espaces Unicode
+    /// (<c>SpaceSeparator</c>, dont U+00A0) deviennent une espace.
+    /// ⚠️ Le parcours se fait par <b>rune</b>, pas par <c>char</c> : un caractère de format hors du plan
+    /// de base (les étiquettes U+E0000, par exemple) s'écrit en deux substituts, que la catégorie d'un
+    /// <c>char</c> classe tous deux <c>Surrogate</c>, donc gardés.
     /// </summary>
     private static string Nettoyer(string brut)
     {
         var sb = new StringBuilder(brut.Length);
 
-        foreach (var c in brut)
+        foreach (var rune in brut.EnumerateRunes())
         {
-            var categorie = CharUnicodeInfo.GetUnicodeCategory(c);
+            var categorie = Rune.GetUnicodeCategory(rune);
 
-            if (c is '\t' or '\n' or '\r'
-                || categorie is UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator)
+            if (rune.Value is '\t' or '\n' or '\r'
+                || categorie is UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator
+                    or UnicodeCategory.SpaceSeparator)
             {
                 sb.Append(' ');
             }
             else if (categorie is not (UnicodeCategory.Control or UnicodeCategory.Format))
             {
-                sb.Append(c);
+                sb.Append(rune.ToString());
             }
         }
 
