@@ -157,6 +157,12 @@ jobs:
           docker compose --project-directory "$RUNNER_TEMP/version" -f "$RUNNER_TEMP/version/docker-compose.yml" --profile outils config --format json > "$RUNNER_TEMP/compose.json"
           jq -e '.networks.klean | has("enable_ipv6") | not' "$RUNNER_TEMP/compose.json"
           jq -e '.networks.klean.ipam.config == [{"subnet": "172.28.0.0/24"}]' "$RUNNER_TEMP/compose.json"
+          # Le réseau entier, et non deux de ses clés : une option ajoutée suffit à le faire recréer.
+          jq -e '.networks.klean | del(.name) == {"ipam": {"config": [{"subnet": "172.28.0.0/24"}]}}' "$RUNNER_TEMP/compose.json"
           jq -e '.services.caddy.networks | keys == ["klean", "public"]' "$RUNNER_TEMP/compose.json"
+          jq -e '.services.caddy.networks.klean.ipv4_address == "172.28.0.10"' "$RUNNER_TEMP/compose.json"
           jq -e '.services.api.networks | keys == ["klean"]' "$RUNNER_TEMP/compose.json"
           jq -e '.services.migrer.networks | keys == ["klean"]' "$RUNNER_TEMP/compose.json"
+          jq -e '.services.postgres.networks | keys == ["klean"]' "$RUNNER_TEMP/compose.json"
+          # gw_priority exige Compose 2.33+ : le plugin d'un serveur en 0.2.0 ne le lirait pas.
+          jq -e '[.services[].networks // {} | .[] | objects | has("gw_priority")] | any | not' "$RUNNER_TEMP/compose.json"

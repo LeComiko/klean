@@ -51,12 +51,17 @@ EN_MARCHE=$'postgres\napi\ncaddy'
 # Ce que l'environnement du conteneur de l'API porte encore : `printenv` l'écrit, vide ou non ;
 # « absente » le fait échouer, comme une variable que le compose ne pose pas.
 CODE_API=''
+# Ce que `compose config -q` écrit en échouant ; vide, il réussit.
+CONFIG_ERREUR=''
 nombre_de_comptes() { [ "$COMPTES" != muet ] || return 1; printf '%s\n' "$COMPTES"; }
 nombre_d_entreprises() { printf '%s\n' "$ENTREPRISES"; }
 compose() {
   printf 'compose %s\n' "$*" >> "$R/journal"
   case "$*" in
     *'ps --status running --services'*) printf '%s\n' "$EN_MARCHE" ;;
+    *'config -q'*)
+      [ -z "$CONFIG_ERREUR" ] || { printf '%s\n' "$CONFIG_ERREUR" >&2; return 1; }
+      ;;
     *'exec -T api printenv Installation__Code'*)
       [ "$CODE_API" != absente ] || return 1
       printf '%s\n' "$CODE_API"
@@ -97,6 +102,7 @@ neuf() {
   EN_MARCHE=$'postgres\napi\ncaddy'
   CODE_API=''
   INSTANT=''
+  CONFIG_ERREUR=''
   : > "$R/logger"
 }
 
@@ -367,28 +373,58 @@ verifier 'code sur une entreprise orpheline : DEPLOIEMENT.md' contient "$sortie"
 
 # ---- KLEAN_IPV6 ----------------------------------------------------------------
 #
-# docker compose refuse toutes ses commandes sur un enable_ipv6 qui n'est ni true ni false :
-# klean le dit avant, et nomme la correction.
+# docker compose refuse toutes ses commandes sur un enable_ipv6 qu'il ne lit pas comme un
+# booléen : klean le dit avant, et nomme la correction. Mais c'est compose qui décide — la
+# doublure rend ici ce que Compose v5.6 répond, mesuré.
+
+INVALIDE='error while interpolating networks.public.enable_ipv6: failed to cast to expected type: invalid boolean: oui'
 
 neuf "${BASE}KLEAN_IPV6=oui\n"
+CONFIG_ERREUR="$INVALIDE"
 sortie=$(principal etat 2>&1)
 s=$?
 verifier 'KLEAN_IPV6=oui : refus' refus "$s"
 verifier 'le refus nomme la variable fautive' contient "$sortie" '« oui »'
 verifier 'et la correction' contient "$sortie" 'KLEAN_IPV6=false'
-verifier 'rien n’est demandé à compose' egal "$(journal)" ''
+verifier 'et dit que compose ne la lit pas' contient "$sortie" 'ne le lit pas comme un booléen'
+verifier 'aucun service n’est interrogé' sans "$(journal)" 'compose ps'
+
+# Compose lit « false # pas d'IPv6 » comme false : klean ne bloque rien.
+neuf "${BASE}KLEAN_IPV6=false # pas d’IPv6\n"
+sortie=$(principal etat 2>&1)
+s=$?
+verifier 'KLEAN_IPV6 suivi d’un commentaire, que compose lit : etat passe' contient "$(journal)" 'compose ps'
+verifier 'sans refus' sans "$sortie" 'booléen'
+verifier 'compose a été consulté' contient "$(journal)" 'compose config -q'
+
+# Compose échoue pour une autre raison : ce n'est pas à ce refus-là de le dire.
+neuf "${BASE}KLEAN_IPV6=yes\n"
+CONFIG_ERREUR='required variable POSTGRES_PASSWORD is missing a value'
+(principal etat) > /dev/null 2>&1
+verifier 'une autre erreur de compose ne passe pas pour KLEAN_IPV6' contient "$(journal)" 'compose ps'
 
 for reglage in true false ''; do
   neuf "${BASE}KLEAN_IPV6=$reglage\n"
+  CONFIG_ERREUR="$INVALIDE"
   (principal etat) > /dev/null 2>&1
   verifier "KLEAN_IPV6=« $reglage » : etat interroge compose" contient "$(journal)" 'compose ps'
+  verifier "KLEAN_IPV6=« $reglage » : reconnu d’office, sans consulter compose" sans "$(journal)" 'config -q'
 done
 
 neuf "${BASE}KLEAN_IPV6=oui\n"
+CONFIG_ERREUR="$INVALIDE"
 sortie=$(principal aide 2>&1)
 s=$?
 verifier 'l’aide se montre même avec un réglage faux' statut "$s" 0
 verifier 'sans parler du réglage' sans "$sortie" KLEAN_IPV6
+
+neuf "${BASE}KLEAN_IPV6=oui\n"
+CONFIG_ERREUR="$INVALIDE"
+sortie=$(principal foo 2>&1)
+s=$?
+verifier 'une commande inconnue le reste, réglage faux ou non' contient "$sortie" 'Commande inconnue : foo'
+verifier 'avec son statut' statut "$s" 2
+verifier 'sans parler du réglage, là non plus' sans "$sortie" 'booléen'
 
 # La détection lit deux fichiers de /proc, remplacés ici.
 IPV6_DESACTIVE="$R/disable_ipv6"
@@ -526,6 +562,74 @@ sortie=$(cmd_sauvegarde_de_nuit 2>&1)
 verifier 'à 3 h, rien à retirer : la sauvegarde est faite' egal "$(sauvegardes_faites)" 1
 verifier 'à 3 h, rien à retirer : logger n’est pas appelé' egal "$(logge)" ''
 verifier 'à 3 h, rien à retirer : rien pour le courrier' egal "$sortie" ''
+
+# Un retrait qui échoue ne coûte pas la sauvegarde. Sous -e, comme klean en vrai : la série,
+# elle, tourne sans.
+neuf "${BASE}KLEAN_CODE_INSTALLATION=$CODE\n"
+COMPTES=1
+INSTANT=$A_TROIS_HEURES
+nuit
+sortie=$(
+  set -e
+  ecrire_env() { echouer 'écriture impossible'; }
+  cmd_sauvegarde_de_nuit 2>&1
+)
+s=$?
+verifier 'à 3 h, retrait en échec : la tâche réussit' statut "$s" 0
+verifier 'à 3 h, retrait en échec : la sauvegarde est faite' egal "$(sauvegardes_faites)" 1
+verifier 'à 3 h, retrait en échec : l’échec est dit à logger' contient "$(logge)" 'écriture impossible'
+verifier 'à 3 h, retrait en échec : le code reste' egal "$(valeur KLEAN_CODE_INSTALLATION)" "$CODE"
+
+# Un échec rendu sans quitter : rien n'est dit retiré, et l'API n'est pas recréée.
+neuf "${BASE}KLEAN_CODE_INSTALLATION=$CODE\n"
+COMPTES=1
+INSTANT=$HORS_DE_TROIS_HEURES
+nuit
+sortie=$(
+  ecrire_env() { return 1; }
+  cmd_sauvegarde_de_nuit 2>&1
+)
+verifier 'écriture refusée : logger ne lit pas « retiré »' sans "$(logge)" 'ce qui ne servait qu'
+verifier 'écriture refusée : l’API n’est pas recréée' aucun_demarrage
+
+# ---- revenir retire le réseau que la version d'avant ne connaît pas --------------
+#
+# Orphelin, `klean_public` garderait sa configuration, et le `up -d` de la mise à jour
+# suivante échouerait si KLEAN_IPV6 a changé entre-temps. Le retour est conduit ici jusqu'au
+# bout, sur des doublures : fichiers, images, restauration et docker.
+
+revenir_double() {
+  (
+    docker() { printf 'docker %s\n' "$*" >> "$R/journal"; }
+    confirmer() { return 0; }
+    obtenir_images() { :; }
+    installer_fichiers() { printf 'fichiers %s\n' "$1" >> "$R/journal"; }
+    restaurer_base() { printf 'restauration %s\n' "$1" >> "$R/journal"; }
+    cmd_revenir
+  )
+}
+PRECEDENTE="$R/versions/0.2.0"
+mkdir -p "$PRECEDENTE"
+for f in $FICHIERS_VERSION; do : > "$PRECEDENTE/$f"; done
+printf '0.2.0\n' > "$PRECEDENTE/VERSION"
+: > "$R/avant.dump"
+
+neuf "KLEAN_DOMAINE=k.exemple.fr\nKLEAN_VERSION=0.2.1\nKLEAN_VERSION_PRECEDENTE=0.2.0\nKLEAN_SAUVEGARDE_AVANT_MAJ=$R/avant.dump\n"
+COMPTES=1
+sortie=$(revenir_double 2>&1)
+s=$?
+verifier 'revenir : réussit' statut "$s" 0
+verifier 'revenir : klean_public est retiré' contient "$(journal)" 'docker network rm klean_public'
+verifier 'revenir : après la restauration' egal "$(journal | grep -E '^(restauration|docker network)' | cut -c1-14 | tr '\n' ' ')" 'restauration / docker network '
+verifier 'revenir : le retour est noté fini' egal "$(valeur KLEAN_RETOUR_EN_COURS)" ''
+
+# Un retour refusé avant tout arrêt ne touche pas au réseau.
+neuf "KLEAN_DOMAINE=k.exemple.fr\nKLEAN_VERSION=0.2.1\nKLEAN_VERSION_PRECEDENTE=0.2.0\nKLEAN_SAUVEGARDE_AVANT_MAJ=$R/perdue.dump\n"
+COMPTES=1
+sortie=$(revenir_double 2>&1)
+s=$?
+verifier 'revenir sans sa sauvegarde : refus' refus "$s"
+verifier 'revenir sans sa sauvegarde : le réseau reste' sans "$(journal)" 'docker network'
 
 # ---- Bilan ---------------------------------------------------------------------
 

@@ -354,10 +354,12 @@ ipv6_disponible() {
   [ "$(cat "$1" 2> /dev/null)" = 0 ] && grep -q . "$2" 2> /dev/null
 }
 
-# Vrai si $1 est une valeur de KLEAN_IPV6 que docker compose lit : true, false, ou vide —
-# le compose retombe alors sur true. Tout autre mot, « oui » par exemple, fait échouer
-# chacune de ses commandes sur « invalid boolean ».
-reglage_ipv6_valide() {
+# Vrai si $1 est une valeur de KLEAN_IPV6 que docker compose lit à coup sûr : true, false,
+# ou vide — le compose retombe alors sur true. Faux ne veut pas dire refusé : compose lit
+# aussi True, yes, off, "false" entre guillemets, ou false suivi d'un commentaire (mesuré
+# sous Compose v5.6), et refuse 1, 0 ou oui. Pour ces autres valeurs, klean le lui demande
+# (exiger_reglage_ipv6) au lieu de recopier sa règle.
+reglage_ipv6_reconnu() {
   case "$1" in
     '' | true | false) return 0 ;;
     *) return 1 ;;

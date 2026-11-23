@@ -393,14 +393,14 @@ verifier 'sans if_inet6, pas d’IPv6' faux ipv6_disponible "$dossier/actif" "$d
 verifier 'un fichier de /proc se lit, il ne se mesure pas' ipv6_disponible "$dossier/actif" /proc/self/status
 rm -rf "$dossier"
 
-# Ce que docker compose accepte dans enable_ipv6 : un autre mot — « oui » — fait échouer
-# toutes ses commandes. Vide, le compose retombe sur true.
-verifier 'KLEAN_IPV6=true est valide' reglage_ipv6_valide true
-verifier 'KLEAN_IPV6=false est valide' reglage_ipv6_valide false
-verifier 'KLEAN_IPV6 vide est valide' reglage_ipv6_valide ''
-verifier 'KLEAN_IPV6=oui est refusé' faux reglage_ipv6_valide oui
-verifier 'KLEAN_IPV6=1 est refusé' faux reglage_ipv6_valide 1
-verifier 'KLEAN_IPV6 suivi d’une espace est refusé' faux reglage_ipv6_valide 'true '
+# Ce que docker compose lit à coup sûr dans enable_ipv6. Vide, le compose retombe sur true.
+# Les autres valeurs ne sont pas refusées ici : klean les soumet à compose.
+verifier 'KLEAN_IPV6=true est reconnu' reglage_ipv6_reconnu true
+verifier 'KLEAN_IPV6=false est reconnu' reglage_ipv6_reconnu false
+verifier 'KLEAN_IPV6 vide est reconnu' reglage_ipv6_reconnu ''
+verifier 'KLEAN_IPV6=oui n’est pas reconnu d’office' faux reglage_ipv6_reconnu oui
+verifier 'KLEAN_IPV6=1 n’est pas reconnu d’office' faux reglage_ipv6_reconnu 1
+verifier 'KLEAN_IPV6 suivi d’un commentaire n’est pas reconnu d’office' faux reglage_ipv6_reconnu 'false # pas d’IPv6'
 # Une mise à jour l'ajoute, avec ce défaut, aux .env qui ne l'ont pas.
 verifier 'env.modele ajoute KLEAN_IPV6=true' egal "$(lire_env "$ici/../env.modele" KLEAN_IPV6)" true
 

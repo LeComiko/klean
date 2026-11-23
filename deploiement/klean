@@ -216,7 +216,9 @@ cmd_sauvegarder() {
 #
 # Le code d'installation part à chaque passage, 3 h compris (retirer_code_de_l_heure) :
 # il ne reste ainsi, en temps ordinaire, qu'une heure au plus dans .env et dans le
-# conteneur après le premier compte — et non jusqu'à 3 h.
+# conteneur après le premier compte — et non jusqu'à 3 h. Le coût, chaque heure : un psql
+# qui compte les comptes, et, une fois le code retiré de .env, un `compose ps` et un
+# `compose exec api printenv` qui vérifient que le conteneur ne le garde pas.
 cmd_sauvegarde_de_nuit() {
   exiger_root
   local fuseau
@@ -470,7 +472,9 @@ retirer_code_si_installe() {
   while IFS= read -r cle; do
     paires+=("$cle" '')
   done <<< "$cles"
-  ecrire_env "${paires[@]}"
+  # Un échec rendu sans quitter — sous la tâche horaire, -e ne s'applique pas — ne doit pas
+  # laisser dire « retiré » à logger quand rien ne l'a été.
+  ecrire_env "${paires[@]}" || return 1
   dire "KLEAN a ses comptes : ce qui ne servait qu'à l'installation est retiré de la configuration (${cles//$'\n'/, })."
   if [ -n "$(operation_inachevee)" ]; then
     dire "L'API, arrêtée tant que l'opération inachevée ne reprend pas, n'est pas redémarrée : elle lira la configuration à sa reprise."
@@ -902,12 +906,19 @@ ipv6_de_la_machine() {
 
 # Toute commande compose échoue sur un KLEAN_IPV6 que docker compose ne lit pas comme un
 # booléen — « oui » donne « invalid boolean », `klean etat` compris : refusé avant, en
-# nommant la correction. Vide, le compose retombe sur true.
+# nommant la correction. Mais c'est compose qui décide : true, false et une valeur vide
+# passent d'office ; pour toute autre, refus seulement si `compose config` échoue sur
+# enable_ipv6. Une règle plus stricte que la sienne bloquerait toutes les commandes,
+# `revenir`, `restaurer` et la sauvegarde horaire comprises, sur un « false # commentaire »
+# qu'il lit très bien. Une autre erreur de compose — une variable obligatoire absente —
+# n'est pas de son ressort : la commande la dira elle-même.
 exiger_reglage_ipv6() {
-  local reglage
+  local reglage erreur
   reglage=$(lire_env "$ENV" KLEAN_IPV6)
-  reglage_ipv6_valide "$reglage" ||
-    echouer "KLEAN_IPV6 vaut « $reglage » dans $ENV, et docker compose n'accepte que true ou false : aucune commande ne passerait. Corrigez la ligne — KLEAN_IPV6=true, ou KLEAN_IPV6=false sur une machine sans IPv6 —, puis relancez : sudo klean ${COMMANDE:-}"
+  ! reglage_ipv6_reconnu "$reglage" || return 0
+  erreur=$(compose config -q 2>&1) && return 0
+  [[ $erreur == *enable_ipv6* ]] || return 0
+  echouer "KLEAN_IPV6 vaut « $reglage » dans $ENV, et docker compose ne le lit pas comme un booléen : aucune commande ne passerait. Corrigez la ligne — KLEAN_IPV6=true, ou KLEAN_IPV6=false sur une machine sans IPv6 —, puis relancez : sudo klean ${COMMANDE:-}"
 }
 
 # Les réponses SMTP, en paires clé valeur pour ecrire_env : toutes, ou aucune. Une
@@ -1185,6 +1196,9 @@ afficher_fin() {
 #     (reproduit avec Compose v5, 23 novembre 2026).
 #   - Un réseau nouveau est permis : `compose run migrer` ne le touche pas, et le `up -d`
 #     qui suit le crée, puis recrée Caddy (0.2.1, `public`).
+#   - Un réseau nouveau est retiré par `revenir` (le `klean` de N+1 le conduit) : un
+#     réseau orphelin de configuration différente fait échouer le `up -d` de la mise à
+#     jour suivante, Caddy arrêté, et la relancer n'y change rien.
 #   - `migrer` ne rejoint jamais que `klean`. Branché sur `public`, son `run` recréerait
 #     ce réseau dès que sa configuration change — KLEAN_IPV6 de true à false —, Caddy
 #     branché : le même refus. Le CI le vérifie sur le compose publié.
@@ -1573,6 +1587,14 @@ cmd_revenir() {
   # D'un seul geste : tant qu'elles restent, `revenir` remettrait la base d'avant la mise
   # à jour par-dessus ce qui sera saisi demain.
   ecrire_env KLEAN_RETOUR_EN_COURS '' KLEAN_VERSION_PRECEDENTE '' KLEAN_SAUVEGARDE_AVANT_MAJ ''
+  # Un réseau que la version d'avant ne connaît pas — `public`, si elle précède 0.2.1 —
+  # reste après le `compose up -d` de restaurer_base, qui ne retire rien. Orphelin, il
+  # garde sa configuration : si KLEAN_IPV6 change d'ici la prochaine mise à jour, son
+  # `up -d` échoue pour de bon (« container … is not connected to the network
+  # klean_public »), Caddy arrêté — mesuré à la relecture. Retiré ici ; Docker refuse
+  # tant qu'un conteneur y est branché, donc une version qui s'en sert le garde. Le nom
+  # est celui du projet, `name: klean`, et du réseau.
+  docker network rm klean_public > /dev/null 2>&1 || true
   # La base d'avant a ses comptes : le code ne sert plus. Sans danger ici — l'opération
   # n'est plus inachevée, et restaurer_base a redémarré l'API —, et avant la sonde, qui
   # attend alors l'API recréée. ⚠️ Ce geste est celui de ce `klean`-ci, de la version
@@ -1608,9 +1630,11 @@ principal() {
   done
   COMMANDE="${1:-aide}"
   shift || true
+  # Les commandes connues seulement : `klean foo` répond toujours « Commande inconnue ».
   case "$COMMANDE" in
-    aide | -h | --help) ;;
-    *) exiger_reglage_ipv6 ;;
+    installer | sauvegarder | etat | journaux | code | restaurer | mettre-a-jour | revenir)
+      exiger_reglage_ipv6
+      ;;
   esac
   case "$COMMANDE" in
     installer) cmd_installer ;;
