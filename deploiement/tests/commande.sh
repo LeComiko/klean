@@ -66,6 +66,8 @@ compose() {
 sonde_https() { printf 'sonde\n' >> "$R/journal"; printf '%s\n' "$SONDE"; }
 verifier_https() { printf 'attente\n' >> "$R/journal"; [ "$SONDE" = 200 ]; }
 exiger_root() { :; }
+# Aucun volume : reprendre_env ne refuse pas une base orpheline.
+volume_postgres_existe() { return 1; }
 
 # neuf « contenu de .env » : un .env neuf, un journal vide, aucun verrou tenu.
 neuf() {
@@ -347,6 +349,69 @@ ENTREPRISES=1
 sortie=$(cmd_code 2>&1)
 verifier 'code sur une entreprise orpheline : pas de code' sans "$sortie" "$LISIBLE"
 verifier 'code sur une entreprise orpheline : DEPLOIEMENT.md' contient "$sortie" 'Une entreprise sans compte'
+
+# ---- KLEAN_IPV6 ----------------------------------------------------------------
+#
+# docker compose refuse toutes ses commandes sur un enable_ipv6 qui n'est ni true ni false :
+# klean le dit avant, et nomme la correction.
+
+neuf "${BASE}KLEAN_IPV6=oui\n"
+sortie=$(principal etat 2>&1)
+s=$?
+verifier 'KLEAN_IPV6=oui : refus' refus "$s"
+verifier 'le refus nomme la variable fautive' contient "$sortie" '« oui »'
+verifier 'et la correction' contient "$sortie" 'KLEAN_IPV6=false'
+verifier 'rien n’est demandé à compose' egal "$(journal)" ''
+
+for reglage in true false ''; do
+  neuf "${BASE}KLEAN_IPV6=$reglage\n"
+  (principal etat) > /dev/null 2>&1
+  verifier "KLEAN_IPV6=« $reglage » : etat interroge compose" contient "$(journal)" 'compose ps'
+done
+
+neuf "${BASE}KLEAN_IPV6=oui\n"
+sortie=$(principal aide 2>&1)
+s=$?
+verifier 'l’aide se montre même avec un réglage faux' statut "$s" 0
+verifier 'sans parler du réglage' sans "$sortie" KLEAN_IPV6
+
+# La détection lit deux fichiers de /proc, remplacés ici.
+IPV6_DESACTIVE="$R/disable_ipv6"
+IPV6_INTERFACES="$R/if_inet6"
+avec_ipv6() { printf '0\n' > "$IPV6_DESACTIVE"; printf '00000000000000000000000000000001 01 80 10 80 lo\n' > "$IPV6_INTERFACES"; }
+sans_ipv6() { printf '1\n' > "$IPV6_DESACTIVE"; : > "$IPV6_INTERFACES"; }
+COMPLET="${BASE}POSTGRES_PASSWORD=x\nKLEAN_JWT_CLE=y\nKLEAN_IMAGES=ghcr.io/essai/klean\n"
+
+neuf "$COMPLET"
+avec_ipv6
+reprendre_env > /dev/null 2>&1
+verifier 'reprise, machine en IPv6 : KLEAN_IPV6=true' egal "$(valeur KLEAN_IPV6)" true
+
+neuf "$COMPLET"
+sans_ipv6
+reprendre_env > /dev/null 2>&1
+verifier 'reprise, machine sans IPv6 : KLEAN_IPV6=false' egal "$(valeur KLEAN_IPV6)" false
+
+neuf "${COMPLET}KLEAN_IPV6=true\n"
+sans_ipv6
+reprendre_env > /dev/null 2>&1
+verifier 'reprise : un KLEAN_IPV6 écrit ne change pas' egal "$(valeur KLEAN_IPV6)" true
+
+# Une installation neuve : les questions répondues dans le sous-processus seul.
+printf '0.2.1\n' > "$R/VERSION"
+for machine in avec_ipv6 sans_ipv6; do
+  neuf ''
+  rm -f "$ENV"
+  "$machine"
+  ( demander_valide() { REPONSE=k.exemple.fr; }
+    verifier_dns() { :; }
+    demander_smtp() { SMTP_ENV=(); }
+    preparer_env ) > /dev/null 2>&1
+  attendu=true
+  [ "$machine" = avec_ipv6 ] || attendu=false
+  verifier "installation neuve, $machine : KLEAN_IPV6=$attendu" egal "$(valeur KLEAN_IPV6)" "$attendu"
+  verifier "installation neuve, $machine : le domaine est écrit avec" egal "$(valeur KLEAN_DOMAINE)" k.exemple.fr
+done
 
 # ---- Bilan ---------------------------------------------------------------------
 

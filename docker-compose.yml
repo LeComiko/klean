@@ -153,12 +153,20 @@ services:
       # redémarrage, et Let's Encrypt plafonne les émissions par domaine.
       - caddy-donnees:/data
       - caddy-config:/config
+    # Deux réseaux : `klean` pour joindre l'API, sous l'adresse fixe qu'elle croit
+    # (Proxy__Reseaux__0) ; `public` pour recevoir les visiteurs sous leur vraie
+    # adresse, IPv6 comprise. Caddy est le seul service branché sur `public`.
     networks:
       klean:
         ipv4_address: 172.28.0.10
+      public: {}
     logging: *journaux
 
 networks:
+  # ⚠️ Ce réseau ne change jamais de configuration, pas même d'une option : une mise à
+  # jour lance `compose run migrer` pendant que Caddy y est branché, et Docker refuse
+  # alors de le recréer — la migration échouerait. Un besoin nouveau prend un réseau
+  # nouveau, comme `public` (contrat N → N+1, deploiement/klean).
   klean:
     ipam:
       config:
@@ -166,6 +174,27 @@ networks:
         # que l'API croit. À changer — ici ET dans Proxy__Reseaux__0 et
         # ipv4_address — si ce réseau chevauche un réseau existant de la machine.
         - subnet: 172.28.0.0/24
+
+  # Les visiteurs, sous leur vraie adresse (0.2.1). Sur `klean` seul, sans IPv6, Docker
+  # recevait les connexions IPv6 par docker-proxy et les transmettait depuis la
+  # passerelle, 172.28.0.1 : tous les visiteurs IPv6 partageaient un même plafond de
+  # connexion, et une même adresse en base.
+  #
+  # Aucun sous-réseau IPv4 : Docker l'attribue de son pool. Personne n'a d'adresse à y
+  # connaître, et un sous-réseau fixé pourrait chevaucher un réseau de la machine, ce qui
+  # ferait échouer le `up -d` d'une mise à jour, après l'arrêt de l'API.
+  #
+  # KLEAN_IPV6=false sur une machine sans IPv6 : Docker crée alors ce réseau en IPv4
+  # seul, et ignore le sous-réseau ci-dessous (mesuré sous Docker 29). Avec true, sur un
+  # noyau sans IPv6, la création échouerait peut-être : non mesuré.
+  public:
+    enable_ipv6: ${KLEAN_IPV6:-true}
+    ipam:
+      config:
+        # Une plage ULA (RFC 4193) : fd, puis 40 bits tirés une fois au hasard — jamais
+        # routée hors de la machine. Le pare-feu IPv6 de Docker, ip6tables, est actif
+        # par défaut depuis la version 27.
+        - subnet: fd91:8576:6d::/64
 
 volumes:
   postgres:

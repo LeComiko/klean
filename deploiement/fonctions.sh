@@ -343,6 +343,27 @@ memoire_suffisante() {
   [ "$1" -ge 900000 ]
 }
 
+# Vrai si la machine a l'IPv6. $1 : /proc/sys/net/ipv6/conf/all/disable_ipv6, qui doit
+# exister et valoir 0 ; $2 : /proc/net/if_inet6, une ligne par adresse IPv6, qui ne doit
+# pas être vide — sous disable_ipv6=1, il existe, mais vide. Sous ipv6.disable=1, au
+# démarrage du noyau, aucun des deux n'existe.
+#
+# ⚠️ Lu, jamais mesuré : un fichier de /proc annonce une taille nulle quel que soit son
+# contenu, et `[ -s ]` le dirait toujours vide.
+ipv6_disponible() {
+  [ "$(cat "$1" 2> /dev/null)" = 0 ] && grep -q . "$2" 2> /dev/null
+}
+
+# Vrai si $1 est une valeur de KLEAN_IPV6 que docker compose lit : true, false, ou vide —
+# le compose retombe alors sur true. Tout autre mot, « oui » par exemple, fait échouer
+# chacune de ses commandes sur « invalid boolean ».
+reglage_ipv6_valide() {
+  case "$1" in
+    '' | true | false) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # $1 : les adresses du domaine, une par ligne ; $2 : celles de la machine. Écrit les
 # adresses du domaine absentes de la machine. Réussit si toutes y sont ; échoue si une
 # manque, ou si le domaine n'a aucune adresse.

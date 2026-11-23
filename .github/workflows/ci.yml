@@ -147,3 +147,16 @@ jobs:
           cat "$RUNNER_TEMP/images.txt"
           grep -qx 'ghcr.io/essai/klean-api:0.0.0' "$RUNNER_TEMP/images.txt"
           grep -qx 'ghcr.io/essai/klean-caddy:0.0.0' "$RUNNER_TEMP/images.txt"
+
+      # Les réseaux, un contrat entre une version et la suivante (deploiement/klean) :
+      # le réseau `klean` ne change jamais de configuration, sans quoi le `compose run
+      # migrer` d'une mise à jour échoue, Caddy y étant branché ; Caddy seul rejoint
+      # `public`, et `migrer` jamais. Le profil `outils` fait paraître `migrer`.
+      - name: Les réseaux du compose publié
+        run: |
+          docker compose --project-directory "$RUNNER_TEMP/version" -f "$RUNNER_TEMP/version/docker-compose.yml" --profile outils config --format json > "$RUNNER_TEMP/compose.json"
+          jq -e '.networks.klean | has("enable_ipv6") | not' "$RUNNER_TEMP/compose.json"
+          jq -e '.networks.klean.ipam.config == [{"subnet": "172.28.0.0/24"}]' "$RUNNER_TEMP/compose.json"
+          jq -e '.services.caddy.networks | keys == ["klean", "public"]' "$RUNNER_TEMP/compose.json"
+          jq -e '.services.api.networks | keys == ["klean"]' "$RUNNER_TEMP/compose.json"
+          jq -e '.services.migrer.networks | keys == ["klean"]' "$RUNNER_TEMP/compose.json"

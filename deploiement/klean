@@ -26,6 +26,9 @@ VERROU="${KLEAN_VERROU:-/run/klean.lock}"
 TROUSSEAU="${KLEAN_TROUSSEAU:-/var/lib/klean-trousseau}"
 JOURNAL_NUIT=/var/log/klean-sauvegarde.log
 JOURS_CONSERVATION=14
+# Ce que lit la détection de l'IPv6 (ipv6_disponible).
+IPV6_DESACTIVE=/proc/sys/net/ipv6/conf/all/disable_ipv6
+IPV6_INTERFACES=/proc/net/if_inet6
 
 # shellcheck source-path=SCRIPTDIR source=fonctions.sh
 . "$REPERTOIRE/fonctions.sh"
@@ -859,7 +862,30 @@ preparer_env() {
     KLEAN_JWT_CLE "$jwt" \
     KLEAN_CODE_INSTALLATION "$code" \
     KLEAN_GEOCODAGE false \
+    KLEAN_IPV6 "$(ipv6_de_la_machine)" \
     "${SMTP_ENV[@]}"
+}
+
+# true si la machine a l'IPv6, false sinon : la valeur de KLEAN_IPV6 qu'une installation
+# écrit. ⚠️ Non mesuré : sur un noyau sans IPv6, la création d'un réseau Docker IPv6 peut
+# échouer. false l'évite — Docker crée alors `public` en IPv4 seul, sous-réseau ULA ignoré
+# (mesuré sous Docker 29).
+ipv6_de_la_machine() {
+  if ipv6_disponible "$IPV6_DESACTIVE" "$IPV6_INTERFACES"; then
+    printf 'true\n'
+  else
+    printf 'false\n'
+  fi
+}
+
+# Toute commande compose échoue sur un KLEAN_IPV6 que docker compose ne lit pas comme un
+# booléen — « oui » donne « invalid boolean », `klean etat` compris : refusé avant, en
+# nommant la correction. Vide, le compose retombe sur true.
+exiger_reglage_ipv6() {
+  local reglage
+  reglage=$(lire_env "$ENV" KLEAN_IPV6)
+  reglage_ipv6_valide "$reglage" ||
+    echouer "KLEAN_IPV6 vaut « $reglage » dans $ENV, et docker compose n'accepte que true ou false : aucune commande ne passerait. Corrigez la ligne — KLEAN_IPV6=true, ou KLEAN_IPV6=false sur une machine sans IPv6 —, puis relancez : sudo klean ${COMMANDE:-}"
 }
 
 # Les réponses SMTP, en paires clé valeur pour ecrire_env : toutes, ou aucune. Une
@@ -949,6 +975,12 @@ reprendre_env() {
       KLEAN_IMAGES) A_ECRIRE+=("$cle" "$(nom_images)") ;;
     esac
   done <<< "$manquantes"
+  # Sans question : d'après la machine, comme à une installation neuve. Avant
+  # completer_env_version, qui poserait sinon le true d'env.modele. Une valeur écrite,
+  # même vide, reste : c'est celle de l'exploitant.
+  if ! grep -qE '^KLEAN_IPV6=' "$ENV"; then
+    A_ECRIRE+=(KLEAN_IPV6 "$(ipv6_de_la_machine)")
+  fi
   if [ "${#A_ECRIRE[@]}" -gt 0 ]; then
     ecrire_env "${A_ECRIRE[@]}"
   fi
@@ -1121,7 +1153,25 @@ afficher_fin() {
 #   - PostgreSQL reste en version majeure 16 : N ne sait pas faire de pg_upgrade, et un
 #     postgres:17 face au volume existant ne démarrerait pas.
 #   - Le compose reste lisible par le plugin docker compose de l'installation : rien ne
-#     le met à jour de lui-même.
+#     le met à jour de lui-même. D'où, en 0.2.1, ni `gw_priority` (Compose 2.33+) ni
+#     rien qu'un plugin plus ancien ne lirait.
+#   - Le réseau `klean` du compose ne change jamais de configuration : même sous-réseau,
+#     172.28.0.0/24, aucune option ajoutée. N arrête l'API, puis lance `compose run --rm
+#     migrer` pendant que Caddy tourne ; Compose voudrait recréer un réseau dont la
+#     configuration a changé, et Docker le refuse tant qu'un conteneur y est branché
+#     (« has active endpoints ») : la migration échouerait sur tous les serveurs
+#     (reproduit avec Compose v5, 23 novembre 2026).
+#   - Un réseau nouveau est permis : `compose run migrer` ne le touche pas, et le `up -d`
+#     qui suit le crée, puis recrée Caddy (0.2.1, `public`).
+#   - `migrer` ne rejoint jamais que `klean`. Branché sur `public`, son `run` recréerait
+#     ce réseau dès que sa configuration change — KLEAN_IPV6 de true à false —, Caddy
+#     branché : le même refus. Le CI le vérifie sur le compose publié.
+#   - KLEAN_IPV6 (0.2.1) : env.modele l'ajoute à true, le défaut du compose. N, s'il est
+#     antérieur à 0.2.1, ne regarde pas si la machine a l'IPv6 : sur une machine sans,
+#     la création de `public` échouerait peut-être après l'arrêt de l'API et la migration
+#     (non mesuré). La reprise : KLEAN_IPV6=false dans .env, puis sudo klean
+#     mettre-a-jour. Le `klean` de N étant figé, seuls DEPLOIEMENT.md et les notes de
+#     version de la 0.2.1 peuvent le dire.
 #   - Le code d'installation (lot A2) : le compose le lit sous le nom
 #     KLEAN_CODE_INSTALLATION, et le passe à l'API en Installation__Code. L'API de N+1
 #     accepte un code de 20 symboles de ALPHABET_CODE, et démarre normalement si un code
@@ -1535,6 +1585,10 @@ principal() {
   done
   COMMANDE="${1:-aide}"
   shift || true
+  case "$COMMANDE" in
+    aide | -h | --help) ;;
+    *) exiger_reglage_ipv6 ;;
+  esac
   case "$COMMANDE" in
     installer) cmd_installer ;;
     sauvegarder)
