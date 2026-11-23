@@ -139,8 +139,10 @@ la création ne reçoit plus de mot de passe : le serveur en tire un, l'affiche 
 fois** à l'administrateur, et ne le garde que par empreinte, comme tout autre. La colonne
 `MotDePasseProvisoire` marque le compte jusqu'à la première connexion, qui impose de le
 remplacer. L'administrateur ne connaît donc le mot de passe d'un collègue que jusqu'à ce que
-celui-ci se connecte. Le premier administrateur, dont le mot de passe a été écrit dans
-`.env`, suit la même règle.
+celui-ci se connecte. Le premier administrateur, depuis le lot A2 de l'étape 34, choisit
+le sien dans l'assistant d'installation : il n'est écrit nulle part, ni provisoire. Créé
+par les variables d'amorçage — le parcours manuel de `DEPLOIEMENT.md` —, son mot de passe
+a été écrit dans `.env`, et il suit la même règle que les autres.
 
 ⚠️ **Ni le mot de passe ni le jeton de rafraîchissement ne sont stockés** : seules
 leurs empreintes le sont, SHA-256 pour le second. Une fuite de `JetonsRafraichissement`
