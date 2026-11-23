@@ -429,6 +429,15 @@ les écrans de référence (§11), et ce que lit un humain. Ce que la générati
   et par compte** sur `connexion`, `mot-de-passe-oublie` et `reinitialiser`.
   Plafonds dans `PlafondsDebit`. Le verrouillage d'Identity est par compte : il
   ne ralentit en rien le bourrage d'identifiants, un essai sur cent comptes.
+
+  ⚠️ **Tous les plafonds par adresse comptent sous `LimiteurDebit.CleDAdresse`**
+  — `AuthController`, `SecondFacteurController` et `InstallationController` —, qui
+  ramène une IPv4 encapsulée en IPv6 à son IPv4 et **regroupe l'IPv6 par son /64**. Un
+  seul hôte en possède des milliards : compté à l'adresse entière, il tournerait dans son
+  préfixe et ne rencontrerait jamais son plafond. Le regroupement ne vaut que pour le
+  plafond : `AdresseIp` des sessions reste l'adresse brute, celle que le diagnostic
+  d'un rejeu veut lire (`RGPD.md` §9.2). Il ne remplace pas non plus le réseau `public`
+  de Caddy (§6 bis, §10) : sans lui, c'est la passerelle Docker qui est comptée.
   Une tentative refusée n'est pas comptée, sinon réessayer prolongerait
   indéfiniment le blocage. Compteur en mémoire de processus : derrière plusieurs
   instances, la limite est par instance.
@@ -591,6 +600,16 @@ client choisir son adresse, donc sortir du plafond à volonté. D'où une liste 
 réseaux, vide par défaut, qui **remplace** la confiance par défaut en la boucle locale,
 et un seul saut retenu. Jamais `ASPNETCORE_FORWARDEDHEADERS_ENABLED`, qui croit tout
 le monde. Éprouvé par `ExploitationTests`, dans les deux sens.
+
+**Caddy est sur deux réseaux, et `Proxy:Reseaux` ne change pas** (0.2.1). `klean`, à
+l'adresse fixe `172.28.0.10`, sert à joindre l'API : c'est cette adresse, et elle seule,
+que `Proxy__Reseaux__0` désigne. `public` — une plage ULA `fd91:8576:6d::/64` pour
+l'IPv6, l'IPv4 laissée à Docker, sans `gw_priority` — ne sert qu'à **recevoir** les
+visiteurs, sous leur vraie adresse, IPv6 comprise. Caddy est le seul service qui y soit
+branché : `api`, `postgres` et `migrer` restent sur `klean` seul. Le saut de Caddy vers
+l'API, lui, n'a pas changé, et l'API lit toujours l'adresse du visiteur dans
+`X-Forwarded-For`, que Caddy pose. `KLEAN_IPV6` règle `enable_ipv6` de `public` :
+`true` par défaut, `false` sur une machine sans IPv6 (`DEPLOIEMENT.md` §9).
 
 ⚠️ **Tout en-tête de réponse se pose dans `OnStarting`, pas à l'aller.**
 `UseExceptionHandler` vide les en-têtes avant d'écrire son 500 : `EnTetesSecurite`
@@ -1952,7 +1971,7 @@ Npgsql cherche `libgssapi_krb5`, absente de l'image .NET, et écrit « Error: �
 open shared object file » au premier démarrage. Sans conséquence, mais c'est la première
 ligne qu'un exploitant lirait.
 
-**Huit pièges du script d'installation** (`deploiement/`, étape 34), chacun rencontré en
+**Dix pièges du script d'installation** (`deploiement/`, étape 34), chacun rencontré en
 l'écrivant ou en le relisant :
 
 - **Un fichier de `/etc/cron.d` dont le nom porte un point est ignoré par cron**, sans
@@ -1977,7 +1996,8 @@ l'écrivant ou en le relisant :
   de la nouvelle. Ce que la version N exige de la version N+1 — le manifeste `FICHIERS`
   de l'archive, les noms de ses ressources et de son `.sha256`, les services du compose, les
   variables `KLEAN_VERSION` et `KLEAN_IMAGES`, `/home/app/.aspnet`, les variables d'état
-  d'une mise à jour, et depuis le lot A2 le nom et le format du code d'installation — est
+  d'une mise à jour, le nom et le format du code d'installation depuis le lot A2, et depuis
+  la 0.2.1 la configuration du réseau `klean` et la règle des réseaux nouveaux — est
   un **contrat** : le changer casse la mise à jour de tous les serveurs restés en N. La
   liste complète est le commentaire « Ce que la version installée N exige de la version
   N+1 » de `deploiement/klean` : la lire avant de toucher à l'un de ces points, et ne pas la
@@ -1986,7 +2006,9 @@ l'écrivant ou en le relisant :
   sa recréation** (lot A2). Elle ne lit son environnement qu'à la création de son
   conteneur : vider `.env` ne suffit pas, le conteneur garderait le code. C'est ce que
   fait `retirer_code_si_installe`, appelée par `installer`, `etat`, `code`, après la bascule
-  d'une mise à jour, après un `revenir`, et après la sauvegarde de la nuit. Quatre choses à
+  d'une mise à jour, après un `revenir`, et **à chaque passage horaire du cron**
+  (`retirer_code_de_l_heure`, 0.2.1) : le code ne reste donc dans `.env` et dans le
+  conteneur que l'heure qui suit le premier compte, et non jusqu'à 3 h. Quatre choses à
   savoir avant d'y toucher :
   - ⚠️ **Une commande d'état ne défait pas un arrêt voulu.** `.env` est vidé dans tous les
     cas, mais l'API n'est recréée — `compose up -d --no-deps api` — que si elle tourne, et
@@ -2003,8 +2025,13 @@ l'écrivant ou en le relisant :
     qu'avec un `KLEAN_ADMIN_MOT_DE_PASSE` vide : une installation 0.1.x inachevée ne l'a pas
     encore affiché, et le retirer perdrait le seul accès au compte. Le code, lui, part.
   - Une mise à jour depuis 0.1.x est conduite par l'ancien `klean`, qui ne retire rien : le
-    code reste dans `.env` jusqu'au prochain `klean etat`, ou jusqu'à la sauvegarde de la
-    nuit.
+    code reste dans `.env` jusqu'au prochain `klean etat`, ou jusqu'au passage horaire
+    suivant du cron.
+  - **La tâche horaire le dit au journal du système, jamais au courrier de cron.** Sa
+    sortie va à `logger -t klean`, et seulement s'il y a eu quelque chose à faire :
+    `journalctl -t klean`. Chaque heure où l'API est recréée aurait sinon envoyé un
+    courrier. Elle tourne dans un sous-shell, pour qu'un échec — `.env` illisible — ne coûte
+    pas la sauvegarde de 3 h qui suit.
 
   Ces gestes sont éprouvés par `deploiement/tests/commande.sh`, qui source `klean` et
   remplace compose, psql et la sonde HTTPS par des doublures.
@@ -2017,6 +2044,34 @@ l'écrivant ou en le relisant :
   où `cut` lit tout, puis vérifier la longueur. La forme à `head -c 20` de `.env.example`
   et du refus de démarrer de l'API vaut pour un terminal, sans `pipefail`, et porte
   `LC_ALL=C`.
+- **Le réseau d'un compose ne change pas de configuration sous un `compose run`, tant
+  qu'un autre service y est branché** (0.2.1). Compose recrée de lui-même un réseau dont
+  la configuration a changé, mais Docker refuse tant qu'un conteneur y est branché :
+  `network … has active endpoints`. Or une mise à jour arrête l'API puis lance `compose run
+  --rm migrer` **pendant que Caddy tourne** : activer l'IPv6 sur `klean` aurait fait échouer
+  la migration sur toutes les instances (reproduit sous Compose v5). Un besoin nouveau prend
+  donc un **réseau nouveau**, que `up -d` crée ensuite avant de recréer Caddy — d'où
+  `public`, et `klean` inchangé octet pour octet. Trois conséquences :
+  - ⚠️ **`migrer` ne rejoint jamais que `klean`.** Branché sur `public`, son `run` recréerait
+    ce réseau dès que `KLEAN_IPV6` passe de `true` à `false`, Caddy branché : le même refus.
+    Le CI le vérifie sur le compose publié.
+  - ⚠️ **Un réseau orphelin, de configuration différente, fait échouer le `up -d`**
+    (« container … is not connected to the network klean_public »), Caddy arrêté, et relancer
+    n'y change rien. `revenir` retire donc `klean_public` à la fin d'un retour réussi — Docker
+    le refuse tant qu'un conteneur s'en sert —, et le remède d'une machine bloquée est dans
+    `DEPLOIEMENT.md` §9.
+  - ⚠️ **Le contrat N → N+1 le porte** : le `klean` de N conduit la mise à jour, et ne sait
+    rien de `KLEAN_IPV6`. Voir le commentaire de `deploiement/klean`, à ne pas recopier ici.
+- **Sans réseau IPv6, tous les visiteurs IPv6 arrivent sous l'adresse de la passerelle
+  Docker, et chaque plafond devient commun** (0.2.1). Le domaine a un enregistrement AAAA,
+  Docker écoute sur `[::]:443` par `docker-proxy`, et un réseau sans IPv6 retransmet depuis sa
+  passerelle : mesuré sur le VPS, `AdresseIp = 172.28.0.1` en base pour une session ouverte
+  depuis un Mac et pour une autre depuis un iPhone, tous deux en IPv6. Le plafond de
+  connexion est alors le même pour tous les visiteurs IPv6 — l'un l'épuise, les autres sont
+  bloqués —, sans aucune erreur ni aucun symptôme fonctionnel. `Proxy:Reseaux` n'y change
+  rien : la passerelle est bien Caddy, du point de vue de Docker. Seule la vraie adresse,
+  reçue par un réseau IPv6, y remédie. Vérification : une session ouverte en IPv6 doit
+  porter une adresse IPv6, pas `172.28.0.1`.
 
 ---
 
@@ -2196,6 +2251,15 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   courante a un fond de marque, l'onglet courant de la sous-navigation un filet : deux
   niveaux, deux formes. Trop étroite, la liste des sections défile à l'horizontale ;
   un nom n'est jamais tronqué.
+
+  ⚠️ **Depuis la 0.2.1, la barre dit où elle continue.** Un fondu se pose du côté où des
+  noms dépassent de la vue, et seulement de ce côté — un masque permanent pâlirait un nom
+  entièrement visible, et l'ombre est interdite (§12). La section courante et le lien qui
+  reçoit le focus au clavier restent visibles, contour compris : `scroll-padding-inline`
+  d'une largeur de fondu les arrête avant le masque. Le groupe du compte et de la
+  déconnexion a un filet à gauche, sinon rien ne dit où les noms passent sous lui. Dans
+  la sous-navigation, la flèche d'une ressource enfant suit son onglet à la ligne au lieu
+  de rester seule en tête ; et une liste vide n'a qu'un état vide, pas deux.
 
   ⚠️ **Le rôle `Agent` a une section depuis l'étape 25**, *Ma journée*, qui est sa
   destination d'arrivée ; avant, il arrivait sur un refus, et le compte était le seul

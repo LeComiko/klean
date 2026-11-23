@@ -298,7 +298,9 @@ Les tables du modèle, plus celles d'Identity. « DP » = donnée personnelle.
   exemptée de journalisation parce qu'un site est un lieu ; le champ peut faire
   mentir cette exemption. Parade proposée au §9.5.
 - **`JetonsRafraichissement.AdresseIp`** est la seule adresse IP du produit. Elle
-  n'était jamais purgée ; elle l'est à trente jours depuis §9.2.
+  n'était jamais purgée ; elle l'est à trente jours depuis §9.2. Depuis la 0.2.1, c'est
+  la **vraie adresse du visiteur**, IPv6 comprise (§9.2), et non plus celle de la
+  passerelle Docker : elle identifie donc mieux, et sa durée compte davantage.
 - **`Anomalies.Description`** est un texte libre, comme les consignes, et l'écran demande
   de l'écrire « sans nommer de personne ».
 - **`PhotosAnomalie.Contenu`** est une image, et une image de couloir peut montrer
@@ -725,6 +727,24 @@ lointaine passe la seconde condition dès que `DateRevocation` est nulle. Le pr�
 été éprouvé sur sept cas limites — vivant, révoqué d'hier, révoqué à 29 et 31 jours,
 expiré sans révocation à 10 et 40 jours — et la classification du rapport s'accorde
 exactement avec ce que le `DELETE` emporterait.
+
+**Depuis la 0.2.1, cette adresse est la vraie.** Jusque-là, un visiteur qui arrivait en
+IPv6 était reçu par Docker, qui retransmettait la connexion depuis la passerelle du
+réseau : l'API enregistrait `172.28.0.1` — mesuré en base sur deux sessions ouvertes en
+IPv6, depuis un ordinateur et un téléphone. La colonne ne désignait alors personne pour ces
+visiteurs-là, et le plafond de connexion leur était commun. Caddy est désormais sur un
+second réseau, `public`, qui a l'IPv6 (`DEPLOIEMENT.md`, schéma de l'introduction et §9) : l'adresse enregistrée
+est celle du visiteur, en IPv4 comme en IPv6. Ce que cela change pour le traitement :
+
+- ⚠️ **La colonne devient plus identifiante**, ce qu'elle n'était pas pour les visiteurs
+  IPv6 : une adresse IPv6 complète, et non plus celle d'un équipement du serveur. Elle reste
+  une donnée personnelle, avec l'adresse IPv4 qu'elle a toujours été.
+- **Sa durée ne change pas** : **30 jours après la mort du jeton** — révocation ou
+  expiration —, par `purge-jetons-rafraichissement.sql`, comme ci-dessus. Aucune nouvelle
+  table, aucune nouvelle colonne, aucun nouvel usage : le diagnostic d'un rejeu.
+- **Le plafond de débit ne lit pas cette colonne** : il compte l'IPv6 par son /64
+  (`CLAUDE.md` §6), en mémoire de processus, sans rien écrire. Le regroupement n'altère pas
+  la valeur stockée, qui reste l'adresse brute.
 
 ### 9.3 — ✅ CORRIGÉ — il n'existait aucun chemin d'effacement pour un compte sans fiche agent
 
