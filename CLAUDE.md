@@ -1561,20 +1561,25 @@ n'est lue par rien.
 
 **La route contrôle dans cet ordre**, administrateur seul comme l'écriture des sites :
 
-1. le **plafond par compte**, trente sur quinze minutes ;
+1. le **plafond par compte**, trente sur quinze minutes, avec **son propre message** —
+   `SitesController.RefusPlafondCompte` —, qui écrit « Trente » et « quinze » en toutes
+   lettres : un test le compare à `PlafondsDebit` ;
 2. le réglage de **l'entreprise du jeton**, lu sous la RLS et cadré sur son `Id` : désactivé,
    ou entreprise introuvable, 409 « La localisation des sites est désactivée : cochez-la dans
    Entreprise. » ;
 3. les champs, refusés en 400 et en français : l'adresse est obligatoire, les bornes sont
    celles de `Site` — 200, 10 et 100 —, un caractère invisible est refusé, et **la
    recherche** — l'adresse et la ville jointes par une espace — doit compter de 3 à
-   200 caractères et commencer par une lettre ou un chiffre, les bornes mesurées du
-   service ;
+   200 caractères et commencer par une lettre ou un chiffre décimal, les bornes mesurées du
+   service. ⚠️ **Le premier caractère se juge par rune des deux côtés** : `Rune.IsLetterOrDigit`
+   au serveur, `/^[\p{L}\p{Nd}]/u` à l'écran — pas `\p{N}`, qui laisserait passer « ½ » et « Ⅳ » ;
 4. le **plafond global**, dix par seconde pour toute l'instance, 429 avec son propre message ;
 5. le service, et son disjoncteur : 200 si l'adresse est trouvée ; 400 « Adresse
    introuvable » si la réponse est vide — jamais des coordonnées nulles à la place — ; 503
    pour tout le reste : injoignable, délai dépassé, tout statut hors 2xx, réponse illisible,
-   trop grosse ou hors bornes, disjoncteur ouvert.
+   trop grosse ou hors bornes, disjoncteur ouvert. ⚠️ L'écran dit « le serveur ne répond pas »
+   pour un 502 ou un 504 du proxy, sans corps, comme pour un `TypeError` de `fetch` ; le 503
+   garde le message du serveur.
 
 Six choses à savoir avant d'y toucher :
 

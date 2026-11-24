@@ -626,7 +626,9 @@ de la forme « votre adresse a pu être transmise à l'IGN, sans votre nom, entr
 telle date ». ⚠️ **Les deux dates sont le dernier passage dans chaque sens,
 pas l'historique** : un réglage coché, décoché puis recoché a perdu la date de sa première
 activation. L'exploitant qui le change plus d'une fois en garde trace de son côté — son
-registre, par exemple (§11).
+registre, par exemple (§11). ⚠️ **Un retour (`klean revenir`) ou une restauration ramène le
+réglage et ses deux dates à l'état de la sauvegarde** : ce qui a été coché ou décoché depuis
+n'y est plus. À noter dans le registre avant de revenir.
 
 **La notification de l'article 19** — prévenir chaque destinataire d'une rectification ou
 d'un effacement — est sans doute impossible envers l'IGN, qui ne reçoit aucun nom et ne
@@ -667,8 +669,8 @@ collecte une information sur un salarié doit avoir été porté à sa connaissa
 > **À quoi servent les coordonnées de votre domicile** : à calculer la distance entre
 > chez vous et un site, lorsqu'il faut trouver un remplaçant. C'est un des trois
 > critères de classement des candidats, avec votre connaissance du site et vos heures
-> déjà planifiées dans la semaine. **L'adresse de votre domicile n'est jamais envoyée à un
-> service de localisation.**
+> déjà planifiées dans la semaine. **KLEAN n'envoie jamais l'adresse enregistrée dans
+> votre fiche à un service de localisation.**
 >
 > **Ce que l'écran « Ma journée » relève de votre position** : quand vous appuyez sur
 > *Démarrer* et sur *Terminer*, et seulement à ce moment-là, votre téléphone donne votre
@@ -702,7 +704,9 @@ qui fait partir vers l'IGN l'adresse des **sites** : le bouton *Localiser* n'exi
 la fiche d'un site, et une invariante de l'écran l'interdit sur les fiches agents
 (`CLAUDE.md` §11). Elle dit « service de localisation » et non « service extérieur » parce
 que l'hébergeur et le stockage des sauvegardes détiennent la base entière, domiciles
-compris (§4, sortie 3). Elle **tombera** si les domiciles sont un jour géocodés, par l'IGN
+compris (§4, sortie 3). La formule parle de « l'adresse enregistrée dans votre fiche » : un
+site, lui, peut être localisé, et si une personne y habite, c'est l'adresse du **site** qui
+part, jamais celle de sa fiche. Elle **tombera** si les domiciles sont un jour géocodés, par l'IGN
 ou par tout autre service, et la note devra changer avant le code.
 
 ---
@@ -1242,7 +1246,10 @@ l'information remise aux clients particuliers, avec la phrase modèle du §6 ; g
 copie datée des conditions d'utilisation de la Géoplateforme et de sa page relative aux
 données personnelles, sur lesquelles repose la qualification du §1 ; reporter l'IGN dans
 son registre, parmi les destinataires (art. 30(1)(d)), et y écrire qu'aucun transfert hors
-de l'Union n'est connu (art. 30(1)(e), §4) ; noter chaque changement du réglage,
+de l'Union n'est connu (art. 30(1)(e), §4) ; noter chaque changement du réglage — et chaque retour en arrière : `klean revenir`, comme une
+restauration de sauvegarde, ramène le réglage **et ses deux dates** à l'état de la sauvegarde
+(DEPLOIEMENT.md §5), si bien qu'une activation ou une désactivation faite depuis a disparu des
+deux dates ; la noter dans le registre **avant** de revenir,
 l'application n'en gardant que le dernier dans chaque sens (§6) ; et, derrière un pare-feu
 sortant, ouvrir le port 443 vers `data.geopf.fr` (`DEPLOIEMENT.md` §1).
 

@@ -62,8 +62,24 @@ l'instance n'y est envoyée (`RGPD.md` §4).
 *Localiser* dans la fiche d'un site. La localisation est désactivée par défaut, et se coche
 dans l'écran *Entreprise*. Derrière un pare-feu sortant, ouvrez ce port vers cet hôte ;
 fermé, le bouton répond que la Géoplateforme ne répond pas, et les coordonnées se
-saisissent à la main. Si vous faites passer les sorties de l'API par un proxy de
-l'environnement (`HTTPS_PROXY`), il voit l'hôte, pas le contenu : la requête est chiffrée
+saisissent à la main. Pour vérifier la sortie, depuis l'hôte :
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' 'https://data.geopf.fr/geocodage/search?q=paris&limit=1'
+```
+
+Attendu : `200`. ⚠️ Cela éprouve l'hôte, pas le conteneur : les règles `DOCKER-USER` d'un
+pare-feu peuvent traiter le trafic du conteneur autrement que celui de l'hôte. Derrière un
+pare-feu fermé, l'écran dit « ne répond pas » en 5 secondes au plus, et le journal technique ne
+montre que la ligne `POST /api/sites/localiser 503` : la garde du journal est voulue, aucun
+détail de la requête n'y est écrit.
+
+Un proxy de sortie ne se règle pas avec le script. `docker-compose.yml` ne transmet au service
+`api` ni `HTTPS_PROXY` ni `Geocodage__*`, et `klean` réécrit `docker-compose.yml` à chaque mise à
+jour (il fait partie des fichiers de la version) : **avec le script, ces réglages n'ont pas de
+voie qui survive à une mise à jour**. Dans le parcours manuel, ils passent par l'environnement du
+service `api`, que vous écrivez vous-même dans le compose. Si vous faites passer les sorties de
+l'API par un proxy de l'environnement (`HTTPS_PROXY`), il voit l'hôte, pas le contenu : la requête est chiffrée
 de bout en bout, et l'adresse recherchée, qui est dans son URL, ne lui est pas lisible —
 sauf à un proxy qui déchiffre le TLS, ce qui demanderait d'installer son autorité dans le
 conteneur de l'API.
@@ -554,6 +570,11 @@ déjà, rendu systématique : défaire une migration qui a ajouté une colonne s
 qu'elle contenait, et le code qui la défait n'existe que dans la version qui l'a
 introduite.
 
+- ⚠️ **Le réglage de localisation des sites suit la base.** La sauvegarde ne connaît que l'état
+  d'avant la mise à jour : après un retour vers une 0.2.x, la colonne n'existe pas et le réglage
+  disparaît ; après un nouveau passage en 0.3.0, il faut **recocher** la case dans l'écran
+  *Entreprise*. Même entre deux 0.3.x, le réglage et ses deux dates reviennent à ce qu'ils
+  étaient à la sauvegarde (`RGPD.md` §6).
 - **Dans les quatorze jours**, comme les sauvegardes : au-delà, la sauvegarde d'avant la
   mise à jour a été supprimée par la rotation, `revenir` le dit et ne touche à rien.
 - Tout est vérifié **avant le premier arrêt** : les fichiers de la version précédente, la
