@@ -297,9 +297,8 @@ export function Installation() {
               sont à valider.
             </li>
             <li>
-              La <strong>localisation automatique des sites</strong> est désactivée : les
-              coordonnées se saisissent à la main.
-              Elle se proposera avec une prochaine version, sur votre choix.
+              La <strong>localisation automatique des sites</strong> est désactivée : à activer dans
+              Entreprise, qui dit ce qui part vers l’IGN.
             </li>
           </ul>
 
