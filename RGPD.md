@@ -20,6 +20,7 @@ aucun serveur de l'auteur, aucune télémétrie. Cela décide des rôles :
 |---|---|
 | **Responsable de traitement** | l'entreprise de propreté qui exploite l'instance |
 | **Sous-traitants** | son hébergeur, son fournisseur SMTP s'il en configure un, et le stockage de ses sauvegardes s'il appartient à un tiers (§4). Google l'a été jusqu'au 3 octobre 2026, par les polices (§9.1) |
+| **Destinataire tiers** | la Géoplateforme de l'IGN, si l'entreprise active la localisation des sites (T6, §4) : responsable de ses propres traitements, **ni sous-traitant ni responsable conjoint** — une lecture, à faire valider, ci-dessous |
 | **L'auteur du logiciel** | ni responsable, ni sous-traitant : il ne traite aucune donnée, n'y a aucun accès et n'en reçoit aucune |
 
 ⚠️ **Une entreprise qui héberge KLEAN pour d'autres entreprises devient leur
@@ -31,7 +32,7 @@ logique des données n'est pas une dispense de contrat.
 La licence AGPL n'a aucun effet sur ces rôles. Elle oblige à publier les
 modifications ; elle ne transfère aucune responsabilité de traitement.
 
-**Personnes concernées**, trois catégories :
+**Personnes concernées**, quatre catégories :
 
 1. **Les agents** — salariés de l'entreprise. La catégorie la plus exposée : nom,
    adresse, **coordonnées GPS du domicile**, absences, et depuis l'étape 25 la **distance
@@ -42,6 +43,46 @@ modifications ; elle ne transfère aucune responsabilité de traitement.
 3. **Les contacts clients** — nom, courriel et téléphone d'un interlocuteur chez le
    donneur d'ordre. Données **professionnelles**, et pas toujours celles d'une
    personne morale : voir §8.3.
+4. **Les occupants d'un site qui est un domicile** — souvent le client particulier
+   lui-même. L'adresse d'un bureau ne désigne personne ; celle d'une maison individuelle
+   désigne ceux qui y vivent, et c'est elle qui part vers l'IGN quand le site est localisé
+   (T6).
+
+### L'IGN, destinataire de la localisation des sites — une lecture, à faire valider
+
+Depuis la 0.3.0, une entreprise peut faire localiser ses sites par la Géoplateforme de
+l'IGN : la voie, le code postal et la commune d'un site partent, à chaque clic sur
+*Localiser*, et reviennent sous forme de coordonnées (T6, §4). ⚠️ **Ce qui suit est une
+lecture, pas un avis.** C'est le premier point à soumettre au juriste, avec le risque
+résiduel qui le suit : si l'une ou l'autre tombe, c'est la fonction qui est en cause, pas
+seulement sa documentation.
+
+**La qualification proposée : destinataire tiers, responsable distinct de ses propres
+traitements.** Elle se fonde sur ce que fait l'IGN, et non sur l'absence de contrat — qui
+découle de la qualification et ne la fonde pas (EDPB, lignes directrices 07/2020) :
+
+- il rend un **service public** de diffusion d'une donnée de référence, la Base Adresse
+  Nationale, **à l'identique à tout demandeur**, sans clé ni inscription ;
+- il décide **seul** de ce qu'il garde des requêtes, pourquoi et combien de temps ;
+- il ne garde **rien pour le compte** de l'exploitant : la réponse est rendue, et rien
+  n'est tenu à la disposition de l'exploitant ensuite.
+
+**Pourquoi pas un sous-traitant** : l'IGN ne traite pas des données sur instruction de
+l'exploitant, pour la finalité de l'exploitant ; il répond à une question sur une adresse,
+comme il répond à tous. **Pourquoi pas un responsable conjoint** : l'exploitant décide seul
+d'envoyer — il coche le réglage, puis clique —, l'IGN décide seul de ce qui suit la
+réception ; aucun des deux ne détermine les moyens ou la finalité de l'autre.
+
+Sources lues le 23 novembre 2026 : les conditions générales d'utilisation de la
+Géoplateforme (cartes.gouv.fr, version du 15 octobre 2024) et sa page relative aux données
+personnelles. La qualification est **à relire si elles changent**.
+
+⚠️ **Le risque résiduel, écrit plutôt que tu.** Une autorité pourrait voir le calcul des
+coordonnées comme un traitement réalisé **pour le compte** de l'exploitant. L'article 28
+exigerait alors un contrat que les conditions de l'IGN ne fournissent pas, et la fonction
+serait à désactiver. Ce qui l'atténue, sans l'écarter : aucun nom ne part ; pour un bureau
+ou un immeuble, aucune donnée personnelle ne part, selon cette lecture ; et la fonction est
+**désactivée par défaut**, chaque entreprise l'activant en connaissance de cause.
 
 ---
 
@@ -194,14 +235,43 @@ pas un. `DEPLOIEMENT.md` §10 lui demande de consigner le geste de son côté.
 
 | | |
 |---|---|
-| **Finalité** | joindre l'interlocuteur du donneur d'ordre, et localiser les sites |
-| **Base légale proposée** | art. 6(1)(b) et art. 6(1)(f) |
-| **Personnes** | contacts clients |
+| **Finalité** | joindre l'interlocuteur du donneur d'ordre, et localiser les sites — à la main, ou depuis l'adresse par la Géoplateforme de l'IGN (0.3.0) |
+| **Base légale proposée** | art. 6(1)(b) et art. 6(1)(f) ; pour l'envoi d'une adresse à l'IGN, art. 6(1)(f), voir ci-dessous |
+| **Personnes** | contacts clients ; occupants d'un site qui est un domicile (§1) |
 | **Données** | nom, adresse, courriel, téléphone du client ; nom, adresse et coordonnées GPS du site ; **consignes en texte libre** |
-| **Tables** | `Clients`, `Sites` |
-| **Accès** | rôles internes et `ClientSyndic`, ce dernier cadré sur son propre `ClientId` |
+| **Tables** | `Clients`, `Sites` ; le réglage `GeocodageActif` et ses deux dates sur `Entreprises` |
+| **Services** | `ServiceGeocodage`, derrière `POST /api/sites/localiser` |
+| **Accès** | rôles internes et `ClientSyndic`, ce dernier cadré sur son propre `ClientId` ; la localisation, l'administrateur seul |
+| **Destinataires** | **la Géoplateforme de l'IGN, si l'entreprise a coché le réglage**, à chaque clic sur *Localiser* : la voie, le code postal et la commune du site, rien d'autre (§4). Destinataire tiers, responsable distinct (§1). Sinon, aucun hors de l'entreprise |
 | **Durée** | voir §5 |
-| **Journalisé** | **non** — exemption motivée, voir §8.3 |
+| **Journalisé** | **non** — exemption motivée, voir §8.3 ; la localisation non plus, rien n'y étant lu en base (`CLAUDE.md` §7 bis) |
+
+**La base de l'envoi à l'IGN : l'intérêt légitime, art. 6(1)(f)** — proposée, à faire
+valider. L'article 6(1)(b) serait fragile : la saisie des coordonnées à la main reste
+possible, donc l'envoi n'est pas **nécessaire** à l'exécution du contrat. La mise en balance,
+en trois lignes :
+
+- **l'intérêt** : placer le site là où il est, pour que le classement des remplaçants (T2) et
+  la preuve des passages (T7) reposent sur une position juste, que le patron ne sait pas
+  saisir lui-même ;
+- **la nécessité** : l'adresse seule, sans nom ; sur un geste de l'administrateur, jamais à
+  l'enregistrement ni par lot ; désactivé par défaut ;
+- **l'impact** : pour un domicile, l'adresse d'un particulier atteint un établissement
+  public qui en fait ce que ses propres conditions disent, sous une durée de journaux non
+  publiée (§5) — limité par l'absence de nom, et par l'information que l'exploitant remet à
+  ses clients (§6).
+
+**Trois cas, selon cette lecture :**
+
+1. **Un bureau ou un immeuble** : l'adresse ne désigne personne, et ce n'est pas une donnée
+   personnelle.
+2. **Une maison individuelle** : l'adresse désigne ceux qui y vivent, et c'en est une.
+3. **L'adresse IP du serveur**, que l'IGN voit — sa limite de débit compte par adresse :
+   donnée personnelle pour un entrepreneur individuel seulement, une entreprise en société
+   n'étant pas une personne physique.
+
+**L'appel part du serveur, jamais du navigateur** : l'adresse IP des utilisateurs ne part
+jamais vers l'IGN, ni rien qui les désigne.
 
 ### T7 — Certification des passages
 
@@ -274,7 +344,7 @@ Les tables du modèle, plus celles d'Identity. « DP » = donnée personnelle.
 | `Interventions` | `AgentId`, `DatePrevue`, `HeurePrevue`, `Statut` | activité professionnelle | `/api/interventions`, `/api/planning` |
 | `Remplacements` | `AgentRemplacantId`, `Score` | **évaluation** d'une personne | `/api/remplacements` |
 | `Clients` | `Nom`, `Email`, `Telephone`, `Adresse` | contact professionnel — voir §8.3 | `/api/clients` |
-| `Sites` | `Adresse`, coordonnées, **`Consignes`** | lieu, et DP par accident dans les consignes | `/api/sites` |
+| `Sites` | `Adresse`, coordonnées, **`Consignes`** | lieu, et DP par accident dans les consignes ; **DP quand le site est un domicile** (§1) | `/api/sites` ; et, si l'entreprise a coché le réglage, la voie, le code postal et la commune vers l'IGN à chaque *Localiser* (§4) |
 | `Contrats` | aucune | — | `/api/contrats` |
 | `Prestations` | `AgentTitulaireId` — `Libelle` est un intitulé de prestation | affectation habituelle d'un salarié à un site, à une heure | `/api/prestations`, et le dossier de l'agent |
 | `Produits`, `Stocks`, `Emplacements` | aucune — un véhicule est nommé par sa plaque ou son modèle, jamais par son conducteur | — | — |
@@ -309,7 +379,10 @@ Les tables du modèle, plus celles d'Identity. « DP » = donnée personnelle.
 **Ce qui n'existe pas, et qu'il est utile de pouvoir affirmer :** aucune position
 historisée — `Pointages` garde une distance, jamais des coordonnées (T7) —, aucun suivi
 en arrière-plan, aucun accusé de lecture de consigne, aucun cookie de mesure d'audience,
-aucune télémétrie, aucun appel sortant hors SMTP, et hors le téléchargement des versions (§4), depuis la correction du §9.1.
+aucune télémétrie, et, depuis la correction du §9.1, aucun appel sortant hors trois cas,
+tous au §4 : le SMTP s'il est configuré, le téléchargement des versions, et depuis la 0.3.0
+la localisation des sites vers l'IGN, **seulement si l'entreprise l'a activée** et
+seulement au clic de son administrateur.
 
 **Une seule valeur est rangée dans le navigateur**, depuis l'étape 32 : `klean.apparence`,
 dans le stockage local — le thème choisi dans *Mon compte*, « automatique », « clair » ou
@@ -326,11 +399,25 @@ requête**. Le chemin contient parfois l'identifiant technique d'un agent
 qui ne dit pas qui a lu — c'est le rôle du journal d'accès de T5. Sa conservation est
 celle que l'exploitant donne à ses journaux de conteneur ; voir `docker-compose.yml`.
 
+⚠️ **Depuis la 0.3.0, une URL sortante porte une adresse**, et le journal technique ne la
+recopie pas. La requête envoyée à l'IGN met la voie et la commune d'un site dans son URL,
+et le client HTTP de .NET écrit d'ordinaire cette URL dans ses lignes d'information et dans
+leur portée. Deux gardes l'en empêchent, éprouvées chacune par son test :
+
+1. **le client de la localisation n'a aucun journal** (`RemoveAllLoggers`), la garde
+   principale : un exploitant qui passe le niveau général en `Debug` ne la défait pas ;
+2. **la catégorie `System.Net.Http.HttpClient` est réglée à `Warning`** dans
+   `appsettings.json`, la redondance.
+
+Côté entrant, l'adresse voyage dans le **corps** de `POST /api/sites/localiser`, jamais
+dans son URL : le corps n'est pas journalisé, l'URL l'est.
+
 ---
 
 ## 4. Où les données sortent de l'instance
 
-Trois sorties depuis la correction du §9.1, et toutes les trois sont voulues.
+Quatre sorties depuis la 0.3.0, et toutes les quatre sont voulues. La quatrième n'existe
+que si l'entreprise l'active.
 
 1. **Vers le navigateur de l'utilisateur** — c'est l'usage. Protégé par HTTPS, par
    les trois cookies `HttpOnly Secure SameSite=Strict`, et par la politique de
@@ -349,10 +436,33 @@ Trois sorties depuis la correction du §9.1, et toutes les trois sont voulues.
    Les sauvegardes que fait `klean` restent **sur le serveur**, sans copie ailleurs tant que
    l'exploitant n'en fait pas une : c'est à lui de choisir ce stockage, et sa durée est
    celle du §5.
-4. ~~**Vers Google**, à chaque chargement de page.~~ **Supprimée** le 3 octobre 2026 :
+4. **Vers la Géoplateforme de l'IGN**, `data.geopf.fr`, en HTTPS, si l'entreprise a coché
+   *Localiser les sites par la Géoplateforme de l'IGN* dans l'écran *Entreprise* — décoché
+   par défaut. **Sur quel geste** : un clic de l'administrateur sur *Localiser*, dans la
+   fiche d'un site ; rien ne part à l'enregistrement, ni par lot. **Ce qui part** : la voie,
+   le code postal s'il compte cinq chiffres, et la commune, tels que saisis — ni le nom du
+   site, ni ses consignes, ni le client, ni aucun nom de personne ; et pour seuls en-têtes
+   `Host` et `User-Agent: KLEAN`, générique, sans version ni domaine. **D'où** : du serveur seul ; l'IGN
+   voit l'adresse IP du serveur, jamais celle d'un utilisateur. **Ce qui revient** : des
+   coordonnées et l'adresse trouvée, posées dans le formulaire ; seules les coordonnées
+   sont gardées, et seulement si l'administrateur enregistre le site. **Destinataire
+   tiers**, responsable distinct, et non sous-traitant — une lecture, au §1.
+
+   ⚠️ **Le champ Adresse est un texte libre, et il part tel quel.** Un nom écrit dedans —
+   « chez Mme Durand » — partirait avec : filtrer un nom côté serveur n'est pas réaliste.
+   L'écran le dit sous le champ : « Voie et numéro, sans nom de personne. »
+
+   ⚠️ **Jamais l'adresse d'un agent.** Le bouton n'existe que sur la fiche d'un site, et une
+   invariante de l'écran le garde : les fiches agents ont les mêmes noms de champs, et le
+   serveur ne distingue pas une adresse de site d'un domicile.
+
+   **Transferts hors de l'Union** : aucun connu. Selon ses mentions légales, l'IGN est un
+   établissement public de l'État, hébergé par OVH à Roubaix ; ce n'est **pas vérifié
+   au-delà** — ni réseau de diffusion, ni sous-traitants de l'IGN.
+5. ~~**Vers Google**, à chaque chargement de page.~~ **Supprimée** le 3 octobre 2026 :
    les polices sont servies par KLEAN, et les deux politiques de sécurité du contenu ne
    déclarent plus aucune origine externe. Voir §9.1 — c'était l'écart le plus sérieux de
-   cette revue, et il n'en reste **trois** sorties.
+   cette revue, et il n'en restait alors que **trois** sorties.
 
 **Ce que l'instance télécharge, et qui n'est pas une sortie de données.** Avec le script
 d'installation, une instance contacte `github.com` et `ghcr.io` pour **récupérer** une
@@ -390,7 +500,21 @@ est la dernière : une durée sans mécanisme est une promesse que personne ne t
 | Pointages des passages (`Pointages`) | **1 an après le pointage** | la CNIL retient un an quand une localisation sert à prouver une prestation au client, ce qui est la finalité de T7 — par analogie avec la norme NS-051, écrite pour les véhicules. Le statut de la vacation, lui, reste cinq ans avec elle | ✅ `purge-pointages.sql`, qui supprime avec `-v confirmer=1` |
 | Checklist d'un passage (`ControlesEffectues`) | 1 an après la date de la vacation | le détail du compte rendu, comme les pointages ; au-delà, le statut suffit | 📋 `conservation-donnees-metier.sql` §9 |
 | Anomalies | 1 an après le signalement, **une fois traitées** | le temps d'une contestation du client sur l'exercice. Une anomalie encore ouverte n'est pas purgée : elle décrit un travail à faire, pas une trace | 📋 `conservation-donnees-metier.sql` §9 |
+| Requête de localisation d'un site (vers l'IGN) | **côté KLEAN, aucune** : ni la requête, ni l'adresse trouvée ne sont gardées ; les coordonnées enregistrées suivent la durée du site. **Côté IGN, non publiée** — lu le 23 novembre 2026 | la requête ne sert qu'à l'instant de la réponse | ✅ par construction côté KLEAN : rien n'est écrit en base ni au journal technique (§3) ; ❓ côté IGN, la question ci-dessous |
 | Photos d'anomalie | **3 mois après le traitement**, et au plus tard avec leur anomalie | elle sert à juger et à traiter ; elle peut montrer une personne, et c'est la donnée la plus lourde du passage. La description et les dates disent ensuite ce qui a été constaté | 📋 `conservation-donnees-metier.sql` §9 |
+
+⚠️ **La durée des journaux de l'IGN n'est écrite nulle part où nous l'ayons cherchée**, et
+ce silence est consigné tel quel, sans être comblé par une supposition. Aucune page lue le
+23 novembre 2026 — conditions d'utilisation, limites d'usage, données personnelles — ne dit
+si les requêtes ou les adresses IP sont conservées, ni combien de temps ; la limite de débit
+par adresse IP suppose seulement que l'adresse est lue. Une question écrite est proposée à
+l'auteur du logiciel, à adresser à `dpo@ign.fr`, et sa réponse, **datée**, à verser ici :
+
+> Le logiciel libre KLEAN interroge `https://data.geopf.fr/geocodage/search` pour localiser
+> des adresses de lieux d'intervention, depuis le serveur de chaque entreprise qui l'exploite.
+> Conservez-vous les requêtes reçues — leur URL, qui porte l'adresse recherchée — et
+> l'adresse IP d'origine ? Si oui, pour quelle finalité, combien de temps, et sont-elles
+> transmises à des sous-traitants ou hors de l'Union européenne ?
 
 **Lire la dernière colonne avec attention : 📋 n'est pas ✅.** Un script marqué 📋
 **rapporte** ce qui est hors délai et porte son `DELETE` **en commentaire**. Il ne
@@ -481,6 +605,30 @@ salarié est une réponse à une demande légale, et c'est un autre geste. Il es
 en nature **`Export`**, distincte de `Lecture` pour la même raison : les confondre
 ferait disparaître l'export dans le bruit des consultations.
 
+**Pour un client particulier, l'IGN fait partie des destinataires à citer** en réponse à
+une demande d'accès (art. 15(1)(c)), dès que son site a pu être localisé. Le clic sur
+*Localiser* n'enregistre rien : KLEAN ne sait donc pas dire **si** une adresse est partie,
+seulement **quand elle a pu partir**. C'est ce que disent `GeocodageActiveLe` et
+`GeocodageDesactiveLe`, posées par le serveur sur l'entreprise à chaque changement du
+réglage. ⚠️ L'écran *Entreprise* ne les affiche pas : elles se lisent par
+`GET /api/entreprises`, ouvert aux rôles internes, ou en base. La réponse honnête est donc
+de la forme « votre adresse a pu être transmise à l'IGN, sans votre nom, entre telle et
+telle date ». ⚠️ **Les deux dates sont le dernier passage dans chaque sens,
+pas l'historique** : un réglage coché, décoché puis recoché a perdu la date de sa première
+activation. L'exploitant qui le change plus d'une fois en garde trace de son côté — son
+registre, par exemple (§11).
+
+**La notification de l'article 19** — prévenir chaque destinataire d'une rectification ou
+d'un effacement — est sans doute impossible envers l'IGN, qui ne reçoit aucun nom et ne
+pourrait rattacher la demande à aucune requête. C'est une lecture, à faire valider avec le
+reste.
+
+**L'information des clients particuliers** (art. 13(1)(e) et 14(1)(e)) appartient à
+l'exploitant, dans les conditions ou la notice qu'il leur remet. Une phrase modèle :
+
+> L'adresse du lieu d'intervention peut être transmise, sans votre nom, à l'IGN
+> (Géoplateforme) pour en calculer les coordonnées.
+
 ---
 
 ## 7. Modèle de note d'information aux agents
@@ -509,7 +657,8 @@ collecte une information sur un salarié doit avoir été porté à sa connaissa
 > **À quoi servent les coordonnées de votre domicile** : à calculer la distance entre
 > chez vous et un site, lorsqu'il faut trouver un remplaçant. C'est un des trois
 > critères de classement des candidats, avec votre connaissance du site et vos heures
-> déjà planifiées dans la semaine.
+> déjà planifiées dans la semaine. **L'adresse de votre domicile n'est jamais envoyée à un
+> service extérieur.**
 >
 > **Ce que l'écran « Ma journée » relève de votre position** : quand vous appuyez sur
 > *Démarrer* et sur *Terminer*, et seulement à ce moment-là, votre téléphone donne votre
@@ -537,6 +686,12 @@ collecte une information sur un salarié doit avoir été porté à sa connaissa
 >
 > **Vos droits** : accès, rectification, effacement, limitation, opposition et
 > réclamation auprès de la CNIL. Contact : *[adresse]*.
+
+⚠️ **La phrase sur l'adresse du domicile est vraie du code tel qu'il est**, depuis la 0.3.0
+qui fait partir vers l'IGN l'adresse des **sites** : le bouton *Localiser* n'existe que sur
+la fiche d'un site, et une invariante de l'écran l'interdit sur les fiches agents
+(`CLAUDE.md` §11). Elle **tombera** si les domiciles sont un jour géocodés, et la note
+devra changer avant le code.
 
 ---
 
@@ -885,6 +1040,14 @@ norme NS-051 de la CNIL, écrite pour la géolocalisation des **véhicules** et 
 juridique depuis le RGPD. Aucune page de la CNIL propre au téléphone d'un salarié n'a été
 trouvée le 6 novembre 2026. C'est le premier point à soumettre à la relecture juridique.
 
+**La localisation des sites (0.3.0) n'ajoute aucun critère**, selon cette lecture : elle ne
+porte ni sur les agents, ni sur une évaluation, ni sur une surveillance, et elle ne vise un
+domicile que lorsque le client particulier en a fait un lieu d'intervention. Mais ce flux
+**entre dans la description du traitement** que l'AIPD doit faire : la voie, le code postal
+et la commune d'un site partent vers un destinataire tiers, l'IGN, au clic d'un
+administrateur, si l'entreprise l'a activé (T6, §4) ; la durée de ses journaux n'est pas
+publiée (§5) ; et la qualification de ce destinataire est elle-même une lecture (§1).
+
 ### 9.7 — ✅ CORRIGÉ — un site ou un client sans contrat n'avait aucune date dont partir
 
 Découvert en écrivant `conservation-donnees-metier.sql`, et c'est le genre de trou qu'on
@@ -1024,6 +1187,14 @@ Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail es
   photos retirées par le serveur, sans s'en remettre à l'écran ; photos relues en
   `Cache-Control: private, no-store` ; seul l'agent affecté pointe ; une vacation pointée
   est figée.
+- **Localisation des sites** (0.3.0) : désactivée par défaut, réservée à l'administrateur,
+  sur un clic et jamais d'elle-même ; adresse du service exigée en HTTPS, sans identifiants,
+  sinon l'API refuse de démarrer ; redirections et cookies refusés, aucun en-tête
+  `traceparent` — qui porterait l'identifiant de corrélation de l'instance —, un
+  `User-Agent` générique, `KLEAN`, sans version ni domaine ; réponse plafonnée à 64 Kio et
+  bornée par un délai ; aucun journal du client HTTP (§3) ; un plafond par compte et un
+  plafond pour toute l'instance, et une pause d'au moins cinq secondes quand l'IGN signale un
+  dépassement.
 - **Mots de passe des comptes créés** (étape 24) : tirés par le serveur, montrés une seule
   fois, et remplacés obligatoirement à la première connexion — un administrateur ne garde
   la connaissance du mot de passe d'un collègue que jusque-là.
@@ -1046,6 +1217,16 @@ avoir consulté le CSE s'il existe (`DEPLOIEMENT.md` §11) —, ordonnancer
 le fournisseur SMTP et le stockage des sauvegardes, fixer la durée de conservation de
 ces sauvegardes, tenir l'AIPD du §9.6, désigner un point de contact.
 
+**Pour la localisation des sites, s'il l'active** (0.3.0) : en décider en connaissance de
+cause — l'aide de la case, dans l'écran *Entreprise*, dit ce qui part ; mettre à jour
+l'information remise aux clients particuliers, avec la phrase modèle du §6 ; garder une
+copie datée des conditions d'utilisation de la Géoplateforme et de sa page relative aux
+données personnelles, sur lesquelles repose la qualification du §1 ; reporter l'IGN dans
+son registre, parmi les destinataires (art. 30(1)(d)), et y écrire qu'aucun transfert hors
+de l'Union n'est connu (art. 30(1)(e), §4) ; noter chaque changement du réglage,
+l'application n'en gardant que le dernier dans chaque sens (§6) ; et, derrière un pare-feu sortant, ouvrir le port 443 vers `data.geopf.fr`
+(`DEPLOIEMENT.md` §1).
+
 **Par le logiciel** — état au 6 novembre 2026, dans l'ordre de gravité où les écarts ont
 été relevés :
 
@@ -1064,6 +1245,9 @@ ces sauvegardes, tenir l'AIPD du §9.6, désigner un point de contact.
 | §5 — checklist, anomalies et photos, étape 25 | 📋 `conservation-donnees-metier.sql` §9, rapport avec `DELETE` commenté |
 | §9.8 — le dossier d'un agent sans ses passages | ✅ pointages, checklist et anomalies sous chaque vacation ; les photos comptées |
 | §9.9 — aucune consigne de ne photographier personne | ✅ `ConsignePhoto` sous le bouton, gardée par deux tests |
+
+**Par l'auteur du logiciel** : adresser à `dpo@ign.fr` la question du §5 sur la durée des
+journaux de l'IGN, et en verser la réponse datée.
 
 **Aucun écart ne reste ouvert côté logiciel.** Ce qui reste est à l'exploitant : valider les durées, dont celle des prospects (§9.7) et
 celles des anomalies, et décommenter les purges.

@@ -577,7 +577,23 @@ origine externe réapparue dans `csp.ts` ou `index.html`.
 
 Conséquence pratique pour le déploiement : **KLEAN n'a besoin d'aucun accès
 sortant pour servir son interface.** Une instance derrière un pare-feu sans route
-vers l'extérieur affiche la même typographie qu'une autre.
+vers l'extérieur affiche la même typographie qu'une autre. Une seule fonction appelle
+l'extérieur depuis l'API, outre le SMTP : la **localisation des sites**, désactivée par
+défaut, qui envoie la voie, le code postal et la commune d'un site à `data.geopf.fr`, la
+Géoplateforme de l'IGN, en HTTPS sur le port 443, quand une entreprise l'a activée et
+qu'un administrateur clique sur *Localiser* (`RGPD.md` §4).
+
+### Localisation des sites
+
+```json
+"Geocodage": { "Adresse": "https://data.geopf.fr/geocodage", "DelaiSecondes": 5 }
+```
+
+Les deux valeurs sont les défauts, et rien n'est à écrire pour les garder. L'adresse doit
+être absolue, en `https`, sans identifiants, requête ni fragment ; le délai, un entier de 1
+à 20 secondes, sous les 30 du délai de requête. Une valeur hors de ces bornes fait refuser
+le démarrage. Activer la fonction n'est pas un réglage de l'API : c'est une case de
+l'écran *Entreprise*, entreprise par entreprise.
 
 ### HTTPS
 

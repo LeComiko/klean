@@ -118,7 +118,8 @@ KLEAN/
 │   │                    migrations, sans Program.cs)
 │   ├── DTOs/            un fichier par entité, XxxDto + XxxCreateDto
 │   ├── Controllers/     un par entité + Auth + SecondFacteur + Planning
-│   │                    + Installation, l'assistant du premier lancement
+│   │                    + Installation, l'assistant du premier lancement ;
+│   │                    ReponsesDebit, le 429 et son Retry-After, communs
 │   ├── Services/        AffectationService, RemplacementService,
 │   │                    PlanningService, ServiceGeneration, JoursFeries,
 │   │                    ServiceStock, ServicePrevisionStock,
@@ -127,7 +128,8 @@ KLEAN/
 │   │                    AmorcageService, ServiceInstallation, CodeInstallation,
 │   │                    EtatInstallation, TenantContext, LimiteurDebit,
 │   │                    ServiceCourrielSmtp, DescripteurErreursFrancais,
-│   │                    ListeTypePrestations
+│   │                    ListeTypePrestations, ServiceGeocodage — la
+│   │                    localisation d'un site par la Géoplateforme de l'IGN
 │   ├── Middleware/      VerificationCsrf, EnTetesSecurite, LimiteCorpsRequete,
 │   │                    IdentifiantCorrelation
 │   ├── Filtres/         JournaliserAcces — filtre d'action MVC, pas un middleware
@@ -164,7 +166,8 @@ KLEAN/
         │                JournalAcces.tsx pour l'administrateur ; Installation.tsx,
         │                l'assistant, public tant qu'aucun compte n'existe
         ├── passage/     passage.ts — gestes, preuves, checklist —, photo.ts — la réduction
-        ├── reference/   descriptions.ts, valeurs.ts — le motif liste-et-formulaire
+        ├── reference/   descriptions.ts, valeurs.ts — le motif liste-et-formulaire ;
+        │                localiser.ts — le bouton Localiser d'un site, hors du composant
         ├── stock/       mouvements.ts, prevision.ts — la saisie et la lecture du stock
         ├── styles/      tokens.css
         ├── types/       interfaces TypeScript
@@ -210,7 +213,7 @@ Intervention ─┬─ Pointage              début et fin, sans position
 
 | Entité | Champs notables |
 |---|---|
-| Entreprise | RaisonSociale, Siret, DateCreation, Territoire (enum) — le fuseau d'« aujourd'hui » et le calendrier des jours fériés |
+| Entreprise | RaisonSociale, Siret, DateCreation, Territoire (enum) — le fuseau d'« aujourd'hui » et le calendrier des jours fériés ; GeocodageActif (faux par défaut), GeocodageActiveLe et GeocodageDesactiveLe (nullables, posées par le serveur, §9 quater) |
 | Client | Type (enum `TypeClient`), coordonnées, DateCreation |
 | Site | Latitude, Longitude, Consignes, DateCreation |
 | Contrat | DateDebut, DateFin (nullable), Frequence (libellé libre), Actif, InclutJoursFeries |
@@ -406,7 +409,8 @@ les écrans de référence (§11), et ce que lit un humain. Ce que la générati
   - **L'écran** (`pages/Installation.tsx`) compte quatre étapes : le code, l'entreprise, le
     compte, puis ce que le patron doit savoir — double authentification à la première
     connexion, responsabilité du traitement, note aux agents de `RGPD.md` §7, durées de
-    conservation à valider, localisation des sites désactivée. Toute la validation passe
+    conservation à valider, localisation des sites désactivée — à activer dans Entreprise
+    (§9 quater). Toute la validation passe
     par `installation/installation.ts` avant l'appel, et `refusDInstallation` dit où mène
     un refus du serveur : au premier écran sur un code faux, à la connexion sur le 409
     « déjà installé », **à l'arrêt** sur tout autre 409, sur place sinon. Tant que le serveur
@@ -1010,6 +1014,17 @@ connaît que `Motif` — ; `LirePhoto` rend des octets, sans DTO à inspecter. L
 journal est donc une décision écrite, en `RGPD.md` §8.4, avec la condition qui la ferait
 tomber : relire cette page avant d'ajouter à une anomalie un champ qui nomme quelqu'un.
 
+⚠️ **La localisation d'un site n'est pas journalisée, et le filet ne la voit pas** (0.3.0,
+§9 quater). `LocalisationDto` porte `Latitude` et `Longitude`, deux des propriétés que le
+filet surveille ; il n'y tombe pas parce que `POST /api/sites/localiser` est un `POST`, et
+que le filet ne vise que les `GET`. L'absence de journal est pourtant une décision, pas
+l'effet de cette restriction : **rien n'y est lu en base**, la réponse est une donnée
+publique de référence sur l'adresse que l'appelant vient d'envoyer, et aucune donnée
+d'agent n'y figure — le journal d'accès existe pour la surveillance des salariés
+(`RGPD.md` §8.3), qui n'est pas en jeu. **La décision tombe le jour où une route géocode
+une adresse lue en base** : celle d'un agent, ou l'import de la 0.3.1 s'il géocode des
+adresses déjà enregistrées.
+
 ⚠️ `ClientDto` reste discutable : le contact d'une petite copropriété est souvent une
 personne physique. La question appartient au lot de la cartographie des données ; elle
 est consignée dans le test, pas tranchée. Et `ProduitDto` montre le prix de la règle —
@@ -1516,6 +1531,156 @@ l'image, parce qu'un EXIF peut se glisser entre deux balayages d'un JPEG progres
 n'est pas un JPEG lisible est refusé. Le test part d'une photo qui porte une position et la
 cherche **en base**.
 
+## 9 quater. Localisation des sites
+
+Numérotée « quater » pour la même raison que §6 bis. Les arbitrages et leurs motifs sont dans
+`docs/superpowers/specs/2026-11-23-geocodage-design.md` ; le traitement, dans `RGPD.md`, T6.
+
+**Une localisation remplit deux champs, et n'enregistre rien.** Dans la fiche d'un site, le
+bouton *Localiser* envoie l'adresse à `POST /api/sites/localiser`, qui la confie à la
+Géoplateforme de l'IGN et rend une latitude, une longitude, l'adresse trouvée et un drapeau
+`AVerifier`. L'écran pose les deux coordonnées dans le formulaire ; le patron relit, puis
+enregistre. Rien ne part sans ce clic : aucun géocodage à l'enregistrement, aucun par lot.
+
+**Le réglage** est sur l'entreprise, `GeocodageActif`, faux par défaut, et coché par
+l'administrateur dans l'écran *Entreprise* — pas dans `.env` : ni SSH, ni redémarrage. Le
+`PUT` pose `GeocodageActiveLe` quand il passe à vrai, `GeocodageDesactiveLe` dans l'autre
+sens, et un `PUT` qui ne le change pas ne date rien. Ces deux dates répondent, autant
+qu'on le peut, à une demande d'accès — « mon adresse est-elle partie, et quand ? » — : le
+clic n'enregistre rien, et elles disent seulement **quand une adresse a pu partir**
+(`RGPD.md` §6). L'écran ne les affiche pas ; `GET /api/entreprises` les rend. ⚠️ **Le dernier passage dans chaque
+sens, pas l'historique** : un réglage coché, décoché puis recoché n'a plus la date de sa
+première activation. ⚠️ `EntreprisesController` projette `EntrepriseDto` à la main, dans
+`Lister` et dans `Obtenir`, et le `PUT` recopie champ par champ : un champ oublié à l'un des
+trois endroits affiche la case toujours décochée, ou désactive la localisation à chaque
+enregistrement de l'entreprise, sans erreur. `KLEAN_GEOCODAGE`, que l'installateur d'une
+0.2.x écrivait dans `.env`, n'est lue par rien.
+
+**La route contrôle dans cet ordre**, administrateur seul comme l'écriture des sites :
+
+1. le **plafond par compte**, trente sur quinze minutes ;
+2. le réglage de **l'entreprise du jeton**, lu sous la RLS et cadré sur son `Id` : désactivé,
+   ou entreprise introuvable, 409 « La localisation des sites est désactivée : cochez-la dans
+   Entreprise. » ;
+3. les champs, refusés en 400 et en français : l'adresse est obligatoire, les bornes sont
+   celles de `Site` — 200, 10 et 100 —, un caractère invisible est refusé, et **la
+   recherche** — l'adresse et la ville jointes par une espace — doit compter de 3 à
+   200 caractères et commencer par une lettre ou un chiffre, les bornes mesurées du
+   service ;
+4. le **plafond global**, dix par seconde pour toute l'instance, 429 avec son propre message ;
+5. le service, et son disjoncteur : 200 si l'adresse est trouvée ; 400 « Adresse
+   introuvable » si la réponse est vide — jamais des coordonnées nulles à la place — ; 503
+   pour tout le reste : injoignable, délai dépassé, tout statut hors 2xx, réponse illisible,
+   trop grosse ou hors bornes, disjoncteur ouvert.
+
+Six choses à savoir avant d'y toucher :
+
+- ⚠️ **L'adresse voyage dans le corps, jamais dans l'URL.** Un `GET ?adresse=` la ferait
+  entrer dans le journal des requêtes d'ASP.NET, réglé à `Information`. `LocaliserSiteDto`
+  n'a que des `string?`, sans annotation, pour la raison du piège de §10.
+- ⚠️ **« Invisible » veut dire les catégories Unicode `Control` et `Format`**, parcourues par
+  runes : bidirectionnalité, espaces sans largeur, U+FEFF, trait d'union conditionnel,
+  caractères d'étiquette hors du plan de base. Refuser les seuls caractères de contrôle
+  laisserait partir vers l'IGN, sans que personne le voie, un texte qui ne s'affiche pas
+  comme il s'écrit.
+  L'écran applique la même règle, `/[\p{Cc}\p{Cf}]/u`.
+- ⚠️ **Le plafond global ne compte que les requêtes qui partent vers l'IGN**, d'où sa place
+  juste avant l'appel, sur le modèle du plafond global des codes faux de l'installation
+  (§6) : compté en tête, un 409 ou un 400 de champ le tiendrait plein sans qu'aucune requête
+  ne parte. Il existe parce que le service compte **par adresse IP**, donc par instance :
+  toutes les entreprises d'un serveur partagent ses cinquante requêtes par seconde, et le
+  plafond par compte ne les protège pas — trente requêtes peuvent partir dans la même
+  seconde, et un administrateur peut en créer d'autres. Le prix, assumé : un administrateur
+  peut en priver les autres entreprises quelques secondes, la saisie à la main restant
+  possible. Les 429 portent `Retry-After`, en secondes, par `ReponsesDebit`, extrait
+  d'`InstallationController` plutôt que recopié.
+- ⚠️ **La recherche est comptée en unités UTF-16**, à l'écran comme au contrôleur, et la
+  borne de 200 ne garantit pas que le service accepte : l'IGN a répondu **500** à une
+  recherche de deux cents « a », et KLEAN rend alors 503. De même, une saisie portant un
+  caractère hors du plan de base peut donner un 503 au lieu d'un refus. Constaté, et
+  négligeable pour une adresse française.
+- **`AVerifier`** vaut vrai quand le score est absent, hors de [0, 1] ou sous 0,7, ou quand
+  le point n'est pas un numéro (`type` autre que `housenumber`) : une adresse placée au
+  centre de sa rue ou de sa commune se voit. Le seuil est une constante, à éprouver sur le
+  terrain avant d'en faire un réglage, comme le rayon du passage (§9 ter).
+- **L'adresse trouvée est un texte d'un tiers, rendu à l'écran.** `Nettoyer` la parcourt par
+  runes : `Control` et `Format` retirés, les retours à la ligne — `\t \n \r \v \f`, U+0085,
+  séparateurs de ligne et de paragraphe — changés en espace, toute suite d'espaces, U+00A0
+  compris, réduite à une, puis une troncature à 200 qui ne coupe pas une paire de
+  substituts. React l'échappe : ce n'est pas une affaire de XSS, mais d'un texte qui ferait
+  afficher une autre adresse que celle trouvée.
+
+**`ServiceGeocodage`**, classe concrète et singleton — il porte le disjoncteur. Sa
+configuration, `Geocodage:Adresse` et `Geocodage:DelaiSecondes`, est lue par `Lire`, et
+une valeur invalide **fait refuser le démarrage**, configurée à moitié comme un SMTP
+incomplet (§2) : une adresse absolue en `https`, sans identifiants, requête ni fragment —
+par défaut `https://data.geopf.fr/geocodage` — ; un délai entier de 1 à 20 secondes, 5 par
+défaut, **strictement sous les 30 s** du délai de requête, sinon le jeton de la requête
+gagnerait et l'appelant recevrait un 504 au lieu du 503. ⚠️ `Lire` est appelée deux fois,
+et les deux sont nécessaires : par `Enregistrer`, ce qui fait refuser le démarrage, et dans
+le délégué du client, pour la valeur finale de la configuration.
+
+Ce qui part : `q`, la voie et la commune ; `postcode`, **seulement s'il compte exactement
+cinq chiffres ASCII** — `char.IsDigit` accepterait les chiffres arabes-indiens, et le
+service refuse en 400 un code postal qui n'a pas cinq chiffres — ; `limit=1` et `index=address`. Aucun nom de site, de client ni
+de personne, et aucun en-tête que `User-Agent: KLEAN` et `Host`. Chaque paramètre est
+encodé seul par `Uri.EscapeDataString` et concaténé à la base : une combinaison d'`Uri`
+perdrait le dernier segment d'une base sans `/` final, et ferait changer d'hôte une partie
+relative commençant par `//`.
+
+**Le client nommé `geocodage` est verrouillé**, et chaque verrou ferme une fuite :
+
+| Réglage | Sans lui |
+|---|---|
+| `AllowAutoRedirect = false` | une redirection serait suivie, vers n'importe quel hôte |
+| `UseCookies = false` | un cookie posé par le service reviendrait sur les requêtes de toutes les entreprises, et les relierait |
+| propagateur sans sortie | chaque requête porterait `traceparent`, dont le `TraceId` est l'identifiant de corrélation de KLEAN — celui de ses journaux, de `X-Correlation-Id` et de ses corps d'erreur |
+| `AutomaticDecompression = None` | déjà le défaut, écrit pour être une déclaration |
+| `MaxResponseContentBufferSize` de 64 Kio, `Timeout` | une réponse sans fin ou servie au compte-gouttes tiendrait la requête |
+| `RemoveAllLoggers()` | l'URL, donc l'adresse, entrerait dans le journal technique |
+
+⚠️ **La lecture met le corps en tampon** — `GetAsync` en mode par défaut, jamais
+`ResponseHeadersRead` : c'est ce qui fait valoir le plafond **et** le délai sur tout le
+corps. Puis le premier `feature` : `coordinates` en **`[longitude, latitude]`**, bornées et
+finies, NaN et infini rejetés ; une étiquette vide rend l'issue illisible. L'appel et
+l'analyse sont dans le même `try` : l'annulation de la requête remonte, et tout le reste —
+dont le délai du client, qui lève aussi une `TaskCanceledException`, sur un jeton de
+requête non annulé — rend « injoignable ».
+
+**Le disjoncteur.** Un 429 du service pose une échéance, lue dans `Retry-After` — un délai
+ou une date —, **bornée entre 5 et 30 secondes** ; jusqu'à elle, la route répond 503 sans
+appeler. ⚠️ La borne basse n'est pas une prudence : la Géoplateforme bloque cinq secondes,
+et relancer avant prolongerait le blocage — un `Retry-After` de 0 ou de 1 vaut donc
+l'absence d'en-tête. Une pause ouverte ne se raccourcit jamais : seule l'échéance la plus
+tardive est gardée. L'échéance est en heure murale, `DateTime.UtcNow`, et la borne haute
+n'est pas éprouvée par la série (§11).
+
+**Le journal technique a deux gardes** : `RemoveAllLoggers()` sur le client, la
+principale — un exploitant qui passe `Default` en `Debug` ne la défait pas — ; et
+`System.Net.Http.HttpClient` à `Warning` dans `appsettings.json`, la redondance. Pourquoi
+deux, et comment elles s'éprouvent : §10.
+
+**L'écran** (`pages/Reference.tsx`, `composants/FormulaireRessource.tsx`, sous-composant
+`Localisation`). La page lit le réglage et appelle ; le formulaire tient les valeurs et
+l'état — en cours, trouvée, refusée. Quatre choses à savoir avant d'y toucher :
+
+- ⚠️ **Le réglage n'est lu que pour qui écrit**, et sur une description qui porte
+  `localiser`. Le `ClientSyndic`, à qui la fiche d'un site est ouverte, recevrait sinon un
+  403 de `GET /api/entreprises` à chaque ouverture. Une lecture en échec cache le bouton,
+  sans message : la saisie à la main reste.
+- ⚠️ **La ligne « Trouvé » ne ment jamais.** Modifier à la main l'un des cinq champs efface
+  le résultat et annule l'appel en cours ; une réponse arrivée après est ignorée. Les
+  coordonnées posées par la localisation passent par `setValeurs` directement, et ne
+  l'effacent donc pas elles-mêmes.
+- ⚠️ **Un 409 « désactivé » laisse le bouton**, avec le message du serveur : le message est
+  rendu dans le même bloc que le bouton, et retirer l'un effaçait l'autre. Un serveur KLEAN
+  injoignable — `fetch` sans réponse, dont le message est en anglais et varie d'un
+  navigateur à l'autre — donne un message français.
+- **Le bouton reste actif sur une adresse vide** : le clic rend un refus en `role="alert"` et
+  le focus au champ adresse — un bouton inactif sans explication serait muet au clavier.
+  Pendant l'appel, `aria-disabled` et jamais `disabled`, qui ferait perdre le focus.
+  « À vérifier » s'écrit en mots et en graisse, jamais en `--alerte` (§12).
+
 ---
 
 ## 10. Pièges connus
@@ -1947,6 +2112,47 @@ export DOTNET_ROOT=/opt/homebrew/opt/dotnet/libexec
 ajoute un BOM que `psql` ne comprend pas. Utiliser `-Encoding ASCII`, et
 éviter les emojis dans les commentaires SQL.
 
+**Un client HTTP ajoute de lui-même ce que le faux gestionnaire ne voit pas** (0.3.0). Le
+`SocketsHttpHandler` de .NET suit les redirections, garde et renvoie les cookies, et pose
+`traceparent` sur chaque requête ; le faux gestionnaire de la série ne fait rien de tout
+cela. Retirer l'un des verrous du client de géocodage (§9 quater) laisse donc verte toute
+série qui passe par le faux : la route, les issues, la requête sortante. Seul
+`Le_gestionnaire_reel_ne_suit_pas_les_redirections_ne_garde_aucun_cookie_et_ne_propage_rien`
+les éprouve — il enregistre le client sur une collection neuve, descend la chaîne des
+`InnerHandler` jusqu'au gestionnaire primaire réel, et lit ses réglages un par un.
+
+Deux règles en découlent pour toute série qui substitue un client nommé :
+
+- **Substituer le gestionnaire primaire** (`ConfigurePrimaryHttpMessageHandler`), et non
+  ajouter un gestionnaire délégué : toute la chaîne du client s'exécute alors, journalisation
+  comprise, comme en production.
+- ⚠️ **Vérifier que le dernier maillon est bien le faux.** Enregistré dans le mauvais ordre —
+  celui de la série avant celui de l'application —, le gestionnaire de production gagne, et
+  la série appelle **la vraie Géoplateforme** sans rien rougir : les adresses de test
+  partent sur le réseau.
+  `Le_gestionnaire_primaire_du_client_de_geocodage_est_le_faux` garde cet ordre.
+
+**Deux gardes du journal, éprouvées séparément** (0.3.0). L'URL d'une localisation porte
+l'adresse d'un site, et le journal JSON de l'API ne doit pas la recopier. Le client HTTP de
+.NET écrit l'URL complète dans ses lignes d'information, et aussi dans sa **portée**
+`HTTP GET {Uri}` : or `IncludeScopes` est vrai, et un niveau de journal filtre les messages,
+**pas la portée** d'une ligne écrite par une autre catégorie. D'où deux gardes, et deux
+tests, parce que deux gardes qui couvrent le même cas ne s'éprouvent qu'une fois séparées
+(§7 bis) :
+
+- `RemoveAllLoggers()` sur le client, éprouvée dans un hôte dérivé, jamais l'hôte partagé.
+  Un fournisseur de capture, avec sa règle propre `AddFilter<…>(null, LogLevel.Trace)` — qui
+  l'emporte sur le `Warning` de `appsettings.json`, donc isole la première garde de la
+  seconde —, consigne les messages et les portées. Après la localisation d'une adresse
+  portant un mot unique, aucune ligne ne contient ce mot, ni `geocodage/search?`.
+- `System.Net.Http.HttpClient` à `Warning`, lu **dans le fichier** `appsettings.json`, et
+  absent de `appsettings.Development.json`, qui le redéfinirait plus bas.
+
+⚠️ .NET masque déjà la requête des URL dans les traces d'`IHttpClientFactory` : un
+troisième filet, que le commutateur `System.Net.Http.DisableUriRedaction` ferait tomber. Il
+ne dispense pas des deux autres, et c'est pourquoi le test cherche aussi
+`geocodage/search?` — le jeton seul resterait introuvable, masqué, garde retirée.
+
 **Trois pièges de l'exploitation, mesurés sur l'instance d'essai de l'étape 18.**
 Détail et procédures dans `DEPLOIEMENT.md`.
 
@@ -2109,6 +2315,12 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   comportement de production d'un réglage, sur un chemin d'authentification.
   Toute troisième interface de service doit être justifiée de la même façon.
 
+  **`ServiceGeocodage` n'en a pas, et n'en demande pas** (0.3.0) : la série substitue,
+  sous lui, le **gestionnaire primaire** de son client HTTP nommé. C'est même la meilleure
+  substitution possible ici : la chaîne du client et le service lui-même s'exécutent
+  comme en production, et seul le réseau est remplacé. Une interface aurait remplacé le
+  service entier sous les tests de la route (§9 quater, §10).
+
   **`TimeProvider`**, la classe abstraite du framework, tient cette place depuis
   l'étape 20, et pour la même raison. « Douze semaines à partir d'aujourd'hui » ne
   s'éprouve pas sur un jour qui change : sans substitution, la série de génération
@@ -2121,7 +2333,9 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   pourtant : expiration des sessions et des jetons, fenêtre de la limitation de
   débit. Leurs tests raisonnent en durées relatives à l'instant présent, pas sur
   un jour du calendrier. Ils n'ont donc pas eu besoin de fixer l'horloge, et les
-  convertir serait un changement sans motif.
+  convertir serait un changement sans motif. Le disjoncteur de la localisation
+  (§9 quater) en est aussi, et c'est le seul dont une borne reste inéprouvée : la pause
+  de trente secondes au plus ne s'observe pas sans attendre, ni sans horloge à substituer.
 - Ne jamais contourner les filtres multi-tenant avec `IgnoreQueryFilters()`.
 
 **Frontend**
@@ -2181,7 +2395,12 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
     d'écriture : la liste des comptes n'est chargée que pour eux, et un lecteur lirait
     « Hors de votre périmètre » sur chaque ligne ;
   - `modificationSeule` sur une description : ni création ni suppression, l'API
-    n'exposant que le `PUT` — l'écran Entreprise.
+    n'exposant que le `PUT` — l'écran Entreprise ;
+  - `localiser` sur une description (0.3.0) : les cinq champs qu'un bouton *Localiser* lit
+    et remplit, la route se déduisant de celle de la description. ⚠️ **Sur les sites
+    seulement**, et `descriptions.test.ts` le garde : les agents ont les mêmes noms de
+    champs, et la poser sur eux enverrait des domiciles de salariés à l'IGN, en silence —
+    le serveur ne distingue pas une adresse de site d'un domicile (§9 quater).
 
   Leur logique est dans `valeurs.ts`, leurs invariantes dans `descriptions.test.ts`, qui
   refuse tout nom de champ qui ne désigne rien. ⚠️ Le préremplissage ne réécrit qu'un
@@ -2234,6 +2453,14 @@ mots-clés techniques restent en anglais (`async`, `Task`, `useState`).
   champs, les messages qui commencent un refus de code ou disent « déjà installé » —, et sa
   série lit `CodeInstallation.cs` et `InstallationController.cs` pour les comparer : une
   divergence la fait rougir, au lieu d'envoyer l'écran sur la mauvaise étape.
+
+  Et pour `src/reference/localiser.ts` (0.3.0) : le refus local, avec les bornes lues dans
+  les `longueurMax` de la description, le corps envoyé, la chaîne d'une coordonnée, la
+  ligne « Trouvé : … », le message d'un refus et la lecture du réglage. Le refus local
+  épargne un appel, et le plafond par compte avec lui. ⚠️ Comme `installation.ts`, elle
+  recopie les refus du serveur, et sa série lit `SitesController.cs` pour les comparer ;
+  elle est aussi **inscrite dans `scripts/tests.mjs`**, hors de quoi elle ne tournerait pas,
+  sans aucune erreur.
 - **Un QR code se dessine noir sur blanc dans les deux thèmes.** `--qr-fond` et
   `--qr-module` ne sont pas écrits en `light-dark()`, et c'est délibéré : un QR
   inversé n'est pas lu par toutes les applications. C'est le seul dessin du produit
