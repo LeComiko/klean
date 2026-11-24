@@ -96,8 +96,8 @@ verifier 'et reçoit la nouvelle clé sur sa propre ligne' egal "$(lire_env "$sa
 
 completer_env "$env" KLEAN_DOMAINE ecrase.exemple.fr
 verifier 'completer_env n’écrase jamais' egal "$(lire_env "$env" KLEAN_DOMAINE)" autre.exemple.fr
-completer_env "$env" KLEAN_GEOCODAGE false
-verifier 'completer_env ajoute ce qui manque' egal "$(lire_env "$env" KLEAN_GEOCODAGE)" false
+completer_env "$env" KLEAN_FUSEAU Europe/Paris
+verifier 'completer_env ajoute ce qui manque' egal "$(lire_env "$env" KLEAN_FUSEAU)" Europe/Paris
 
 verifier '.env reste en 600' egal "$(stat -c %a "$env")" 600
 verifier 'une clé absente se lit vide' egal "$(lire_env "$env" ABSENTE)" ''
