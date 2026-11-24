@@ -210,6 +210,22 @@ export interface ParenteRessource {
   champ: string
 }
 
+/**
+ * Les champs qu'un bouton « Localiser » lit et remplit (0.3.0) : il envoie l'adresse, le code postal
+ * et la ville, et pose la latitude et la longitude.
+ *
+ * ⚠️ Posée sur la description des **sites seulement**, et `descriptions.test.ts` le garde : les agents
+ * ont les mêmes noms de champs, et la poser sur eux enverrait des domiciles de salariés à l'IGN, en
+ * silence — le serveur ne distingue pas une adresse de site d'un domicile (RGPD.md, T6).
+ */
+export interface LocalisationRessource {
+  adresse: string
+  codePostal: string
+  ville: string
+  latitude: string
+  longitude: string
+}
+
 export interface DescriptionRessource {
   /** Identifiant interne, et clé de parenté. */
   cle: string
@@ -286,6 +302,12 @@ export interface DescriptionRessource {
    * « Supprimer », deux boutons qui répondraient 405.
    */
   modificationSeule?: boolean
+
+  /**
+   * Un bouton « Localiser » sous les coordonnées, offert à qui écrit quand l'entreprise a coché le
+   * réglage. La route est `${route}/localiser`.
+   */
+  localiser?: LocalisationRessource
 }
 
 /**

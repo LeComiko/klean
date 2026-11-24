@@ -4,7 +4,7 @@ import { describe, test } from 'node:test'
 
 import { Roles } from '../types/auth.ts'
 import {
-  Descriptions, JoursSemaine, compteRenduImport, descriptionDe, descriptionsLisibles, enfantsDe,
+  AideGeocodage, Descriptions, JoursSemaine, compteRenduImport, descriptionDe, descriptionsLisibles, enfantsDe,
 } from './descriptions.ts'
 
 /**
@@ -721,5 +721,44 @@ describe('compteRenduImport', () => {
     for (const illisible of [null, 'texte', {}, { crees: [1], dejaPresents: [] }]) {
       assert.equal(compteRenduImport(illisible), 'Liste type importée.')
     }
+  })
+})
+
+describe('descriptions — localisation des sites (0.3.0)', () => {
+  test('seule la description des sites porte localiser', () => {
+    assert.deepEqual(
+      Descriptions.filter((d) => d.localiser !== undefined).map((d) => d.cle),
+      ['sites'],
+    )
+  })
+
+  test('chaque nom de localiser désigne un champ du bon type, cinq noms distincts', () => {
+    const sites = descriptionDe('sites')!
+    const localiser = sites.localiser!
+    const champ = (nom: string) => sites.champs.find((c) => c.nom === nom)
+
+    assert.equal(new Set(Object.values(localiser)).size, 5)
+    for (const nom of [localiser.adresse, localiser.codePostal, localiser.ville]) {
+      assert.equal(champ(nom)?.type, 'texte', nom)
+      assert.ok(champ(nom)?.longueurMax !== undefined, `${nom} sans longueurMax`)
+    }
+    for (const nom of [localiser.latitude, localiser.longitude]) {
+      assert.equal(champ(nom)?.type, 'nombre', nom)
+      assert.ok(champ(nom)?.pas !== undefined, `${nom} sans pas : l’arrondi en dépend`)
+    }
+  })
+
+  test('l’entreprise porte geocodageActif en booléen, avec l’aide qui dit ce qui part', () => {
+    const champ = descriptionDe('entreprises')!.champs.find((c) => c.nom === 'geocodageActif')
+    assert.equal(champ?.type, 'booleen')
+    assert.equal(champ?.aide, AideGeocodage)
+    for (const mot of ['IGN', 'Rien d’un agent', 'aucun nom', 'donnée personnelle', 'n’est pas publiée']) {
+      assert.ok(AideGeocodage.includes(mot), mot)
+    }
+  })
+
+  test('l’adresse d’un site demande de ne nommer personne', () => {
+    const adresse = descriptionDe('sites')!.champs.find((c) => c.nom === 'adresse')
+    assert.match(adresse?.aide ?? '', /sans nom de personne/)
   })
 })
