@@ -74,6 +74,7 @@ const Indifferentes = [
   { fichier: 'src/passage/passage.test.ts', libelle: 'passage.ts — gestes, preuves et checklist' },
   { fichier: 'src/apparence/apparence.test.ts', libelle: 'apparence.ts — thème et stockage' },
   { fichier: 'src/installation/installation.test.ts', libelle: 'installation.ts — assistant' },
+  { fichier: 'src/reference/localiser.test.ts', libelle: 'localiser.ts — localisation d’un site' },
 ]
 
 let echecs = 0
