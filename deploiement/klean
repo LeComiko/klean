@@ -869,7 +869,7 @@ preparer_env() {
   domaine="$REPONSE"
   # Tout de suite : un domaine mal saisi se corrige en relançant, avant qu'il soit écrit.
   verifier_dns "$domaine"
-  # La localisation des sites par l'API Adresse ne se demande pas ici : depuis la 0.3.0, elle
+  # La localisation des sites par la Géoplateforme de l'IGN ne se demande pas ici : depuis la 0.3.0, elle
   # se règle dans l'application, par l'administrateur, écran Entreprise. Une ligne
   # KLEAN_GEOCODAGE restée dans un .env — celui d'une 0.2.x — n'est lue par rien.
   demander_smtp
