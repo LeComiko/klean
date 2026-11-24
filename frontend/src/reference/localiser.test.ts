@@ -88,6 +88,12 @@ describe('localiser — corps, coordonnées, phrases', () => {
     assert.equal(messageRefus('?'), 'La localisation a échoué.')
   })
 
+  test('un serveur injoignable (TypeError de fetch) dit de réessayer ou de saisir à la main', () => {
+    const attendu = 'Le serveur ne répond pas : réessayez, ou saisissez les coordonnées à la main.'
+    assert.equal(messageRefus(new TypeError('Failed to fetch')), attendu)
+    assert.equal(messageRefus(new TypeError('Load failed')), attendu)
+  })
+
   test('le réglage se lit sur la première entreprise, faux par défaut', () => {
     assert.equal(reglageActif({ elements: [{ geocodageActif: true }] }), true)
     assert.equal(reglageActif({ elements: [{ geocodageActif: false }] }), false)

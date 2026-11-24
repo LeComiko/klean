@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useRef, useState } from 'react'
 
 import { masque, optionsProposees, preremplir } from '../reference/valeurs'
 import type { Ligne, ValeursFormulaire } from '../reference/valeurs'
@@ -107,6 +107,7 @@ export function FormulaireRessource({
   function changer(nom: string, valeur: ValeursFormulaire[string]) {
     if (nomsLocalisation.includes(nom)) {
       generation.current += 1
+      controleurLocalisation.current?.abort()
       setLocalisationEtat({ etat: 'repos' })
     }
 
@@ -122,7 +123,7 @@ export function FormulaireRessource({
   }
 
   async function localiserSite() {
-    if (localisation === undefined || localisationEtat.etat === 'enCours') return
+    if (localisation === undefined || localisationEtat.etat === 'enCours' || enCours) return
 
     const noms = localisation.champs
     const texte = (nom: string) => (typeof valeurs[nom] === 'string' ? valeurs[nom] : '')
@@ -229,7 +230,7 @@ export function FormulaireRessource({
                 onChanger={changer}
               />
               {localisation !== undefined && !lectureSeule && champ.nom === localisation.champs.longitude && (
-                <Localisation etat={localisationEtat} onLocaliser={() => void localiserSite()} />
+                <Localisation etat={localisationEtat} occupe={enCours} onLocaliser={() => void localiserSite()} />
               )}
             </Fragment>
           ))}
@@ -493,6 +494,8 @@ function typeDeSaisie(type: ChampRessource['type']): string {
 
 interface ProprietesLocalisation {
   etat: EtatLocalisation
+  /** Un enregistrement du formulaire est en cours. */
+  occupe: boolean
   onLocaliser: () => void
 }
 
@@ -501,26 +504,27 @@ interface ProprietesLocalisation {
  * au bouton. Le résultat vit dans un `<output>` toujours rendu — un conteneur vivant doit exister avant
  * que son contenu change, sinon le lecteur d'écran ne l'annonce pas.
  */
-function Localisation({ etat, onLocaliser }: ProprietesLocalisation) {
+function Localisation({ etat, occupe, onLocaliser }: ProprietesLocalisation) {
   const enCours = etat.etat === 'enCours'
+  const identifiantAide = useId()
 
   return (
     <div className="localisation">
       <button
         className="localisation__bouton"
         type="button"
-        aria-disabled={enCours}
-        aria-describedby="localisation-aide"
+        aria-disabled={enCours || occupe}
+        aria-describedby={identifiantAide}
         onClick={onLocaliser}
       >
         {enCours ? 'Localisation…' : 'Localiser'}
       </button>
 
-      <p className="champ__aide" id="localisation-aide">
+      <p className="champ__aide" id={identifiantAide}>
         {AideLocaliser}
       </p>
 
-      <output className="localisation__resultat">
+      <output className="localisation__resultat" aria-live="polite">
         {etat.etat === 'trouvee' && (
           <>
             {phraseTrouvee(etat.resultat)}

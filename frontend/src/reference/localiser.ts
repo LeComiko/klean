@@ -115,6 +115,8 @@ export function phraseTrouvee(resultat: ResultatLocalisation): string {
 export function messageRefus(echec: unknown): string | null {
   if (echec instanceof Error) {
     if (echec.name === 'AbortError') return null
+    // `fetch` sans réponse : le message du navigateur est en anglais et varie (« Failed to fetch », « Load failed »).
+    if (echec.name === 'TypeError') return 'Le serveur ne répond pas : réessayez, ou saisissez les coordonnées à la main.'
     if (echec.message !== '') return echec.message
   }
   return 'La localisation a échoué.'
