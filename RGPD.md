@@ -379,10 +379,10 @@ Les tables du modèle, plus celles d'Identity. « DP » = donnée personnelle.
 **Ce qui n'existe pas, et qu'il est utile de pouvoir affirmer :** aucune position
 historisée — `Pointages` garde une distance, jamais des coordonnées (T7) —, aucun suivi
 en arrière-plan, aucun accusé de lecture de consigne, aucun cookie de mesure d'audience,
-aucune télémétrie, et, depuis la correction du §9.1, aucun appel sortant hors trois cas,
-tous au §4 : le SMTP s'il est configuré, le téléchargement des versions, et depuis la 0.3.0
-la localisation des sites vers l'IGN, **seulement si l'entreprise l'a activée** et
-seulement au clic de son administrateur.
+aucune télémétrie, et, depuis la correction du §9.1, aucun appel sortant hors quatre cas,
+tous au §4 : le SMTP s'il est configuré ; Let's Encrypt, pour le certificat ; le
+téléchargement des versions ; et depuis la 0.3.0 la localisation des sites vers l'IGN,
+**seulement si l'entreprise l'a activée** et seulement au clic de son administrateur.
 
 **Une seule valeur est rangée dans le navigateur**, depuis l'étape 32 : `klean.apparence`,
 dans le stockage local — le thème choisi dans *Mon compte*, « automatique », « clair » ou
@@ -400,9 +400,13 @@ qui ne dit pas qui a lu — c'est le rôle du journal d'accès de T5. Sa conserv
 celle que l'exploitant donne à ses journaux de conteneur ; voir `docker-compose.yml`.
 
 ⚠️ **Depuis la 0.3.0, une URL sortante porte une adresse**, et le journal technique ne la
-recopie pas. La requête envoyée à l'IGN met la voie et la commune d'un site dans son URL,
-et le client HTTP de .NET écrit d'ordinaire cette URL dans ses lignes d'information et dans
-leur portée. Deux gardes l'en empêchent, éprouvées chacune par son test :
+recopie pas. La requête envoyée à l'IGN met la voie, la commune et, s'il compte cinq
+chiffres, le code postal d'un site dans la partie requête de son URL. Le client HTTP de .NET
+journalise cette URL, mais en **masque la requête** par défaut : l'adresse n'y paraîtrait
+pas, seuls l'hôte et le chemin — ce qui a été mesuré en retirant la première garde
+ci-dessous. Ce masquage se désactive pourtant par un commutateur de .NET, et l'hôte et le
+chemin disent encore à qui l'instance parle et quand. Deux gardes ferment les deux cas,
+éprouvées chacune par son test :
 
 1. **le client de la localisation n'a aucun journal** (`RemoveAllLoggers`), la garde
    principale : un exploitant qui passe le niveau général en `Debug` ne la défait pas ;
@@ -442,11 +446,12 @@ que si l'entreprise l'active.
    fiche d'un site ; rien ne part à l'enregistrement, ni par lot. **Ce qui part** : la voie,
    le code postal s'il compte cinq chiffres, et la commune, tels que saisis — ni le nom du
    site, ni ses consignes, ni le client, ni aucun nom de personne ; et pour seuls en-têtes
-   `Host` et `User-Agent: KLEAN`, générique, sans version ni domaine. **D'où** : du serveur seul ; l'IGN
-   voit l'adresse IP du serveur, jamais celle d'un utilisateur. **Ce qui revient** : des
-   coordonnées et l'adresse trouvée, posées dans le formulaire ; seules les coordonnées
-   sont gardées, et seulement si l'administrateur enregistre le site. **Destinataire
-   tiers**, responsable distinct, et non sous-traitant — une lecture, au §1.
+   `Host` et `User-Agent: KLEAN`, générique, sans version ni domaine. **D'où** : du serveur
+   seul ; l'IGN voit l'adresse IP du serveur, jamais celle d'un utilisateur. **Ce qui
+   revient** : des coordonnées, posées dans le formulaire, et l'adresse trouvée,
+   seulement affichée sous le bouton ; seules les coordonnées sont gardées, et seulement si
+   l'administrateur enregistre le site. **Destinataire tiers**, responsable distinct, et
+   non sous-traitant — une lecture, au §1.
 
    ⚠️ **Le champ Adresse est un texte libre, et il part tel quel.** Un nom écrit dedans —
    « chez Mme Durand » — partirait avec : filtrer un nom côté serveur n'est pas réaliste.
@@ -474,6 +479,11 @@ utilisateurs ni aucune donnée sur eux. Elles sont à signaler à l'exploitant q
 sorties ; nous ne les lisons pas comme une sous-traitance de données personnelles, à
 confirmer avec le reste de ce document. Le téléchargement est
 la seule sollicitation de GitHub : une instance ne lui envoie rien d'autre.
+
+**Le certificat, de même.** Caddy obtient et renouvelle seul le certificat HTTPS auprès de
+Let's Encrypt (`frontend/Caddyfile`). La demande porte le nom de domaine de l'instance,
+public par nature, et aucune adresse de courriel n'est configurée : aucune donnée d'un
+utilisateur ni de l'entreprise n'y part, au-delà de ce nom et de l'adresse IP du serveur.
 
 ---
 
@@ -658,7 +668,7 @@ collecte une information sur un salarié doit avoir été porté à sa connaissa
 > chez vous et un site, lorsqu'il faut trouver un remplaçant. C'est un des trois
 > critères de classement des candidats, avec votre connaissance du site et vos heures
 > déjà planifiées dans la semaine. **L'adresse de votre domicile n'est jamais envoyée à un
-> service extérieur.**
+> service de localisation.**
 >
 > **Ce que l'écran « Ma journée » relève de votre position** : quand vous appuyez sur
 > *Démarrer* et sur *Terminer*, et seulement à ce moment-là, votre téléphone donne votre
@@ -690,8 +700,10 @@ collecte une information sur un salarié doit avoir été porté à sa connaissa
 ⚠️ **La phrase sur l'adresse du domicile est vraie du code tel qu'il est**, depuis la 0.3.0
 qui fait partir vers l'IGN l'adresse des **sites** : le bouton *Localiser* n'existe que sur
 la fiche d'un site, et une invariante de l'écran l'interdit sur les fiches agents
-(`CLAUDE.md` §11). Elle **tombera** si les domiciles sont un jour géocodés, et la note
-devra changer avant le code.
+(`CLAUDE.md` §11). Elle dit « service de localisation » et non « service extérieur » parce
+que l'hébergeur et le stockage des sauvegardes détiennent la base entière, domiciles
+compris (§4, sortie 3). Elle **tombera** si les domiciles sont un jour géocodés, par l'IGN
+ou par tout autre service, et la note devra changer avant le code.
 
 ---
 
@@ -763,6 +775,13 @@ plus.
 **`SiteDto` est le cas plus faible, et c'est `Consignes` qui l'affaiblit** — texte
 libre pouvant nommer une personne. La parade proportionnée n'est pas de journaliser
 chaque lecture de site, mais d'empêcher que la donnée y entre. Voir §9.5.
+
+**Un site qui est un domicile est une donnée personnelle**, et la 0.3.0 l'écrit : c'est la
+quatrième catégorie de personnes du §1, et la ligne `Sites` du §3. L'exemption de `SiteDto`
+au journal d'accès tient pourtant, et pour la raison de T5 : ce journal existe pour la
+surveillance des salariés par leur employeur, et lire l'adresse d'un lieu d'intervention
+n'en est pas une. Que l'occupant soit un particulier change l'information qui lui est due
+(§6), pas le journal.
 
 ### 8.4 — Les anomalies et leurs photos sont-elles à journaliser ?
 
@@ -1224,8 +1243,8 @@ copie datée des conditions d'utilisation de la Géoplateforme et de sa page rel
 données personnelles, sur lesquelles repose la qualification du §1 ; reporter l'IGN dans
 son registre, parmi les destinataires (art. 30(1)(d)), et y écrire qu'aucun transfert hors
 de l'Union n'est connu (art. 30(1)(e), §4) ; noter chaque changement du réglage,
-l'application n'en gardant que le dernier dans chaque sens (§6) ; et, derrière un pare-feu sortant, ouvrir le port 443 vers `data.geopf.fr`
-(`DEPLOIEMENT.md` §1).
+l'application n'en gardant que le dernier dans chaque sens (§6) ; et, derrière un pare-feu
+sortant, ouvrir le port 443 vers `data.geopf.fr` (`DEPLOIEMENT.md` §1).
 
 **Par le logiciel** — état au 6 novembre 2026, dans l'ordre de gravité où les écarts ont
 été relevés :

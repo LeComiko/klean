@@ -65,9 +65,10 @@ public sealed class ServiceGeocodage
     }
 
     /// <summary>
-    /// Lit et valide la configuration. ⚠️ Appelée deux fois, et les deux sont nécessaires : par
-    /// <see cref="Enregistrer"/>, ce qui fait refuser le démarrage ; et dans le délégué du client, pour
-    /// la valeur finale de la configuration.
+    /// Lit et valide la configuration. ⚠️ Appelée trois fois, et chacune a sa raison : par
+    /// <see cref="Enregistrer"/>, ce qui fait refuser le démarrage ; par le constructeur, pour l'adresse
+    /// réellement visée, figée à la construction du singleton ; et dans le délégué du client, pour le
+    /// délai, lu dans la valeur finale de la configuration.
     /// </summary>
     public static ReglagesGeocodage Lire(IConfiguration configuration)
     {

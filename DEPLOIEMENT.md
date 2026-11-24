@@ -186,8 +186,8 @@ Ce que dit le quatrième écran, et qui reste vrai après lui :
   saisissent à la main tant que vous ne l'activez pas. Elle s'active dans l'écran
   *Entreprise*, dont l'aide dit ce qui part vers l'IGN, et rien ne part avant ce choix ;
   `RGPD.md` §4 et T6 en disent le détail, et ce qu'elle vous demande envers vos clients
-  particuliers. Une ligne `KLEAN_GEOCODAGE` restée dans le `.env` d'une 0.2.x n'est lue par
-  rien : le réglage vit dans l'application.
+  particuliers. Une ligne `KLEAN_GEOCODAGE` restée dans le `.env` d'une 0.1.x ou d'une 0.2.x
+  n'est lue par rien : le réglage vit dans l'application.
 - **La double authentification s'équipe dès la première connexion**, comme ci-dessus.
 
 Un code refusé ramène au premier écran. Au-delà de trente codes faux reçus par le serveur

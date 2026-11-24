@@ -591,8 +591,11 @@ qu'un administrateur clique sur *Localiser* (`RGPD.md` §4).
 
 Les deux valeurs sont les défauts, et rien n'est à écrire pour les garder. L'adresse doit
 être absolue, en `https`, sans identifiants, requête ni fragment ; le délai, un entier de 1
-à 20 secondes, sous les 30 du délai de requête. Une valeur hors de ces bornes fait refuser
-le démarrage. Activer la fonction n'est pas un réglage de l'API : c'est une case de
+à 20 secondes. Une valeur hors de ces bornes fait refuser le démarrage. ⚠️ Le délai doit
+rester **strictement inférieur à `Http:DelaiRequeteSecondes`**, le délai de requête, 30 s
+par défaut : sinon une localisation lente répond 504 au lieu du 503 qui dit de réessayer.
+Rien ne compare les deux valeurs : qui baisse le délai de requête baisse aussi celui-ci.
+Activer la fonction n'est pas un réglage de l'API : c'est une case de
 l'écran *Entreprise*, entreprise par entreprise.
 
 ### HTTPS

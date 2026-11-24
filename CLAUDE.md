@@ -119,7 +119,8 @@ KLEAN/
 │   ├── DTOs/            un fichier par entité, XxxDto + XxxCreateDto
 │   ├── Controllers/     un par entité + Auth + SecondFacteur + Planning
 │   │                    + Installation, l'assistant du premier lancement ;
-│   │                    ReponsesDebit, le 429 et son Retry-After, communs
+│   │                    ReponsesDebit, le 429 et son Retry-After — Installation
+│   │                    et Sites ; Auth et SecondFacteur gardent le leur
 │   ├── Services/        AffectationService, RemplacementService,
 │   │                    PlanningService, ServiceGeneration, JoursFeries,
 │   │                    ServiceStock, ServicePrevisionStock,
@@ -410,10 +411,10 @@ les écrans de référence (§11), et ce que lit un humain. Ce que la générati
     compte, puis ce que le patron doit savoir — double authentification à la première
     connexion, responsabilité du traitement, note aux agents de `RGPD.md` §7, durées de
     conservation à valider, localisation des sites désactivée — à activer dans Entreprise
-    (§9 quater). Toute la validation passe
-    par `installation/installation.ts` avant l'appel, et `refusDInstallation` dit où mène
-    un refus du serveur : au premier écran sur un code faux, à la connexion sur le 409
-    « déjà installé », **à l'arrêt** sur tout autre 409, sur place sinon. Tant que le serveur
+    (§9 quater). Toute la validation passe par `installation/installation.ts` avant
+    l'appel, et `refusDInstallation` dit où mène un refus du serveur : au premier écran
+    sur un code faux, à la connexion sur le 409 « déjà installé », **à l'arrêt** sur tout
+    autre 409, sur place sinon. Tant que le serveur
     dit `installee: false`, la connexion renvoie à l'assistant.
 
     ⚠️ **L'orpheline bloque l'assistant, sans retour à l'entreprise ni lien vers la
@@ -1533,7 +1534,8 @@ cherche **en base**.
 
 ## 9 quater. Localisation des sites
 
-Numérotée « quater » pour la même raison que §6 bis. Les arbitrages et leurs motifs sont dans
+Numérotée « quater » pour la même raison que §6 bis. Le cadrage est dans `SPEC.md`, lot A3
+de l'étape 34, points 9 et 10 ; les arbitrages et leurs motifs, dans
 `docs/superpowers/specs/2026-11-23-geocodage-design.md` ; le traitement, dans `RGPD.md`, T6.
 
 **Une localisation remplit deux champs, et n'enregistre rien.** Dans la fiche d'un site, le
@@ -1548,13 +1550,14 @@ l'administrateur dans l'écran *Entreprise* — pas dans `.env` : ni SSH, ni red
 sens, et un `PUT` qui ne le change pas ne date rien. Ces deux dates répondent, autant
 qu'on le peut, à une demande d'accès — « mon adresse est-elle partie, et quand ? » — : le
 clic n'enregistre rien, et elles disent seulement **quand une adresse a pu partir**
-(`RGPD.md` §6). L'écran ne les affiche pas ; `GET /api/entreprises` les rend. ⚠️ **Le dernier passage dans chaque
-sens, pas l'historique** : un réglage coché, décoché puis recoché n'a plus la date de sa
-première activation. ⚠️ `EntreprisesController` projette `EntrepriseDto` à la main, dans
-`Lister` et dans `Obtenir`, et le `PUT` recopie champ par champ : un champ oublié à l'un des
-trois endroits affiche la case toujours décochée, ou désactive la localisation à chaque
-enregistrement de l'entreprise, sans erreur. `KLEAN_GEOCODAGE`, que l'installateur d'une
-0.2.x écrivait dans `.env`, n'est lue par rien.
+(`RGPD.md` §6). L'écran ne les affiche pas ; `GET /api/entreprises` les rend. ⚠️ **Le
+dernier passage dans chaque sens, pas l'historique** : un réglage coché, décoché puis
+recoché n'a plus la date de sa première activation. ⚠️ `EntreprisesController` projette
+`EntrepriseDto` à la main, dans `Lister` et dans `Obtenir`, et le `PUT` recopie champ par
+champ : un champ oublié à l'un des trois endroits affiche la case toujours décochée, ou
+désactive la localisation à chaque enregistrement de l'entreprise, sans erreur.
+`KLEAN_GEOCODAGE`, que l'installateur d'une 0.1.x ou d'une 0.2.x écrivait dans `.env`,
+n'est lue par rien.
 
 **La route contrôle dans cet ordre**, administrateur seul comme l'écriture des sites :
 
@@ -1582,8 +1585,7 @@ Six choses à savoir avant d'y toucher :
   runes : bidirectionnalité, espaces sans largeur, U+FEFF, trait d'union conditionnel,
   caractères d'étiquette hors du plan de base. Refuser les seuls caractères de contrôle
   laisserait partir vers l'IGN, sans que personne le voie, un texte qui ne s'affiche pas
-  comme il s'écrit.
-  L'écran applique la même règle, `/[\p{Cc}\p{Cf}]/u`.
+  comme il s'écrit. L'écran applique la même règle, `/[\p{Cc}\p{Cf}]/u`.
 - ⚠️ **Le plafond global ne compte que les requêtes qui partent vers l'IGN**, d'où sa place
   juste avant l'appel, sur le modèle du plafond global des codes faux de l'installation
   (§6) : compté en tête, un 409 ou un 400 de champ le tiendrait plein sans qu'aucune requête
@@ -1592,8 +1594,9 @@ Six choses à savoir avant d'y toucher :
   plafond par compte ne les protège pas — trente requêtes peuvent partir dans la même
   seconde, et un administrateur peut en créer d'autres. Le prix, assumé : un administrateur
   peut en priver les autres entreprises quelques secondes, la saisie à la main restant
-  possible. Les 429 portent `Retry-After`, en secondes, par `ReponsesDebit`, extrait
-  d'`InstallationController` plutôt que recopié.
+  possible. ⚠️ Il compte aussi les requêtes que le disjoncteur arrête, celui-ci n'étant
+  consulté que dans `LocaliserAsync`, après lui. Les 429 de la route portent `Retry-After`,
+  en secondes, par `ReponsesDebit`, extrait d'`InstallationController` plutôt que recopié.
 - ⚠️ **La recherche est comptée en unités UTF-16**, à l'écran comme au contrôleur, et la
   borne de 200 ne garantit pas que le service accepte : l'IGN a répondu **500** à une
   recherche de deux cents « a », et KLEAN rend alors 503. De même, une saisie portant un
@@ -1615,18 +1618,23 @@ configuration, `Geocodage:Adresse` et `Geocodage:DelaiSecondes`, est lue par `Li
 une valeur invalide **fait refuser le démarrage**, configurée à moitié comme un SMTP
 incomplet (§2) : une adresse absolue en `https`, sans identifiants, requête ni fragment —
 par défaut `https://data.geopf.fr/geocodage` — ; un délai entier de 1 à 20 secondes, 5 par
-défaut, **strictement sous les 30 s** du délai de requête, sinon le jeton de la requête
-gagnerait et l'appelant recevrait un 504 au lieu du 503. ⚠️ `Lire` est appelée deux fois,
-et les deux sont nécessaires : par `Enregistrer`, ce qui fait refuser le démarrage, et dans
-le délégué du client, pour la valeur finale de la configuration.
+défaut. ⚠️ **`Geocodage:DelaiSecondes` doit rester strictement inférieur à
+`Http:DelaiRequeteSecondes`**, le délai de requête, 30 s par défaut : sinon le jeton de la
+requête gagne la course, et l'appelant reçoit un 504 au lieu du 503. Rien ne compare les
+deux valeurs ; la borne de 20 ne protège que le délai de requête par défaut, et c'est une
+contrainte de configuration à tenir quand on baisse celui-ci. ⚠️ `Lire` est appelée
+**trois fois**, et chacune a sa raison : par `Enregistrer`, ce qui fait refuser le
+démarrage ; par le constructeur, pour l'adresse réellement visée, figée à la construction
+du singleton ; et dans le délégué du client, pour le délai, lu dans la valeur finale de la
+configuration.
 
 Ce qui part : `q`, la voie et la commune ; `postcode`, **seulement s'il compte exactement
 cinq chiffres ASCII** — `char.IsDigit` accepterait les chiffres arabes-indiens, et le
-service refuse en 400 un code postal qui n'a pas cinq chiffres — ; `limit=1` et `index=address`. Aucun nom de site, de client ni
-de personne, et aucun en-tête que `User-Agent: KLEAN` et `Host`. Chaque paramètre est
-encodé seul par `Uri.EscapeDataString` et concaténé à la base : une combinaison d'`Uri`
-perdrait le dernier segment d'une base sans `/` final, et ferait changer d'hôte une partie
-relative commençant par `//`.
+service refuse en 400 un code postal qui n'a pas cinq chiffres — ; `limit=1` et
+`index=address`. Aucun nom de site, de client ni de personne, et aucun en-tête que
+`User-Agent: KLEAN` et `Host`. Chaque paramètre est encodé seul par `Uri.EscapeDataString`
+et concaténé à la base : une combinaison d'`Uri` perdrait le dernier segment d'une base sans
+`/` final, et ferait changer d'hôte une partie relative commençant par `//`.
 
 **Le client nommé `geocodage` est verrouillé**, et chaque verrou ferme une fuite :
 
@@ -1637,7 +1645,7 @@ relative commençant par `//`.
 | propagateur sans sortie | chaque requête porterait `traceparent`, dont le `TraceId` est l'identifiant de corrélation de KLEAN — celui de ses journaux, de `X-Correlation-Id` et de ses corps d'erreur |
 | `AutomaticDecompression = None` | déjà le défaut, écrit pour être une déclaration |
 | `MaxResponseContentBufferSize` de 64 Kio, `Timeout` | une réponse sans fin ou servie au compte-gouttes tiendrait la requête |
-| `RemoveAllLoggers()` | l'URL, donc l'adresse, entrerait dans le journal technique |
+| `RemoveAllLoggers()` | l'URL entrerait dans le journal technique : l'hôte et le chemin, et l'adresse elle-même si le masquage de la requête par .NET est désactivé (§10) |
 
 ⚠️ **La lecture met le corps en tampon** — `GetAsync` en mode par défaut, jamais
 `ResponseHeadersRead` : c'est ce qui fait valoir le plafond **et** le délai sur tout le
@@ -2132,26 +2140,34 @@ Deux règles en découlent pour toute série qui substitue un client nommé :
   partent sur le réseau.
   `Le_gestionnaire_primaire_du_client_de_geocodage_est_le_faux` garde cet ordre.
 
-**Deux gardes du journal, éprouvées séparément** (0.3.0). L'URL d'une localisation porte
-l'adresse d'un site, et le journal JSON de l'API ne doit pas la recopier. Le client HTTP de
-.NET écrit l'URL complète dans ses lignes d'information, et aussi dans sa **portée**
-`HTTP GET {Uri}` : or `IncludeScopes` est vrai, et un niveau de journal filtre les messages,
-**pas la portée** d'une ligne écrite par une autre catégorie. D'où deux gardes, et deux
-tests, parce que deux gardes qui couvrent le même cas ne s'éprouvent qu'une fois séparées
-(§7 bis) :
+**Deux gardes du journal, éprouvées séparément** (0.3.0). L'adresse d'un site est tout
+entière dans la **requête** de l'URL sortante — `q`, et `postcode` s'il a cinq chiffres —, et
+le journal JSON de l'API ne doit pas la recopier. Le client d'`IHttpClientFactory`
+journalise l'URL de chaque appel, sous les catégories `System.Net.Http.HttpClient.geocodage.*`,
+dans ses messages et, d'après la conception de la 0.3.0 — non mesuré à part —, dans sa
+portée `HTTP GET {Uri}` ; or
+`IncludeScopes` est vrai, et un niveau de journal filtre les messages, pas la portée d'une
+ligne écrite par une autre catégorie.
 
-- `RemoveAllLoggers()` sur le client, éprouvée dans un hôte dérivé, jamais l'hôte partagé.
-  Un fournisseur de capture, avec sa règle propre `AddFilter<…>(null, LogLevel.Trace)` — qui
-  l'emporte sur le `Warning` de `appsettings.json`, donc isole la première garde de la
-  seconde —, consigne les messages et les portées. Après la localisation d'une adresse
-  portant un mot unique, aucune ligne ne contient ce mot, ni `geocodage/search?`.
+⚠️ **Avec les réglages par défaut, .NET y masque la requête** : l'URL s'écrit
+`…/geocodage/search?*`, et l'adresse n'y paraît pas, même sans garde. C'est mesuré, garde
+retirée : le mot unique de l'adresse restait introuvable dans les lignes capturées, le
+chemin s'y trouvait. Les deux gardes ferment donc ce que le masquage laisse : le jour où le
+commutateur `System.Net.Http.DisableUriRedaction` le désactive, l'adresse entière ; et dès
+aujourd'hui, l'hôte et le chemin, qui disent à qui l'instance parle et quand. Deux gardes,
+deux tests, parce que deux gardes qui couvrent le même cas ne s'éprouvent qu'une fois
+séparées (§7 bis) :
+
+- `RemoveAllLoggers()` sur le client, éprouvée **sur une `ServiceCollection` neuve**, sans
+  hôte ni `appsettings.json` : `Enregistrer` réel, gestionnaire primaire substitué, et un
+  fournisseur de capture dont la règle propre, `AddFilter<…>(null, LogLevel.Trace)`, lui
+  fait recevoir tous les niveaux. Il consigne les messages et les portées. Après la
+  localisation de « 12 rue Zqxwvjeton Paris », aucune ligne ne doit contenir `Zqxwvjeton`,
+  ni `geocodage/search?`. ⚠️ **C'est la seconde assertion qui porte** : `RemoveAllLoggers()`
+  retiré, la première reste verte — la requête est masquée — et la seconde rougit.
 - `System.Net.Http.HttpClient` à `Warning`, lu **dans le fichier** `appsettings.json`, et
-  absent de `appsettings.Development.json`, qui le redéfinirait plus bas.
-
-⚠️ .NET masque déjà la requête des URL dans les traces d'`IHttpClientFactory` : un
-troisième filet, que le commutateur `System.Net.Http.DisableUriRedaction` ferait tomber. Il
-ne dispense pas des deux autres, et c'est pourquoi le test cherche aussi
-`geocodage/search?` — le jeton seul resterait introuvable, masqué, garde retirée.
+  absent de `appsettings.Development.json`, qui le redéfinirait plus bas. Ce test-là ne
+  journalise rien : il lit la configuration, puisque la garde n'est que cela.
 
 **Trois pièges de l'exploitation, mesurés sur l'instance d'essai de l'étape 18.**
 Détail et procédures dans `DEPLOIEMENT.md`.
