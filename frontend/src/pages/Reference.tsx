@@ -13,7 +13,6 @@ import {
   TailleParDefaut,
 } from '../api/ressources'
 import type { Page, Ressource } from '../api/ressources'
-import { ErreurApi } from '../api/client'
 import { useAuth } from '../auth/contexte'
 import { FormulaireRessource } from '../composants/FormulaireRessource'
 import type { OptionReference } from '../composants/FormulaireRessource'
@@ -310,16 +309,8 @@ function EcranReference({
   }, [description, ecriture])
 
   const localiser = useCallback(
-    async (corps: CorpsLocalisation, signal: AbortSignal): Promise<ResultatLocalisation> => {
-      try {
-        return await localiserSite(description.route, corps, signal)
-      } catch (echec) {
-        // 409 : le réglage a été décoché ailleurs. Le message du serveur s'affiche, et le bouton
-        // disparaît au rendu suivant.
-        if (echec instanceof ErreurApi && echec.statut === 409) setGeocodage(false)
-        throw echec
-      }
-    },
+    (corps: CorpsLocalisation, signal: AbortSignal): Promise<ResultatLocalisation> =>
+      localiserSite(description.route, corps, signal),
     [description.route],
   )
 
