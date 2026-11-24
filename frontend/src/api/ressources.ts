@@ -2,6 +2,8 @@
 // ressources.test.ts, et Node n'applique pas la résolution sans extension de Vite
 // (CLAUDE.md §10).
 import { api } from './client.ts'
+import { routeLocalisation } from '../reference/localiser.ts'
+import type { CorpsLocalisation, ResultatLocalisation } from '../reference/localiser.ts'
 
 /**
  * Enveloppe de pagination des onze listes, en place depuis l'étape 8.
@@ -115,4 +117,13 @@ export function modifierRessource(route: string, id: string, corps: unknown): Pr
 
 export function supprimerRessource(route: string, id: string): Promise<void> {
   return api.supprimer<void>(`${route}/${id}`)
+}
+
+/** « Localiser » (0.3.0) : rien n'est enregistré, le formulaire pose les coordonnées. */
+export function localiserSite(
+  route: string,
+  corps: CorpsLocalisation,
+  signal: AbortSignal,
+): Promise<ResultatLocalisation> {
+  return api.post<ResultatLocalisation>(routeLocalisation(route), corps, signal)
 }

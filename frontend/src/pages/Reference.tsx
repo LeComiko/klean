@@ -7,6 +7,7 @@ import {
   listerRessource,
   listerComptes,
   listerToutPourChoix,
+  localiserSite,
   modifierRessource,
   supprimerRessource,
   TailleParDefaut,
@@ -16,6 +17,8 @@ import { useAuth } from '../auth/contexte'
 import { FormulaireRessource } from '../composants/FormulaireRessource'
 import type { OptionReference } from '../composants/FormulaireRessource'
 import type { ValeursFormulaire } from '../reference/valeurs'
+import { reglageActif } from '../reference/localiser'
+import type { CorpsLocalisation, ResultatLocalisation } from '../reference/localiser'
 import { EnTetePage } from '../composants/EnTetePage'
 import { Pagination } from '../composants/Pagination'
 import { SousNavigation } from '../composants/SousNavigation'
@@ -276,6 +279,41 @@ function EcranReference({
       controleur.abort()
     }
   }, [description, ecriture])
+
+  // ---- Le réglage de localisation (0.3.0) ----
+  //
+  // Seulement pour qui écrit, et sur une description qui localise : le `ClientSyndic`, à qui la fiche
+  // d'un site est ouverte, n'a pas accès à `/api/entreprises` et recevrait un 403 à chaque ouverture.
+  // L'écran est remonté par `key={description.cle}` : le réglage est relu à chaque entrée dans Sites.
+  const [geocodage, setGeocodage] = useState(false)
+
+  useEffect(() => {
+    if (!ecriture || description.localiser === undefined) return
+
+    const entreprises = descriptionDe('entreprises')
+    if (entreprises === undefined) return
+
+    const controleur = new AbortController()
+
+    listerToutPourChoix<Ressource>(entreprises.route, controleur.signal)
+      .then((recue) => {
+        setGeocodage(reglageActif(recue))
+      })
+      .catch(() => {
+        // Silencieux : sans réglage lu, le bouton n'apparaît pas, et la saisie à la main reste.
+      })
+
+    return () => {
+      controleur.abort()
+    }
+  }, [description, ecriture])
+
+  const localiser = useCallback(
+    (corps: CorpsLocalisation, signal: AbortSignal): Promise<ResultatLocalisation> =>
+      localiserSite(description.route, corps, signal),
+    [description.route],
+  )
+
   const lectureSeule = !ecriture
   const suppression = ecriture && description.modificationSeule !== true
   const designation = designer(description.singulier, description.genre)
@@ -581,6 +619,11 @@ function EcranReference({
               erreur={erreurFormulaire}
               onEnregistrer={(valeurs) => void enregistrer(valeurs)}
               onAnnuler={fermer}
+              localisation={
+                geocodage && description.localiser !== undefined
+                  ? { champs: description.localiser, onLocaliser: localiser }
+                  : undefined
+              }
             />
           )}
         </div>

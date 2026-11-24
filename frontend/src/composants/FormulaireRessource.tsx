@@ -1,8 +1,19 @@
-import { useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 
 import { masque, optionsProposees, preremplir } from '../reference/valeurs'
 import type { Ligne, ValeursFormulaire } from '../reference/valeurs'
-import type { ChampRessource } from '../types/reference'
+import {
+  AideLocaliser,
+  MotAVerifier,
+  bornesDe,
+  chaineCoordonnee,
+  corpsLocalisation,
+  messageRefus,
+  phraseTrouvee,
+  refusLocal,
+} from '../reference/localiser'
+import type { CorpsLocalisation, ResultatLocalisation } from '../reference/localiser'
+import type { ChampRessource, LocalisationRessource } from '../types/reference'
 import './FormulaireRessource.css'
 
 /** Une option de liste déroulante pour un champ de référence. */
@@ -52,7 +63,22 @@ interface Proprietes {
 
   onEnregistrer: (valeurs: ValeursFormulaire) => void
   onAnnuler: () => void
+
+  /**
+   * « Localiser » (0.3.0), offert quand l'entreprise a coché le réglage. La page appelle, le formulaire
+   * tient les valeurs et pose les coordonnées. Absent : aucun bouton.
+   */
+  localisation?: {
+    champs: LocalisationRessource
+    onLocaliser: (corps: CorpsLocalisation, signal: AbortSignal) => Promise<ResultatLocalisation>
+  }
 }
+
+type EtatLocalisation =
+  | { etat: 'repos' }
+  | { etat: 'enCours' }
+  | { etat: 'trouvee'; resultat: ResultatLocalisation }
+  | { etat: 'refusee'; message: string }
 
 export function FormulaireRessource({
   titre,
@@ -65,10 +91,25 @@ export function FormulaireRessource({
   erreur,
   onEnregistrer,
   onAnnuler,
+  localisation,
 }: Proprietes) {
   const [valeurs, setValeurs] = useState<ValeursFormulaire>(depart)
+  const [localisationEtat, setLocalisationEtat] = useState<EtatLocalisation>({ etat: 'repos' })
+  // Chaque modification à la main d'un champ de localisation invalide la réponse attendue : la ligne
+  // « Trouvé » ne ment jamais sur des coordonnées qui n'en viennent plus.
+  const generation = useRef(0)
+  const controleurLocalisation = useRef<AbortController | null>(null)
+
+  useEffect(() => () => controleurLocalisation.current?.abort(), [])
+
+  const nomsLocalisation: string[] = localisation === undefined ? [] : Object.values(localisation.champs)
 
   function changer(nom: string, valeur: ValeursFormulaire[string]) {
+    if (nomsLocalisation.includes(nom)) {
+      generation.current += 1
+      setLocalisationEtat({ etat: 'repos' })
+    }
+
     const champ = champs.find((candidat) => candidat.nom === nom)
 
     setValeurs((precedentes) => {
@@ -78,6 +119,46 @@ export function FormulaireRessource({
 
       return preremplir(champ, suivantes, ligneDe(nom, precedentes[nom]), ligneDe(nom, valeur))
     })
+  }
+
+  async function localiserSite() {
+    if (localisation === undefined || localisationEtat.etat === 'enCours') return
+
+    const noms = localisation.champs
+    const texte = (nom: string) => (typeof valeurs[nom] === 'string' ? valeurs[nom] : '')
+    const refus = refusLocal(texte(noms.adresse), texte(noms.codePostal), texte(noms.ville), bornesDe(champs, noms))
+
+    if (refus !== null) {
+      setLocalisationEtat({ etat: 'refusee', message: refus })
+      document.getElementById(`champ-${noms.adresse}`)?.focus()
+      return
+    }
+
+    const mienne = ++generation.current
+    controleurLocalisation.current?.abort()
+    const controleur = new AbortController()
+    controleurLocalisation.current = controleur
+    setLocalisationEtat({ etat: 'enCours' })
+
+    try {
+      const resultat = await localisation.onLocaliser(
+        corpsLocalisation(texte(noms.adresse), texte(noms.codePostal), texte(noms.ville)),
+        controleur.signal,
+      )
+      if (mienne !== generation.current) return
+
+      // Par setValeurs directement, et non par changer : l'écriture de la localisation ne l'efface pas.
+      setValeurs((precedentes) => ({
+        ...precedentes,
+        [noms.latitude]: chaineCoordonnee(resultat.latitude),
+        [noms.longitude]: chaineCoordonnee(resultat.longitude),
+      }))
+      setLocalisationEtat({ etat: 'trouvee', resultat })
+    } catch (echec) {
+      if (mienne !== generation.current) return
+      const message = messageRefus(echec)
+      setLocalisationEtat(message === null ? { etat: 'repos' } : { etat: 'refusee', message })
+    }
   }
 
   function ligneDe(nom: string, valeur: ValeursFormulaire[string] | undefined): Ligne | undefined {
@@ -138,15 +219,19 @@ export function FormulaireRessource({
         {champs
           .filter((champ) => !masque(champ, valeurs))
           .map((champ) => (
-            <Champ
-              key={champ.nom}
-              champ={champ}
-              valeur={valeurs[champ.nom] ?? ''}
-              options={optionsProposees(champ, options[champ.nom] ?? [], depart[champ.nom])}
-              tronquee={optionsTronquees[champ.nom] === true}
-              lectureSeule={lectureSeule}
-              onChanger={changer}
-            />
+            <Fragment key={champ.nom}>
+              <Champ
+                champ={champ}
+                valeur={valeurs[champ.nom] ?? ''}
+                options={optionsProposees(champ, options[champ.nom] ?? [], depart[champ.nom])}
+                tronquee={optionsTronquees[champ.nom] === true}
+                lectureSeule={lectureSeule}
+                onChanger={changer}
+              />
+              {localisation !== undefined && !lectureSeule && champ.nom === localisation.champs.longitude && (
+                <Localisation etat={localisationEtat} onLocaliser={() => void localiserSite()} />
+              )}
+            </Fragment>
           ))}
       </div>
 
@@ -404,4 +489,56 @@ function typeDeSaisie(type: ChampRessource['type']): string {
   if (type === 'heure') return 'time'
 
   return 'text'
+}
+
+interface ProprietesLocalisation {
+  etat: EtatLocalisation
+  onLocaliser: () => void
+}
+
+/**
+ * Le bouton et le résultat. ⚠️ Jamais `disabled` pendant l'appel : le navigateur ferait perdre le focus
+ * au bouton. Le résultat vit dans un `<output>` toujours rendu — un conteneur vivant doit exister avant
+ * que son contenu change, sinon le lecteur d'écran ne l'annonce pas.
+ */
+function Localisation({ etat, onLocaliser }: ProprietesLocalisation) {
+  const enCours = etat.etat === 'enCours'
+
+  return (
+    <div className="localisation">
+      <button
+        className="localisation__bouton"
+        type="button"
+        aria-disabled={enCours}
+        aria-describedby="localisation-aide"
+        onClick={onLocaliser}
+      >
+        {enCours ? 'Localisation…' : 'Localiser'}
+      </button>
+
+      <p className="champ__aide" id="localisation-aide">
+        {AideLocaliser}
+      </p>
+
+      <output className="localisation__resultat">
+        {etat.etat === 'trouvee' && (
+          <>
+            {phraseTrouvee(etat.resultat)}
+            {etat.resultat.aVerifier && (
+              <>
+                {' — '}
+                <strong className="localisation__a-verifier">{MotAVerifier}</strong>
+              </>
+            )}
+          </>
+        )}
+      </output>
+
+      {etat.etat === 'refusee' && (
+        <p className="formulaire__erreur" role="alert">
+          <strong className="formulaire__erreur-mot">Refusé —</strong> {etat.message}
+        </p>
+      )}
+    </div>
+  )
 }
