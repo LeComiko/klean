@@ -57,6 +57,12 @@ describe('localiser — refus locaux', () => {
     assert.equal(refusLocal('20 avenue de Ségur', '75007', 'Paris', bornes), null)
     assert.equal(refusLocal('« 20 rue »', '', '', bornes), Refus.debut)
   })
+
+  test('un nombre qui n’est pas un chiffre décimal ne commence pas une adresse, comme au serveur', () => {
+    assert.equal(refusLocal('\u00BD rue', '', '', bornes), Refus.debut)
+    assert.equal(refusLocal('\u2163 rue', '', '', bornes), Refus.debut)
+    assert.equal(refusLocal('4 rue', '', '', bornes), null)
+  })
 })
 
 describe('localiser — corps, coordonnées, phrases', () => {
@@ -92,6 +98,14 @@ describe('localiser — corps, coordonnées, phrases', () => {
     const attendu = 'Le serveur ne répond pas : réessayez, ou saisissez les coordonnées à la main.'
     assert.equal(messageRefus(new TypeError('Failed to fetch')), attendu)
     assert.equal(messageRefus(new TypeError('Load failed')), attendu)
+  })
+
+  test('un 502 ou un 504 sans corps dit le serveur injoignable, un 503 garde son message', () => {
+    const attendu = 'Le serveur ne répond pas : réessayez, ou saisissez les coordonnées à la main.'
+    const erreur = (statut: number, message: string) => Object.assign(new Error(message), { name: 'ErreurApi', statut })
+    assert.equal(messageRefus(erreur(502, '')), attendu)
+    assert.equal(messageRefus(erreur(504, 'Gateway Timeout')), attendu)
+    assert.equal(messageRefus(erreur(503, 'La Géoplateforme ne répond pas.')), 'La Géoplateforme ne répond pas.')
   })
 
   test('le réglage se lit sur la première entreprise, faux par défaut', () => {

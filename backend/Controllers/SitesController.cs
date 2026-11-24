@@ -38,6 +38,9 @@ public class SitesController : ControllerBase
     public const string RefusDebut = "L’adresse doit commencer par un numéro ou une lettre, et compter au moins trois caractères.";
     public const string RefusIntrouvable = "Adresse introuvable : vérifiez-la, ou saisissez les coordonnées à la main.";
     public const string RefusSurcharge = "Trop de localisations en même temps sur ce serveur : réessayez dans un instant.";
+    // ⚠️ « Trente » et « quinze » sont `PlafondsDebit.LocalisationsParCompte` et `FenetreLocalisations` en toutes
+    // lettres : un test les compare, changer un plafond sans ce message le fait rougir.
+    public const string RefusPlafondCompte = "Trente localisations en quinze minutes pour ce compte : réessayez dans quelques minutes, ou saisissez les coordonnées à la main.";
     public const string RefusInjoignable = "La Géoplateforme de l’IGN ne répond pas : réessayez plus tard, ou saisissez les coordonnées à la main.";
 
     /// <summary>
@@ -137,7 +140,7 @@ public class SitesController : ControllerBase
         if (!_debit.Autoriser($"localisation:compte:{compte}", PlafondsDebit.LocalisationsParCompte,
                 PlafondsDebit.FenetreLocalisations, out var attente))
         {
-            return this.TropDeTentatives(attente, PlafondsDebit.FenetreLocalisations);
+            return this.TropDeTentatives(attente, PlafondsDebit.FenetreLocalisations, RefusPlafondCompte);
         }
 
         // L'entreprise du jeton, et elle seule : sous la RLS, et cadrée sur son Id. Introuvable vaut désactivé.
@@ -164,7 +167,10 @@ public class SitesController : ControllerBase
         // Les bornes mesurées du service : de 3 à 200 caractères, une lettre ou un chiffre en tête.
         var recherche = ville.Length == 0 ? adresse : $"{adresse} {ville}";
         if (recherche.Length > 200) return BadRequest(RefusTropLongue);
-        if (recherche.Length < 3 || !char.IsLetterOrDigit(recherche[0])) return BadRequest(RefusDebut);
+        // ⚠️ Le premier caractère se juge par rune, comme l'écran (`\p{L}\p{Nd}`) : `char.IsLetterOrDigit` lit une
+        // unité UTF-16, et une paire de substitution lui échappe. Une paire invalide est refusée.
+        if (recherche.Length < 3 || !Rune.TryGetRuneAt(recherche, 0, out var premiere)
+            || !Rune.IsLetterOrDigit(premiere)) return BadRequest(RefusDebut);
 
         // Le plafond global ne compte que les requêtes qui partent vers l'IGN, sur le modèle du plafond
         // global des codes faux de l'installation : compté sur tout, un 409 ou un 400 de champ le

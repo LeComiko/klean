@@ -284,7 +284,10 @@ public sealed class JeuDeDemonstration
             {
                 RaisonSociale = RaisonSociale,
                 Siret = actuelle.Siret,
-                Territoire = nameof(Territoire.Metropole)
+                Territoire = nameof(Territoire.Metropole),
+                // ⚠️ Le PUT remplace la ligne entière (CLAUDE.md §9 quater) : sans cette ligne, le réglage de
+                // localisation serait décoché, et sa date de désactivation posée.
+                GeocodageActif = actuelle.GeocodageActif
             })), "le renommage de l'entreprise");
         }
 

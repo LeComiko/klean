@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using Klean.Api.Data;
 using Klean.Api.Demonstration;
@@ -74,6 +75,25 @@ public class JeuDeDemonstrationTests : IAsyncLifetime
 
         Assert.Equal(JeuDeDemonstration.RaisonSociale, entreprise.RaisonSociale);
         Assert.Equal(nameof(Territoire.Metropole), entreprise.Territoire);
+    }
+
+    /// <summary>
+    /// Le renommage passe par un <c>PUT</c> qui remplace la ligne : le réglage de localisation, coché avant,
+    /// ne doit être ni décoché ni daté de nouveau.
+    /// </summary>
+    [Fact]
+    public async Task Le_renommage_conserve_le_reglage_de_localisation()
+    {
+        var reponse = await _client.PutAsJsonAsync($"/api/entreprises/{_fixture.EntrepriseAlpha}", new EntrepriseCreateDto
+        {
+            RaisonSociale = "Alpha Propreté", Siret = "10000000000001", Territoire = "Metropole", GeocodageActif = true
+        });
+        Assert.Equal(HttpStatusCode.NoContent, reponse.StatusCode);
+
+        await InstallerAsync();
+
+        var entreprise = Assert.Single(await _client.ListerAsync<EntrepriseDto>("/api/entreprises"));
+        Assert.True(entreprise.GeocodageActif);
     }
 
     /// <summary>

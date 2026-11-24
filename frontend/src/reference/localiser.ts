@@ -47,6 +47,8 @@ export const MotAVerifier = 'à vérifier : le point est approximatif'
 /** La borne de la recherche envoyée, mesurée sur le service : de 3 à 200 caractères. */
 const LongueurRecherche = 200
 
+const MessageInjoignable = 'Le serveur ne répond pas : réessayez, ou saisissez les coordonnées à la main.'
+
 export const Refus = {
   adresseVide: 'Saisissez l’adresse du site avant de le localiser.',
   invisible: 'L’adresse, le code postal ou la ville contient un caractère invisible : retapez-les.',
@@ -87,7 +89,9 @@ export function refusLocal(adresse: string, codePostal: string, ville: string, b
 
   const envoyee = recherche(a, v)
   if (envoyee.length > LongueurRecherche) return Refus.tropLongue
-  if (envoyee.length < 3 || !/^[\p{L}\p{N}]/u.test(envoyee)) return Refus.debut
+  // ⚠️ Lettre ou chiffre décimal (Nd), la règle de `Rune.IsLetterOrDigit` du serveur : « ½ » et « Ⅳ » sont
+  // des nombres (N) sans être des chiffres, et le serveur les refuserait.
+  if (envoyee.length < 3 || !/^[\p{L}\p{Nd}]/u.test(envoyee)) return Refus.debut
 
   return null
 }
@@ -115,8 +119,12 @@ export function phraseTrouvee(resultat: ResultatLocalisation): string {
 export function messageRefus(echec: unknown): string | null {
   if (echec instanceof Error) {
     if (echec.name === 'AbortError') return null
+    // Un 502 ou un 504 du proxy n'a pas de corps : le message de l'erreur serait vide ou technique. Le 503,
+    // lui, porte le message du serveur.
+    const statut = (echec as { statut?: unknown }).statut
+    if (typeof statut === 'number' && (statut === 502 || statut === 504)) return MessageInjoignable
     // `fetch` sans réponse : le message du navigateur est en anglais et varie (« Failed to fetch », « Load failed »).
-    if (echec.name === 'TypeError') return 'Le serveur ne répond pas : réessayez, ou saisissez les coordonnées à la main.'
+    if (echec.name === 'TypeError') return MessageInjoignable
     if (echec.message !== '') return echec.message
   }
   return 'La localisation a échoué.'

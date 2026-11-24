@@ -205,7 +205,40 @@ public class LocalisationSitesTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.TooManyRequests, refusee.StatusCode);
         Assert.True(refusee.Headers.RetryAfter?.Delta > TimeSpan.FromSeconds(60));
-        Assert.DoesNotContain(SitesController.RefusSurcharge, await refusee.Content.ReadAsStringAsync());
+        var corps = await refusee.Content.ReadAsStringAsync();
+        Assert.Contains(SitesController.RefusPlafondCompte, corps);
+        Assert.DoesNotContain(SitesController.RefusSurcharge, corps);
+    }
+
+    /// <summary>
+    /// Le message du plafond par compte écrit le nombre et la fenêtre en toutes lettres : changer l'un des
+    /// deux plafonds sans le message le fait rougir.
+    /// </summary>
+    [Fact]
+    public void Le_message_du_plafond_par_compte_dit_le_nombre_et_la_fenetre_de_PlafondsDebit()
+    {
+        var nombres = new Dictionary<int, string> { [30] = "Trente", [15] = "quinze" };
+
+        Assert.Contains(nombres[PlafondsDebit.LocalisationsParCompte], SitesController.RefusPlafondCompte);
+        Assert.Contains(nombres[(int)PlafondsDebit.FenetreLocalisations.TotalMinutes], SitesController.RefusPlafondCompte);
+    }
+
+    /// <summary>
+    /// Le premier caractère est jugé par rune, comme l'écran (lettre ou chiffre décimal) : « \u00BD » et
+    /// « \u2163 » sont des nombres sans être des chiffres, et partent en 400 sans appel à l'IGN.
+    /// </summary>
+    [Theory]
+    [InlineData("\u00BD rue de Paris")]
+    [InlineData("\u2163 rue de Paris")]
+    public async Task Un_debut_qui_n_est_ni_lettre_ni_chiffre_400_sans_appel_au_faux(string adresse)
+    {
+        await ActiverAlpha();
+
+        var reponse = await Localiser(_admin, new LocaliserSiteDto { Adresse = adresse });
+
+        Assert.Equal(HttpStatusCode.BadRequest, reponse.StatusCode);
+        Assert.Equal(SitesController.RefusDebut, await reponse.Content.ReadAsStringAsync());
+        Assert.Empty(_fixture.Fabrique.Geocodage.Requetes);
     }
 
     [Fact]
