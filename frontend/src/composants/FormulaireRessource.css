@@ -249,6 +249,46 @@
   cursor: not-allowed;
 }
 
+/* « Localiser » (0.3.0) : un bouton secondaire, sous les coordonnées qu'il remplit. */
+.localisation {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espace-2);
+}
+
+.localisation__bouton {
+  height: var(--ligne-confortable);
+  padding: 0 var(--espace-4);
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--border-fort);
+  border-radius: var(--rayon-bloc);
+  font-weight: 600;
+}
+
+.localisation__bouton:hover:not([aria-disabled='true']) {
+  background: var(--brand-tint);
+  border-color: var(--brand);
+}
+
+.localisation__bouton[aria-disabled='true'] {
+  color: var(--texte-2);
+  cursor: progress;
+}
+
+.localisation__resultat {
+  font-size: var(--corps-taille);
+  line-height: var(--corps-interligne);
+  color: var(--texte);
+}
+
+/* En mots et en graisse, jamais par la seule couleur, ni en --alerte, réservée au « non pourvu » (§12). */
+.localisation__a-verifier {
+  font-weight: 600;
+  color: var(--texte);
+}
+
 @media (max-width: 1100px) {
   .formulaire {
     width: auto;
@@ -261,7 +301,8 @@
   .champ__zone,
   .champ__liste,
   .formulaire__valider,
-  .formulaire__annuler {
+  .formulaire__annuler,
+  .localisation__bouton {
     min-height: var(--cible-tactile);
     font-size: var(--corps-mobile-taille);
     line-height: var(--corps-mobile-interligne);

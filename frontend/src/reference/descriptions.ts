@@ -146,7 +146,14 @@ const Sites: DescriptionRessource = {
       requis: true,
     },
     { nom: 'nom', libelle: 'Nom', type: 'texte', requis: true, longueurMax: 200 },
-    { nom: 'adresse', libelle: 'Adresse', type: 'texte', requis: true, longueurMax: 200 },
+    {
+      nom: 'adresse',
+      libelle: 'Adresse',
+      type: 'texte',
+      requis: true,
+      longueurMax: 200,
+      aide: 'Voie et numéro, sans nom de personne.',
+    },
     { nom: 'codePostal', libelle: 'Code postal', type: 'texte', longueurMax: 10 },
     { nom: 'ville', libelle: 'Ville', type: 'texte', longueurMax: 100 },
     {
@@ -195,6 +202,14 @@ const Sites: DescriptionRessource = {
   rolesEcriture: EcritureReference,
 
   parent: { ressource: 'clients', champ: 'clientId' },
+
+  localiser: {
+    adresse: 'adresse',
+    codePostal: 'codePostal',
+    ville: 'ville',
+    latitude: 'latitude',
+    longitude: 'longitude',
+  },
 }
 
 const Agents: DescriptionRessource = {
@@ -837,6 +852,16 @@ export const LibellesTerritoire: Readonly<Record<(typeof Territoires)[number], s
 }
 
 /**
+ * Ce que l'administrateur doit savoir pour décider (RGPD art. 5(2) et 24) : ce qui part, vers qui, ce
+ * qu'on ne sait pas, et le cas du domicile.
+ */
+export const AideGeocodage =
+  'La voie, le code postal et la commune d’un site partent vers la Géoplateforme de l’IGN, '
+  + 'établissement public, à chaque clic sur Localiser dans la fiche d’un site. Rien d’un agent, aucun '
+  + 'nom. L’IGN en est responsable sous ses propres conditions ; la durée de ses journaux n’est pas '
+  + 'publiée. Pour un client particulier, son adresse est une donnée personnelle : voir RGPD.md.'
+
+/**
  * L'entreprise elle-même : une ligne, celle du tenant. Ni création ni suppression —
  * l'instance la provisionne (CLAUDE.md §7) —, d'où `modificationSeule`.
  */
@@ -877,6 +902,12 @@ const Entreprises: DescriptionRessource = {
       aide: 'Fixe le jour d’« aujourd’hui » pour la génération et la prévision, et les jours '
         + 'fériés : le Vendredi saint et le 26 décembre en Alsace-Moselle, l’abolition de '
         + 'l’esclavage outre-mer.',
+    },
+    {
+      nom: 'geocodageActif',
+      libelle: 'Localiser les sites par la Géoplateforme de l’IGN',
+      type: 'booleen',
+      aide: AideGeocodage,
     },
   ],
 

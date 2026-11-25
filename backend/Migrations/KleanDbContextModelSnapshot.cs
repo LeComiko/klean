@@ -381,6 +381,15 @@ namespace Klean.Api.Migrations
                     b.Property<DateTime>("DateCreation")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("GeocodageActif")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("GeocodageActiveLe")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("GeocodageDesactiveLe")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("RaisonSociale")
                         .IsRequired()
                         .HasMaxLength(200)

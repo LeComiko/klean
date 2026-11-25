@@ -44,6 +44,21 @@ public class Entreprise
     /// </summary>
     public Territoire Territoire { get; set; } = Territoire.Metropole;
 
+    /// <summary>
+    /// La localisation des sites par la Géoplateforme de l'IGN (0.3.0) : désactivée par défaut,
+    /// activée par l'administrateur dans l'écran Entreprise. Elle envoie la voie, le code postal et
+    /// la commune d'un site, à chaque clic sur « Localiser » (RGPD.md, T6).
+    /// </summary>
+    public bool GeocodageActif { get; set; }
+
+    /// <summary>
+    /// Posées par le serveur au changement d'état, jamais reçues : elles répondent à « mon adresse
+    /// est-elle partie, et quand ? », que le clic, qui n'enregistre rien, laisse sans trace
+    /// (RGPD.md §6). Le dernier passage dans chaque sens, pas l'historique.
+    /// </summary>
+    public DateTime? GeocodageActiveLe { get; set; }
+    public DateTime? GeocodageDesactiveLe { get; set; }
+
     public ICollection<Client> Clients { get; set; } = new List<Client>();
     public ICollection<Agent> Agents { get; set; } = new List<Agent>();
     public ICollection<Produit> Produits { get; set; } = new List<Produit>();

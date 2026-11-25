@@ -11,6 +11,10 @@ public class EntrepriseDto
 
     /// <summary>Valeurs : Metropole, AlsaceMoselle, Guadeloupe, Martinique, Guyane, Reunion, Mayotte.</summary>
     public string Territoire { get; set; } = string.Empty;
+
+    public bool GeocodageActif { get; set; }
+    public DateTime? GeocodageActiveLe { get; set; }
+    public DateTime? GeocodageDesactiveLe { get; set; }
 }
 
 /// <summary>
@@ -33,4 +37,11 @@ public class EntrepriseCreateDto
     /// de lui faire travailler son Vendredi saint.
     /// </summary>
     public string Territoire { get; set; } = string.Empty;
+
+    /// <summary>
+    /// ⚠️ Un <c>bool</c> absent du corps vaut <c>false</c> : le <c>PUT</c> remplace la ligne, et un
+    /// écran qui oublierait le champ désactiverait la localisation à chaque enregistrement. La
+    /// description de l'écran le porte, et <c>descriptions.test.ts</c> l'exige.
+    /// </summary>
+    public bool GeocodageActif { get; set; }
 }

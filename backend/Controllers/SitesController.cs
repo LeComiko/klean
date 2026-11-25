@@ -1,6 +1,10 @@
+using System.Globalization;
+using System.Security.Claims;
+using System.Text;
 using Klean.Api.DTOs;
 using Klean.Api.Data;
 using Klean.Api.Models;
+using Klean.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,8 +17,31 @@ namespace Klean.Api.Controllers;
 public class SitesController : ControllerBase
 {
     private readonly KleanDbContext _db;
+    private readonly ITenantContext _tenant;
+    private readonly LimiteurDebit _debit;
+    private readonly ServiceGeocodage _geocodage;
 
-    public SitesController(KleanDbContext db) => _db = db;
+    public SitesController(KleanDbContext db, ITenantContext tenant, LimiteurDebit debit, ServiceGeocodage geocodage)
+    {
+        _db = db;
+        _tenant = tenant;
+        _debit = debit;
+        _geocodage = geocodage;
+    }
+
+    // Les refus de « Localiser ». ⚠️ Recopiés par l'écran (`reference/localiser.ts`), dont la série lit
+    // ce fichier : changer l'un sans l'autre la fait rougir.
+    public const string RefusDesactive = "La localisation des sites est désactivée : cochez-la dans Entreprise.";
+    public const string RefusAdresseVide = "Saisissez l’adresse du site avant de le localiser.";
+    public const string RefusInvisible = "L’adresse, le code postal ou la ville contient un caractère invisible : retapez-les.";
+    public const string RefusTropLongue = "L’adresse et la ville dépassent ensemble 200 caractères : abrégez-les.";
+    public const string RefusDebut = "L’adresse doit commencer par un numéro ou une lettre, et compter au moins trois caractères.";
+    public const string RefusIntrouvable = "Adresse introuvable : vérifiez-la, ou saisissez les coordonnées à la main.";
+    public const string RefusSurcharge = "Trop de localisations en même temps sur ce serveur : réessayez dans un instant.";
+    // ⚠️ « Trente » et « quinze » sont `PlafondsDebit.LocalisationsParCompte` et `FenetreLocalisations` en toutes
+    // lettres : un test les compare, changer un plafond sans ce message le fait rougir.
+    public const string RefusPlafondCompte = "Trente localisations en quinze minutes pour ce compte : réessayez dans quelques minutes, ou saisissez les coordonnées à la main.";
+    public const string RefusInjoignable = "La Géoplateforme de l’IGN ne répond pas : réessayez plus tard, ou saisissez les coordonnées à la main.";
 
     /// <summary>
     /// Liste paginée, filtrable par <c>clientId</c> — la descente de niveau,
@@ -96,6 +123,87 @@ public class SitesController : ControllerBase
             .FirstOrDefaultAsync();
 
         return site is null ? NotFound() : Ok(site);
+    }
+
+    /// <summary>
+    /// Localise un site par la Géoplateforme de l'IGN (0.3.0). Administrateur seul, comme l'écriture des
+    /// sites ; l'adresse voyage dans le <b>corps</b> — un <c>GET ?adresse=</c> la ferait entrer dans le
+    /// journal des requêtes. Rien n'est enregistré : l'écran remplit ses champs, le patron relit puis
+    /// enregistre.
+    /// </summary>
+    [Authorize(Roles = RolesKlean.Administrateur)]
+    [HttpPost("localiser")]
+    public async Task<ActionResult<LocalisationDto>> Localiser(LocaliserSiteDto dto, CancellationToken annulation)
+    {
+        var compte = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+
+        if (!_debit.Autoriser($"localisation:compte:{compte}", PlafondsDebit.LocalisationsParCompte,
+                PlafondsDebit.FenetreLocalisations, out var attente))
+        {
+            return this.TropDeTentatives(attente, PlafondsDebit.FenetreLocalisations, RefusPlafondCompte);
+        }
+
+        // L'entreprise du jeton, et elle seule : sous la RLS, et cadrée sur son Id. Introuvable vaut désactivé.
+        var entrepriseId = _tenant.EntrepriseId;
+        var actif = entrepriseId is not null && await _db.Entreprises.AsNoTracking()
+            .Where(e => e.Id == entrepriseId)
+            .Select(e => e.GeocodageActif)
+            .FirstOrDefaultAsync(annulation);
+
+        if (!actif) return Conflict(RefusDesactive);
+
+        var adresse = (dto.Adresse ?? "").Trim();
+        var codePostal = (dto.CodePostal ?? "").Trim();
+        var ville = (dto.Ville ?? "").Trim();
+
+        if (adresse.Length == 0) return BadRequest(RefusAdresseVide);
+        if (adresse.Length > 200) return BadRequest("L’adresse dépasse 200 caractères.");
+        if (codePostal.Length > 10) return BadRequest("Le code postal dépasse 10 caractères.");
+        if (ville.Length > 100) return BadRequest("La ville dépasse 100 caractères.");
+        // ⚠️ Par runes, et Format avec Control : un caractère de bidirectionnalité ou d'étiquette ne se
+        // voit pas, et partirait vers l'IGN. Le même filtre que `Nettoyer` du service, au retour.
+        if (new[] { adresse, codePostal, ville }.Any(ContientInvisible)) return BadRequest(RefusInvisible);
+
+        // Les bornes mesurées du service : de 3 à 200 caractères, une lettre ou un chiffre en tête.
+        var recherche = ville.Length == 0 ? adresse : $"{adresse} {ville}";
+        if (recherche.Length > 200) return BadRequest(RefusTropLongue);
+        // ⚠️ Le premier caractère se juge par rune, comme l'écran (`\p{L}\p{Nd}`) : `char.IsLetterOrDigit` lit une
+        // unité UTF-16, et une paire de substitution lui échappe. Une paire invalide est refusée.
+        if (recherche.Length < 3 || !Rune.TryGetRuneAt(recherche, 0, out var premiere)
+            || !Rune.IsLetterOrDigit(premiere)) return BadRequest(RefusDebut);
+
+        // Le plafond global ne compte que les requêtes qui partent vers l'IGN, sur le modèle du plafond
+        // global des codes faux de l'installation : compté sur tout, un 409 ou un 400 de champ le
+        // tiendrait plein sans qu'aucune requête ne parte.
+        if (!_debit.Autoriser("localisation:global", PlafondsDebit.LocalisationsGlobales,
+                PlafondsDebit.FenetreLocalisationsGlobales, out var attenteGlobale))
+        {
+            return this.TropDeTentatives(attenteGlobale, PlafondsDebit.FenetreLocalisationsGlobales, RefusSurcharge);
+        }
+
+        return await _geocodage.LocaliserAsync(recherche, codePostal, annulation) switch
+        {
+            ResultatGeocodage.Trouve trouve => Ok(new LocalisationDto
+            {
+                Latitude = trouve.Latitude,
+                Longitude = trouve.Longitude,
+                AdresseTrouvee = trouve.AdresseTrouvee,
+                AVerifier = trouve.AVerifier
+            }),
+            ResultatGeocodage.Introuvable => BadRequest(RefusIntrouvable),
+            _ => StatusCode(StatusCodes.Status503ServiceUnavailable, RefusInjoignable)
+        };
+    }
+
+    private static bool ContientInvisible(string texte)
+    {
+        foreach (var rune in texte.EnumerateRunes())
+        {
+            var categorie = Rune.GetUnicodeCategory(rune);
+            if (categorie is UnicodeCategory.Control or UnicodeCategory.Format) return true;
+        }
+
+        return false;
     }
 
     [Authorize(Roles = RolesKlean.Administrateur)]

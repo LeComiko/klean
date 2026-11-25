@@ -57,6 +57,33 @@ ajoutent le **téléchargement des versions** — `github.com` pour l'archive, `
 les images — et, à l'installation seulement, le dépôt de Docker : aucune donnée de
 l'instance n'y est envoyée (`RGPD.md` §4).
 
+**Une sortie de plus si une entreprise active la localisation des sites** : l'API appelle
+`data.geopf.fr`, la Géoplateforme de l'IGN, en **HTTPS sur le port 443**, à chaque clic sur
+*Localiser* dans la fiche d'un site. La localisation est désactivée par défaut, et se coche
+dans l'écran *Entreprise*. Derrière un pare-feu sortant, ouvrez ce port vers cet hôte ;
+fermé, le bouton répond que la Géoplateforme ne répond pas, et les coordonnées se
+saisissent à la main. Pour vérifier la sortie, depuis l'hôte :
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' 'https://data.geopf.fr/geocodage/search?q=paris&limit=1'
+```
+
+Attendu : `200`. ⚠️ Cela éprouve l'hôte, pas le conteneur : les règles `DOCKER-USER` d'un
+pare-feu peuvent traiter le trafic du conteneur autrement que celui de l'hôte. Derrière un
+pare-feu fermé, l'écran dit « ne répond pas » en 5 secondes au plus, et le journal technique ne
+montre que la ligne `POST /api/sites/localiser 503` : la garde du journal est voulue, aucun
+détail de la requête n'y est écrit.
+
+Un proxy de sortie ne se règle pas avec le script. `docker-compose.yml` ne transmet au service
+`api` ni `HTTPS_PROXY` ni `Geocodage__*`, et `klean` réécrit `docker-compose.yml` à chaque mise à
+jour (il fait partie des fichiers de la version) : **avec le script, ces réglages n'ont pas de
+voie qui survive à une mise à jour**. Dans le parcours manuel, ils passent par l'environnement du
+service `api`, que vous écrivez vous-même dans le compose. Si vous faites passer les sorties de
+l'API par un proxy de l'environnement (`HTTPS_PROXY`), il voit l'hôte, pas le contenu : la requête est chiffrée
+de bout en bout, et l'adresse recherchée, qui est dans son URL, ne lui est pas lisible —
+sauf à un proxy qui déchiffre le TLS, ce qui demanderait d'installer son autorité dans le
+conteneur de l'API.
+
 ---
 
 ## 2. Installation
@@ -172,9 +199,11 @@ Ce que dit le quatrième écran, et qui reste vrai après lui :
   reste.
 - **Les durées de conservation** proposées en `RGPD.md` §5 sont à valider (section 7).
 - **La localisation automatique des sites est désactivée** : les coordonnées se
-  saisissent à la main. Elle se proposera avec une prochaine version, sur votre choix.
-  Le script d'installation écrit déjà `KLEAN_GEOCODAGE=false` dans `.env`, que la
-  version 0.2.0 ne lit pas encore.
+  saisissent à la main tant que vous ne l'activez pas. Elle s'active dans l'écran
+  *Entreprise*, dont l'aide dit ce qui part vers l'IGN, et rien ne part avant ce choix ;
+  `RGPD.md` §4 et T6 en disent le détail, et ce qu'elle vous demande envers vos clients
+  particuliers. Une ligne `KLEAN_GEOCODAGE` restée dans le `.env` d'une 0.1.x ou d'une 0.2.x
+  n'est lue par rien : le réglage vit dans l'application.
 - **La double authentification s'équipe dès la première connexion**, comme ci-dessus.
 
 Un code refusé ramène au premier écran. Au-delà de trente codes faux reçus par le serveur
@@ -541,6 +570,11 @@ déjà, rendu systématique : défaire une migration qui a ajouté une colonne s
 qu'elle contenait, et le code qui la défait n'existe que dans la version qui l'a
 introduite.
 
+- ⚠️ **Le réglage de localisation des sites suit la base.** La sauvegarde ne connaît que l'état
+  d'avant la mise à jour : après un retour vers une 0.2.x, la colonne n'existe pas et le réglage
+  disparaît ; après un nouveau passage en 0.3.0, il faut **recocher** la case dans l'écran
+  *Entreprise*. Même entre deux 0.3.x, le réglage et ses deux dates reviennent à ce qu'ils
+  étaient à la sauvegarde (`RGPD.md` §6).
 - **Dans les quatorze jours**, comme les sauvegardes : au-delà, la sauvegarde d'avant la
   mise à jour a été supprimée par la rotation, `revenir` le dit et ne touche à rien.
 - Tout est vérifié **avant le premier arrêt** : les fichiers de la version précédente, la
@@ -715,7 +749,10 @@ faire. La sauvegarde de 3 h a son propre fichier, `/var/log/klean-sauvegarde.log
 
 Les journaux sont plafonnés à cinq fichiers de 10 Mo par conteneur, puis remplacés. Ils
 ne contiennent ni adresse IP, ni identité de l'utilisateur, ni contenu de requête
-(`RGPD.md` §3). Caddy n'écrit **aucun** journal d'accès ; en ajouter un consignerait
+(`RGPD.md` §3), ni l'adresse d'un site envoyée à l'IGN : le client qui l'appelle n'écrit
+aucun journal. Laissez à `Warning` la catégorie `System.Net.Http.HttpClient` de
+`appsettings.json` : c'est la seconde garde, et la passer à `Information` ou à `Debug` la
+retirerait. Caddy n'écrit **aucun** journal d'accès ; en ajouter un consignerait
 l'adresse IP de chaque visiteur, avec la durée de conservation que cela suppose.
 
 ---

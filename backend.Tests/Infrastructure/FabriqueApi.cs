@@ -93,6 +93,9 @@ public class FabriqueApi : WebApplicationFactory<Program>
     /// <summary>Rôle et entreprise des connexions, relevés sous chaque commande. Inactive par défaut.</summary>
     public SondeInstallation Sonde { get; } = new();
 
+    /// <summary>Le gestionnaire primaire du client de géocodage. Aucun appel ne sort de la série.</summary>
+    public GeocodageDeTest Geocodage { get; } = new();
+
     private readonly string _environnement;
 
     /// <summary>
@@ -124,6 +127,9 @@ public class FabriqueApi : WebApplicationFactory<Program>
             // Relève le rôle et l'entreprise de la connexion sous les requêtes de l'assistant
             // (étape 34, lot A2). S'ajoute à BasculeRoleApplicatif sans le remplacer (EF Core 10).
             services.ConfigureDbContext<KleanDbContext>(options => options.AddInterceptors(Sonde));
+
+            // Le gestionnaire primaire, et non un gestionnaire ajouté : toute la chaîne du client s'exécute (0.3.0).
+            services.AddHttpClient(ServiceGeocodage.NomClient).ConfigurePrimaryHttpMessageHandler(() => Geocodage);
         });
     }
 

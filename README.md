@@ -577,7 +577,33 @@ origine externe réapparue dans `csp.ts` ou `index.html`.
 
 Conséquence pratique pour le déploiement : **KLEAN n'a besoin d'aucun accès
 sortant pour servir son interface.** Une instance derrière un pare-feu sans route
-vers l'extérieur affiche la même typographie qu'une autre.
+vers l'extérieur affiche la même typographie qu'une autre. Une seule fonction appelle
+l'extérieur depuis l'API, outre le SMTP : la **localisation des sites**, désactivée par
+défaut, qui envoie la voie, le code postal et la commune d'un site à `data.geopf.fr`, la
+Géoplateforme de l'IGN, en HTTPS sur le port 443, quand une entreprise l'a activée et
+qu'un administrateur clique sur *Localiser* (`RGPD.md` §4).
+
+### Localisation des sites
+
+```json
+"Geocodage": { "Adresse": "https://data.geopf.fr/geocodage", "DelaiSecondes": 5 }
+```
+
+Les deux valeurs sont les défauts, et rien n'est à écrire pour les garder. L'adresse doit
+être absolue, en `https`, sans identifiants, requête ni fragment ; le délai, un entier de 1
+à 20 secondes. Une valeur hors de ces bornes fait refuser le démarrage. ⚠️ Le délai doit
+rester **strictement inférieur à `Http:DelaiRequeteSecondes`**, le délai de requête, 30 s
+par défaut : sinon une localisation lente répond 504 au lieu du 503 qui dit de réessayer.
+Rien ne compare les deux valeurs : qui baisse le délai de requête baisse aussi celui-ci.
+⚠️ `docker-compose.yml` ne transmet au service `api` ni `Geocodage__*` ni `HTTPS_PROXY`. Dans
+le parcours manuel, ils passent par l'environnement du service `api` (`Geocodage__Adresse`,
+`Geocodage__DelaiSecondes`), que vous écrivez dans le compose. Avec le script d'installation,
+qui réécrit `docker-compose.yml` à chaque mise à jour, ces réglages n'ont **pas de voie qui
+survive** : les défauts sont ceux de l'instance. Pour vérifier la sortie depuis l'hôte, voir
+`DEPLOIEMENT.md` §1.
+
+Activer la fonction n'est pas un réglage de l'API : c'est une case de
+l'écran *Entreprise*, entreprise par entreprise.
 
 ### HTTPS
 
