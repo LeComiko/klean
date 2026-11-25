@@ -1221,9 +1221,9 @@ Résumé de ce qui existe, à reporter dans le registre et l'AIPD. Le détail es
 - **Mots de passe des comptes créés** (étape 24) : tirés par le serveur, montrés une seule
   fois, et remplacés obligatoirement à la première connexion — un administrateur ne garde
   la connaissance du mot de passe d'un collègue que jusque-là.
-- **Traçabilité du code** : 710 tests côté serveur, 351 cas côté interface — dont 127
-  dans les séries rejouées dans cinq fuseaux —, et la discipline de validation par sabotage décrite dans
-  `CLAUDE.md`.
+- **Traçabilité du code** : 921 tests côté serveur à la 0.3.0, des séries côté interface —
+  dont certaines rejouées dans cinq fuseaux —, et la discipline de validation par sabotage
+  décrite dans `CLAUDE.md`.
 - ⚠️ **Les valeurs de paramètres SQL ne sont pas journalisées** :
   `EnableSensitiveDataLogging` n'est activé nulle part, et ne doit jamais l'être en
   production — les requêtes d'EF Core sont tracées au niveau `Information`, et leurs

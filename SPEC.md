@@ -4780,6 +4780,79 @@ La version 0.2.1 est publiée et tourne sur le VPS. Elle corrige les trois limit
   réseau `public`.
 - **Une mise à jour ne détecte pas l'IPv6** : elle écrit `true`. Sur une machine sans IPv6,
   la reprise est manuelle (`DEPLOIEMENT.md` §9).
+
+**0.3.0 — fait le 25 novembre 2026**
+
+La version 0.3.0 est publiée et tourne sur le VPS. Elle fait la moitié du lot A3 : le
+géocodage. L'import `.xlsx` sera la 0.3.1. Conception :
+`docs/superpowers/specs/2026-11-23-geocodage-design.md` ; mécanisme : `CLAUDE.md` §9 quater ;
+traitement : `RGPD.md`, T6 et §1.
+
+- **Un réglage de l'entreprise**, « Localiser les sites par la Géoplateforme de l'IGN »,
+  désactivé par défaut, avec deux dates posées par le serveur au seul changement d'état :
+  la dernière activation, la dernière désactivation. Il remplace `KLEAN_GEOCODAGE`, retirée
+  du déploiement : le choix appartient au patron, pas à l'exploitant.
+- **Un bouton « Localiser »** dans la fiche d'un site, réglage coché, pour l'administrateur.
+  Il envoie la voie, le code postal et la ville, rien d'autre, et pose la latitude et la
+  longitude arrondies à six décimales. Rien n'est enregistré : le patron relit, puis
+  enregistre. Un point qui n'est pas un numéro, ou un score sous 0,7, est dit « à vérifier ».
+- **`POST /api/sites/localiser`**, l'adresse dans le corps et jamais dans l'URL : 30 par
+  compte et par quart d'heure ; 10 par seconde pour l'instance, ce dernier ne comptant que
+  les requêtes qui partent vers l'IGN ; 409 réglage coupé, 400 en français, 503 quand l'IGN
+  ne répond pas.
+- **Un client HTTP verrouillé** : ni redirection, ni cookie, ni `traceparent`, ni
+  décompression, 64 Kio au plus, cinq secondes par défaut, et aucune ligne de journal. Un
+  refus de l'IGN suspend les appels de 5 à 30 s.
+- **Vu en local le 24 novembre**, sur la base de développement : refus d'une adresse vide
+  et focus remis sur le champ ; « 20 avenue de Ségur, 75007 Paris » localisée ; la ligne
+  « Trouvé » effacée à la saisie ; le bouton absent, réglage décoché ; journal de l'API sans
+  l'adresse.
+- **Sur le VPS, le 25 novembre :**
+  - **Mise à jour 0.2.1 → 0.3.0**, conduite par la 0.2.1 installée, sans incident ; la
+    migration `GeocodageDesSites` appliquée, le réglage à faux, sans date.
+  - **Le même essai**, en administrateur, dans « Nouveau site » fermé par Annuler : l'IGN a
+    répondu au VPS, et les deux dates sont posées en base. Le journal de l'API ne porte aucune
+    ligne `geocodage/search`.
+- **Non vus** : un compte Responsable — aucun dans la base de développement —, Safari, un
+  lecteur d'écran.
+
+**Ce qui a cassé en route, et comment c'est réparé**
+
+- **Le plan ne refusait que les caractères de contrôle.** Un caractère de bidirectionnalité
+  ou une espace sans largeur serait parti vers l'IGN sous le refus « caractère invisible ».
+  Le serveur et l'écran refusent désormais les catégories Unicode Control et Format, par
+  point de code.
+- **Un `Retry-After: 1` laissait relancer l'IGN au bout d'une seconde**, alors qu'il bloque
+  cinq secondes. La pause est bornée à cinq secondes, et ne se raccourcit jamais.
+- **Le plafond global comptait les requêtes refusées par KLEAN lui-même**, 409 et 400 : un
+  compte pouvait le tenir plein sans qu'aucune requête parte. Il est contrôlé juste avant
+  l'appel.
+- **Un code postal en chiffres arabes-indiens** passait par `char.IsDigit` : seuls les
+  chiffres ASCII sont envoyés, et un test l'éprouve.
+- **La commande `demonstration` décochait le réglage** : son `PUT` de l'entreprise omettait
+  le champ. Trouvé à la relecture d'ensemble.
+- **Retirer le bouton sur un 409 effaçait aussi le message** qui en disait la cause, rendu
+  dans le même bloc : le bouton reste, le message dit de cocher le réglage.
+- **Sur le VPS, une connexion refusée** n'avait rien à voir avec la version : une adresse
+  qui n'est pas celle du compte, puis un mot de passe rempli par le navigateur pour un autre
+  site. Deux échecs, sans verrouillage.
+
+**Limites constatées**
+
+- **Le seuil de 0,7** du « à vérifier » n'a pas été éprouvé sur le terrain.
+- **La durée des journaux de l'IGN n'est pas publiée** : la question est à poser à
+  `dpo@ign.fr` (`RGPD.md` §5). La lecture juridique de T6 est à faire valider.
+- **Le plafond par compte, 30 par quart d'heure**, peut arrêter un patron qui localise ses
+  sites un par un ; le refus le dit et propose la saisie à la main. Gardé à 30, en attendant
+  la localisation en lot de l'import.
+- **Les plafonds et le disjoncteur sont en mémoire**, donc par instance, et la lecture du
+  compteur n'est pas atomique : une rafale peut dépasser de peu.
+- **La borne haute de la pause n'est pas éprouvée** par la série, faute d'horloge
+  injectable ; l'échéance suit l'heure murale.
+- **Le délai du géocodage doit rester sous celui de la requête** (`Http:DelaiRequeteSecondes`) :
+  rien ne compare les deux. Avec le script, ni `Geocodage:*` ni un proxy sortant n'ont de voie
+  qui survive à une mise à jour (`DEPLOIEMENT.md` §1).
+- **Un retour vers 0.2.x efface le réglage et ses dates**, avec la base restaurée.
 ---
 
 # Suite — non planifié
